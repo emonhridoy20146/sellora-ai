@@ -1,0 +1,147 @@
+import { z } from 'zod';
+
+const bool = z
+  .enum(['true', 'false', '1', '0', 'yes', 'no'])
+  .transform((v) => v === 'true' || v === '1' || v === 'yes');
+
+const csv = z.string().transform((v) =>
+  v
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
+);
+
+/**
+ * Every environment variable the API reads. Parsing fails fast at boot with a readable
+ * message, so a misconfigured deployment never starts half-working.
+ */
+export const envSchema = z
+  .object({
+    NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+    APP_NAME: z.string().default('Sellora AI'),
+    PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+    TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
+    LOG_LEVEL: z
+      .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
+      .default('info'),
+
+    API_PUBLIC_URL: z.url().default('http://localhost:4000'),
+    WEB_APP_URL: z.url().default('http://localhost:3000'),
+    STOREFRONT_BASE_DOMAIN: z.string().min(3).default('sellora.localhost'),
+    CORS_ORIGINS: csv.default(['http://localhost:3000']),
+    COOKIE_DOMAIN: z.string().optional(),
+    COOKIE_SECURE: bool.default(false),
+
+    MONGODB_URI: z.string().min(1),
+    MONGODB_DB_NAME: z.string().min(1).default('sellora'),
+    MONGODB_AUTO_INDEX: bool.default(true),
+
+    REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379/0'),
+    REDIS_QUEUE_URL: z.string().optional(),
+    REDIS_KEY_PREFIX: z.string().default('sl:'),
+
+    JWT_ISSUER: z.string().default('sellora-api'),
+    JWT_KEY_ID: z.string().min(1),
+    JWT_PRIVATE_KEY: z.string().min(1).describe('base64 encoded PKCS8 PEM (Ed25519)'),
+    JWT_PUBLIC_KEY: z.string().min(1).describe('base64 encoded SPKI PEM (Ed25519)'),
+    JWT_PREVIOUS_PUBLIC_KEYS: z
+      .string()
+      .optional()
+      .describe('JSON array of {"kid":"..","pem":"base64"} accepted during key rotation'),
+    ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
+    REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(30),
+    REFRESH_TOKEN_IDLE_DAYS: z.coerce.number().int().min(1).max(90).default(14),
+    PLATFORM_ACCESS_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(1800).default(300),
+    PLATFORM_SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(72).default(12),
+
+    DATA_ENCRYPTION_KEYS: z
+      .string()
+      .min(1)
+      .describe('Comma separated kid:base64key pairs, each key 32 bytes'),
+    DATA_ENCRYPTION_ACTIVE_KID: z.string().min(1),
+
+    MAIL_TRANSPORT: z.enum(['log', 'smtp']).default('log'),
+    SMTP_URL: z.string().optional(),
+    MAIL_FROM: z.string().default('Sellora AI <no-reply@sellora.localhost>'),
+
+    STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+    STORAGE_LOCAL_DIR: z.string().default('./storage'),
+    STORAGE_SIGNING_SECRET: z.string().min(32).optional(),
+    S3_ENDPOINT: z.string().optional(),
+    S3_REGION: z.string().default('auto'),
+    S3_BUCKET: z.string().optional(),
+    S3_ACCESS_KEY_ID: z.string().optional(),
+    S3_SECRET_ACCESS_KEY: z.string().optional(),
+    S3_FORCE_PATH_STYLE: bool.default(true),
+    S3_PUBLIC_BASE_URL: z.string().optional(),
+
+    METRICS_TOKEN: z.string().min(16).optional(),
+
+    TELEGRAM_BOT_TOKEN: z.string().optional(),
+    TELEGRAM_CHAT_ID: z.string().optional(),
+
+    WEBCHAT_TOKEN_SECRET: z.string().min(32).optional(),
+
+    AI_ANTHROPIC_API_KEY: z.string().optional(),
+    AI_OPENAI_API_KEY: z.string().optional(),
+    AI_OPENAI_BASE_URL: z.string().optional(),
+
+    RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().min(10).default(600),
+    RATE_LIMIT_AUTH_PER_15MIN: z.coerce.number().int().min(3).default(20),
+    /** Scales every per-IP limit (e.g. behind a carrier-grade NAT, or in tests). */
+    RATE_LIMIT_IP_MULTIPLIER: z.coerce.number().int().min(1).max(10_000).default(1),
+  })
+  .superRefine((env, ctx) => {
+    if (env.NODE_ENV === 'production') {
+      if (!env.COOKIE_SECURE) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['COOKIE_SECURE'],
+          message: 'must be true in production',
+        });
+      }
+      if (env.MAIL_TRANSPORT === 'log') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['MAIL_TRANSPORT'],
+          message: 'log transport is not allowed in production',
+        });
+      }
+      if (
+        env.STORAGE_DRIVER === 's3' &&
+        (!env.S3_BUCKET || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY)
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['S3_BUCKET'],
+          message: 'S3 settings are required for the s3 driver',
+        });
+      }
+    }
+    if (env.MAIL_TRANSPORT === 'smtp' && !env.SMTP_URL) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['SMTP_URL'],
+        message: 'required when MAIL_TRANSPORT=smtp',
+      });
+    }
+    const kids = env.DATA_ENCRYPTION_KEYS.split(',').map((p) => p.split(':')[0]);
+    if (!kids.includes(env.DATA_ENCRYPTION_ACTIVE_KID)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['DATA_ENCRYPTION_ACTIVE_KID'],
+        message: 'must match a kid in DATA_ENCRYPTION_KEYS',
+      });
+    }
+  });
+
+export type Env = z.infer<typeof envSchema>;
+
+export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  const parsed = envSchema.safeParse(source);
+  if (!parsed.success) {
+    const lines = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`);
+    throw new Error(`Invalid environment configuration:\n${lines.join('\n')}`);
+  }
+  return parsed.data;
+}
