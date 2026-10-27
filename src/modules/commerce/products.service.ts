@@ -392,12 +392,24 @@ export class ProductsService {
     const after = await this.tx.run(async () => {
       // Stock of existing variants may have changed since we read it (orders). Write the
       // variants with the stock values read inside the transaction.
+      const writeOffs: { variantId: Types.ObjectId; stock: number; note: string }[] = [];
       if (set.variants) {
         const fresh = await this.products.findById(before._id, { variants: 1 });
-        for (const v of set.variants as Variant[]) {
+        const next = set.variants as Variant[];
+        for (const v of next) {
           const live = fresh?.variants.find((f) => f._id.equals(v._id));
           const old = before.variants.find((b) => b._id.equals(v._id));
           if (live && old && live.trackStock === v.trackStock) v.stock = live.stock;
+          else if (live?.trackStock && !v.trackStock)
+            writeOffs.push({
+              variantId: v._id,
+              stock: live.stock,
+              note: 'Stock tracking turned off',
+            });
+        }
+        for (const live of fresh?.variants ?? []) {
+          if (live.trackStock && !next.some((v) => v._id.equals(live._id)))
+            writeOffs.push({ variantId: live._id, stock: live.stock, note: 'Variant removed' });
         }
       }
       const updated = await this.products.findOneAndUpdate(
@@ -405,6 +417,7 @@ export class ProductsService {
         { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
       );
       if (newVariants.length) await this.inventory.recordInitial(before._id, newVariants);
+      if (writeOffs.length) await this.inventory.recordWriteOff(before._id, writeOffs);
       return updated!;
     });
     await this.audit.record({

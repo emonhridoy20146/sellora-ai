@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { RequestContext } from '../../common/context/request-context.js';
 import { AppError, type FieldError } from '../../common/errors/app-error.js';
-import { startOfMonthInZone } from '../../common/time/zoned.js';
+import { startOfDayInZone, startOfMonthInZone } from '../../common/time/zoned.js';
 import { CounterService } from '../../infra/database/counter.service.js';
 import type { WithId } from '../../infra/database/schema-helpers.js';
 import { TransactionService } from '../../infra/database/transaction.service.js';
@@ -104,7 +104,10 @@ export function toOrderDto(o: OrderDoc) {
     discountMinor: o.discountMinor,
     deliveryChargeMinor: o.deliveryChargeMinor,
     totalMinor: o.totalMinor,
-    dueMinor: Math.max(0, o.payment.status === 'refunded' ? 0 : o.totalMinor - o.payment.paidMinor),
+    dueMinor: o.payment.status === 'refunded' ? 0 : Math.max(0, o.totalMinor - o.payment.paidMinor),
+    /** Paid more than the order now costs (items were removed): money owed back. */
+    refundDueMinor:
+      o.payment.status === 'refunded' ? 0 : Math.max(0, o.payment.paidMinor - o.totalMinor),
     deliveryZone: o.deliveryZone ?? null,
     payment: {
       method: o.payment.method,
@@ -157,6 +160,17 @@ function quantities(lines: StockLine[]): Map<string, StockLine> {
  * back when it is cancelled or returned; every step runs in a transaction with a guard on
  * the current status, so two people pressing the same button cannot double-count stock.
  */
+export interface OrdersSummary {
+  currency: string;
+  timezone: string;
+  today: { orders: number; valueMinor: number };
+  month: { orders: number; valueMinor: number };
+  toHandle: { pending: number; confirmed: number; packed: number };
+  /** Shipped orders and what couriers still have to collect on them. */
+  shipped: { orders: number; toCollectMinor: number };
+  products: { active: number; lowStock: number };
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -238,6 +252,94 @@ export class OrdersService {
       counts.all += r.n;
     }
     return counts;
+  }
+
+  /**
+   * Numbers for the overview page. "Order value" counts orders that are not cancelled or
+   * returned, by the day and month they were placed in the business's time zone.
+   */
+  async summary(): Promise<OrdersSummary> {
+    const [org, settings] = await Promise.all([
+      this.orgs.get(this.orgId()),
+      this.shopSettings.get(),
+    ]);
+    const now = new Date();
+    const counted = { status: { $nin: ['cancelled', 'returned'] }, currency: org.currency };
+    const totals = [
+      {
+        $group: {
+          _id: null,
+          orders: { $sum: 1 },
+          valueMinor: { $sum: '$totalMinor' },
+        },
+      },
+    ];
+    type Total = { orders: number; valueMinor: number };
+    const [row] = await this.orders.aggregate<{ today: Total[]; month: Total[] }>([
+      { $match: { placedAt: { $gte: startOfMonthInZone(now, org.timezone) } } },
+      {
+        $facet: {
+          today: [
+            { $match: { ...counted, placedAt: { $gte: startOfDayInZone(now, org.timezone) } } },
+            ...totals,
+          ],
+          month: [{ $match: counted }, ...totals],
+        },
+      },
+    ]);
+    // Open and shipped orders are not limited to this month, so they get their own query.
+    const [open] = await this.orders.aggregate<{
+      open: { _id: OrderStatus; n: number }[];
+      shipped: { orders: number; dueMinor: number }[];
+    }>([
+      { $match: { status: { $in: ['pending', 'confirmed', 'packed', 'shipped'] } } },
+      {
+        $facet: {
+          open: [
+            { $match: { status: { $in: ['pending', 'confirmed', 'packed'] } } },
+            { $group: { _id: '$status', n: { $sum: 1 } } },
+          ],
+          shipped: [
+            { $match: { status: 'shipped', currency: org.currency } },
+            {
+              $group: {
+                _id: null,
+                orders: { $sum: 1 },
+                dueMinor: {
+                  $sum: { $max: [0, { $subtract: ['$totalMinor', '$payment.paidMinor'] }] },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ]);
+    const openCount = (status: OrderStatus) => open?.open.find((r) => r._id === status)?.n ?? 0;
+    const [activeProducts, lowStockProducts] = await Promise.all([
+      this.products.count({ status: 'active' }),
+      this.products.count({
+        status: { $ne: 'archived' },
+        variants: {
+          $elemMatch: { trackStock: true, stock: { $lte: settings.lowStockThreshold } },
+        },
+      }),
+    ]);
+    return {
+      currency: org.currency,
+      timezone: org.timezone,
+      today: { orders: row?.today[0]?.orders ?? 0, valueMinor: row?.today[0]?.valueMinor ?? 0 },
+      month: { orders: row?.month[0]?.orders ?? 0, valueMinor: row?.month[0]?.valueMinor ?? 0 },
+      toHandle: {
+        pending: openCount('pending'),
+        confirmed: openCount('confirmed'),
+        packed: openCount('packed'),
+      },
+      shipped: {
+        orders: open?.shipped[0]?.orders ?? 0,
+        toCollectMinor: open?.shipped[0]?.dueMinor ?? 0,
+      },
+      products: { active: activeProducts, lowStock: lowStockProducts },
+    };
   }
 
   async get(id: string): Promise<OrderDoc> {
@@ -732,7 +834,8 @@ export class OrdersService {
   ): Promise<OrderDoc> {
     const before = await this.get(id);
     const paidMinor = input.paidMinor ?? before.payment.paidMinor;
-    if (paidMinor > before.totalMinor)
+    // An earlier overpayment (items removed after paying) may stay while other fields change.
+    if (input.paidMinor !== undefined && paidMinor > before.totalMinor)
       throw AppError.validation([
         { path: 'paidMinor', message: 'The paid amount is more than the order total' },
       ]);

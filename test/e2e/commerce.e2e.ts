@@ -7,7 +7,14 @@ interface ProductDto {
   name: string;
   slug: string;
   status: string;
-  variants: { id: string; title: string; sku: string | null; stock: number; priceMinor: number }[];
+  variants: {
+    id: string;
+    title: string;
+    sku: string | null;
+    stock: number;
+    priceMinor: number;
+    trackStock: boolean;
+  }[];
   stock: { tracked: boolean; total: number; lowVariants: number | null };
   soldCount: number;
 }
@@ -25,6 +32,7 @@ interface OrderDto {
   deliveryChargeMinor: number;
   totalMinor: number;
   dueMinor: number;
+  refundDueMinor: number;
   deliveryZone: { id: string; name: string } | null;
   payment: { method: string; status: string; paidMinor: number };
   stockCommitted: boolean;
@@ -181,6 +189,57 @@ describe('commerce: products, stock, customers and orders', () => {
         .get(url(`/stock-movements?productId=${p.id}`))
         .expect(200);
       expect(history.body.items.map((m: { delta: number }) => m.delta).sort()).toEqual([4, 6]);
+    });
+
+    it('writes stock off in history when a variant is removed or stops being tracked', async () => {
+      const p = await createProduct({
+        name: 'Panjabi',
+        options: [{ name: 'Size', values: ['M', 'L', 'XL'] }],
+        variants: [
+          { optionValues: ['M'], priceMinor: 90_000, stock: 2 },
+          { optionValues: ['L'], priceMinor: 90_000, stock: 5 },
+          { optionValues: ['XL'], priceMinor: 90_000, stock: 0 },
+        ],
+      });
+      const [m, l, xl] = p.variants;
+      const res = await O()
+        .patch(url(`/products/${p.id}`))
+        .send({
+          options: [{ name: 'Size', values: ['M', 'XL'] }],
+          variants: [
+            { id: m!.id, optionValues: ['M'], priceMinor: 90_000, trackStock: false },
+            { id: xl!.id, optionValues: ['XL'], priceMinor: 90_000 },
+          ],
+        })
+        .expect(200);
+      expect(
+        (res.body as ProductDto).variants.map((v) => [v.title, v.trackStock, v.stock]),
+      ).toEqual([
+        ['M', false, 0],
+        ['XL', true, 0],
+      ]);
+      const history = await O()
+        .get(url(`/stock-movements?productId=${p.id}`))
+        .expect(200);
+      const rows = (
+        history.body.items as {
+          variantId: string;
+          delta: number;
+          stockAfter: number;
+          reason: string;
+          note?: string;
+        }[]
+      ).filter((r) => r.reason === 'adjustment');
+      expect(
+        rows
+          .map((r) => [r.variantId, r.delta, r.stockAfter, r.note])
+          .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+      ).toEqual(
+        [
+          [m!.id, -2, 0, 'Stock tracking turned off'],
+          [l!.id, -5, 0, 'Variant removed'],
+        ].sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+      );
     });
 
     it('lists, searches and filters by stock', async () => {
@@ -567,6 +626,35 @@ describe('commerce: products, stock, customers and orders', () => {
         .expect(422);
     });
 
+    it('shows money owed back when items are removed after payment', async () => {
+      const p = await simple('Prepaid Jacket', 5, 100_000);
+      const o = (await order(p, 2, { deliveryZoneId: null }).expect(201)).body as OrderDto;
+      await O()
+        .post(url(`/orders/${o.id}/payment`))
+        .send({ paidMinor: 200_000, method: 'bkash' })
+        .expect(200);
+      const edited = await O()
+        .put(url(`/orders/${o.id}/items`))
+        .send({ items: [{ productId: p.id, variantId: p.variants[0]!.id, quantity: 1 }] })
+        .expect(200);
+      expect(edited.body).toMatchObject({
+        totalMinor: 100_000,
+        dueMinor: 0,
+        refundDueMinor: 100_000,
+        payment: { status: 'paid', paidMinor: 200_000 },
+      });
+      // Changing only the method keeps the overpayment on record.
+      await O()
+        .post(url(`/orders/${o.id}/payment`))
+        .send({ method: 'nagad' })
+        .expect(200);
+      const settled = await O()
+        .post(url(`/orders/${o.id}/payment`))
+        .send({ paidMinor: 100_000 })
+        .expect(200);
+      expect(settled.body).toMatchObject({ dueMinor: 0, refundDueMinor: 0 });
+    });
+
     it('records payments and refunds', async () => {
       const p = await simple('Bedsheet', 5, 150_000);
       const o = (await order(p, 1).expect(201)).body as OrderDto;
@@ -689,6 +777,72 @@ describe('commerce: products, stock, customers and orders', () => {
         invoiceNote: 'Thank you for shopping with us',
       });
       expect(print.body.orders.map((o: OrderDto) => o.id)).toEqual([first.id]);
+    });
+
+    it('summarises orders for the overview page', async () => {
+      const shop = (await t.createOrg(owner, { name: 'Summary Shop' })).id;
+      const u = (path: string) => `/v1/orgs/${shop}${path}`;
+      const org = (await O().get(`/v1/orgs/${shop}`).expect(200)).body as {
+        currency: string;
+        timezone: string;
+      };
+      const p = (
+        await O()
+          .post(u('/products'))
+          .send({ name: 'Lungi', variants: [{ priceMinor: 50_000, stock: 10 }] })
+          .expect(201)
+      ).body as ProductDto;
+      await O()
+        .post(u('/products'))
+        .send({ name: 'Cap', variants: [{ priceMinor: 20_000, stock: 2 }] })
+        .expect(201);
+      const place = async (quantity: number, extra: Record<string, unknown> = {}) =>
+        (
+          await O()
+            .post(u('/orders'))
+            .send({
+              customer: { name: 'Karim', phone: '01811111111' },
+              shippingAddress: { line1: 'Road 1', city: 'Dhaka' },
+              items: [{ productId: p.id, variantId: p.variants[0]!.id, quantity }],
+              ...extra,
+            })
+            .expect(201)
+        ).body as OrderDto;
+
+      await place(1);
+      await place(2, { status: 'pending' });
+      const cancelled = await place(1);
+      await O()
+        .post(u(`/orders/${cancelled.id}/cancel`))
+        .send({ reason: 'Changed mind' })
+        .expect(200);
+      const shipped = await place(1, { payment: { method: 'bkash', paidMinor: 10_000 } });
+      await O()
+        .post(u(`/orders/${shipped.id}/status`))
+        .send({ status: 'shipped' })
+        .expect(200);
+      // An open order from an earlier month still needs handling but is not this month's value.
+      const old = await place(1);
+      await t.db
+        .model('Order')
+        .updateOne(
+          { _id: new Types.ObjectId(old.id), orgId: new Types.ObjectId(shop) },
+          { $set: { placedAt: new Date(Date.now() - 40 * 86_400_000) } },
+        );
+
+      const summary = await O().get(u('/orders/summary')).expect(200);
+      expect(summary.body).toEqual({
+        currency: org.currency,
+        timezone: org.timezone,
+        today: { orders: 3, valueMinor: 200_000 },
+        month: { orders: 3, valueMinor: 200_000 },
+        toHandle: { pending: 1, confirmed: 2, packed: 0 },
+        shipped: { orders: 1, toCollectMinor: 40_000 },
+        products: { active: 2, lowStock: 1 },
+      });
+      // The summary is per business.
+      const mine = await O().get(url('/orders/summary')).expect(200);
+      expect(mine.body.products.active).not.toBe(2);
     });
 
     it('enforces the monthly order limit', async () => {

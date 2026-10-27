@@ -206,6 +206,15 @@ export class OrdersController {
     return this.orders.statusCounts();
   }
 
+  @Get('summary')
+  @RequirePermissions('orders.view')
+  @ApiOperation({
+    summary: 'Overview numbers: order value today and this month, orders to handle, COD to collect',
+  })
+  summary() {
+    return this.orders.summary();
+  }
+
   @Post()
   @RequirePermissions('orders.create')
   @ApiOperation({

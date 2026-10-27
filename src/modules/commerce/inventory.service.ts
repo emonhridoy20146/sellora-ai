@@ -193,6 +193,29 @@ export class InventoryService {
     await this.movements.insertMany(rows);
   }
 
+  /**
+   * Writes counted stock down to zero when a variant is removed or stops being tracked, so the
+   * history still explains where the units went.
+   */
+  async recordWriteOff(
+    productId: Types.ObjectId,
+    rows: { variantId: Types.ObjectId; stock: number; note: string }[],
+  ): Promise<void> {
+    await this.movements.insertMany(
+      rows
+        .filter((r) => r.stock !== 0)
+        .map((r) => ({
+          productId,
+          variantId: r.variantId,
+          delta: -r.stock,
+          stockAfter: 0,
+          reason: 'adjustment' as const,
+          note: r.note,
+          actor: this.actor(),
+        })),
+    );
+  }
+
   async history(query: { productId?: string; limit: number; cursor?: string }) {
     const filter = query.productId ? { productId: new Types.ObjectId(query.productId) } : {};
     return this.movements.paginate(filter, query, 'createdAt');

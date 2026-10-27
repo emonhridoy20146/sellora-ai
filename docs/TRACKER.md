@@ -44,14 +44,23 @@ Last updated: 2026-10-27.
 | Tenant billing tools: wallet adjust, freeze, assign plan, extend trial, module overrides         | Done                 |                                                                                                                                  |
 | Telegram daily stats to the super-admin                                                          | Not started          | Planned with M9 (platform operations).                                                                                           |
 
-## M3 — Commerce (next)
+## M3 — Commerce
 
-| Feature                                                      | Status                                                |
-| ------------------------------------------------------------ | ----------------------------------------------------- |
-| Products, variants, stock, categories, images                | Not started                                           |
-| Customers                                                    | Not started                                           |
-| Manual orders, order statuses, receipts and invoice printing | Not started                                           |
-| File storage (S3-compatible, signed URLs)                    | Not started (configuration exists, no implementation) |
+| Feature                                                                                          | Status      | Notes                                                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Products with options and variants (up to 3 options, 100 variants)                               | Done        | Unique slugs, SKUs unique per business, plan product limit. Products on any order are archived instead of deleted.                                                             |
+| Categories                                                                                       | Done        |                                                                                                                                                                                |
+| Stock: tracking per variant, adjustments, full stock history                                     | Done        | Every change is a stock movement (opening, received, damaged, order, cancel, edit, return, write-off when a variant is removed or untracked). 12 racing orders never oversell. |
+| Product images                                                                                   | Partial     | Image links only. Uploads arrive with file storage (below).                                                                                                                    |
+| Customers: phones normalised to E.164, addresses, block, order stats                             | Done        | One customer per phone per business.                                                                                                                                           |
+| Manual orders: pricing, delivery zones, discount, payment, auto-confirm                          | Done        | Monthly order limit counted in the business's time zone.                                                                                                                       |
+| Order statuses, cancel with reason, returns with or without restock                              | Done        | Status changes are conditional, so a double cancel from two tabs restores stock once.                                                                                          |
+| Editing items on open orders (stock moves by the difference)                                     | Done        | Shows a refund due when the customer has paid more than the new total.                                                                                                         |
+| Payments and refunds on orders                                                                   | Done        | Records what was paid; no gateway is charged from an order yet.                                                                                                                |
+| Invoices and packing slips (print, bulk print up to 50)                                          | Done        | Printed from the browser; no PDF file yet.                                                                                                                                     |
+| Overview numbers: order value today and this month, orders to handle, cash to collect, low stock | Done        |                                                                                                                                                                                |
+| Orders from chats (inbox), storefront and landing pages                                          | Not started | Arrive with M4 and M6. The order model already has a `source` field for them.                                                                                                  |
+| File storage (S3-compatible, signed URLs)                                                        | Not started | Configuration exists, no implementation.                                                                                                                                       |
 
 ## M4 — Inbox and AI agent
 
