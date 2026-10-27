@@ -20,7 +20,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, usePathname } from 'next/navigation';
 import { useMemo } from 'react';
 import { Brand } from '@/components/brand';
 import { AppShell, type NavSection } from '@/components/layout/app-shell';
@@ -48,7 +48,9 @@ function nav(orgId: string, can: (p: string) => boolean): NavSection[] {
       { href: base, label: 'Overview', icon: LayoutDashboard, exact: true },
       // Items marked soon are built in later milestones; listed so the roadmap is visible,
       // never clickable yet.
-      { href: `${base}/inbox`, label: 'Inbox', icon: Inbox, soon: true },
+      ...(can('inbox.view') || can('inbox.view_assigned')
+        ? [{ href: `${base}/inbox`, label: 'Inbox', icon: Inbox }]
+        : []),
       { href: `${base}/ai-agent`, label: 'AI sales agent', icon: Bot, soon: true },
       ...(can('orders.view')
         ? [{ href: `${base}/orders`, label: 'Orders', icon: ShoppingBag }]
@@ -156,6 +158,7 @@ function Banner({ org, billing }: { org: OrgWithRole; billing: BillingSummary | 
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
   const { orgId } = useParams<{ orgId: string }>();
+  const pathname = usePathname();
   const me = useMe();
   const org = me.data?.organizations.find((o) => o.id === orgId);
   const can = useMemo(() => {
@@ -192,6 +195,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
         switcher={<OrgSwitcher org={org} orgs={me.data.organizations} />}
         sections={nav(org.id, can)}
         banner={<Banner org={org} billing={billing.data} />}
+        fullBleed={pathname === `/app/${org.id}/inbox`}
         topRight={
           <>
             <ThemeToggle />

@@ -815,3 +815,112 @@ export interface PrintBundle {
   invoiceNote: string;
   orders: Order[];
 }
+
+// ------------------------------------------------------------------- inbox
+
+export type ChannelType = 'web_chat' | 'messenger' | 'instagram' | 'whatsapp';
+
+export interface Channel {
+  id: string;
+  type: ChannelType;
+  name: string;
+  status: 'active' | 'disabled' | 'error';
+  statusReason: string | null;
+  aiEnabled: boolean;
+  webChat: {
+    publicKey: string;
+    allowedOrigins: string[];
+    greeting: string;
+    color: string;
+    askContact: boolean;
+  } | null;
+  account: { externalId: string; displayName: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Contact {
+  id: string;
+  channelId: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+  customerId: string | null;
+  lastSeenAt: string | null;
+  createdAt: string;
+}
+
+export interface Conversation {
+  id: string;
+  channelId: string;
+  channelType: ChannelType;
+  status: 'open' | 'closed';
+  assigneeId: string | null;
+  ai: {
+    mode: 'auto' | 'paused';
+    changedAt: string | null;
+    changedBy: { type: string; id: string; name?: string } | null;
+    reason: string | null;
+  };
+  lastMessage: { text: string; at: string; direction: 'in' | 'out'; senderType: string } | null;
+  lastMessageAt: string;
+  lastInboundAt: string | null;
+  unread: number;
+  tags: string[];
+  locked: boolean;
+  contact: Contact | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InboxMessage {
+  id: string;
+  conversationId: string;
+  direction: 'in' | 'out';
+  type: 'text' | 'image' | 'file' | 'note' | 'system';
+  sender: { type: 'contact' | 'user' | 'ai' | 'system'; id: string | null; name: string | null };
+  text: string;
+  attachments: {
+    url: string;
+    contentType: string | null;
+    name: string | null;
+    size: number | null;
+  }[];
+  clientId: string | null;
+  delivery: { status: string; error: string | null };
+  ai: { credits: number } | null;
+  createdAt: string;
+}
+
+export interface TeamMember {
+  userId: string;
+  name: string;
+  isYou: boolean;
+}
+
+/** What the website chat widget gets about the business. */
+export interface WidgetConfig {
+  businessName: string;
+  greeting: string;
+  color: string;
+  askContact: boolean;
+  allowedOrigins: string[];
+}
+
+export interface VisitorMessage {
+  id: string;
+  from: 'visitor' | 'business';
+  name: string | null;
+  type: string;
+  text: string;
+  attachments: { url: string; contentType: string | null; name: string | null }[];
+  clientId: string | null;
+  createdAt: string;
+}
+
+export interface VisitorContact {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+}

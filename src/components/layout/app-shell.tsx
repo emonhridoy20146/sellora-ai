@@ -93,6 +93,7 @@ export function AppShell({
   sections,
   topRight,
   banner,
+  fullBleed = false,
   children,
 }: {
   brand: React.ReactNode;
@@ -100,6 +101,8 @@ export function AppShell({
   sections: NavSection[];
   topRight: React.ReactNode;
   banner?: React.ReactNode;
+  /** The page fills the space below the top bar edge to edge (the inbox). */
+  fullBleed?: boolean;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -154,7 +157,7 @@ export function AppShell({
         </div>
       )}
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={cn('flex min-w-0 flex-1 flex-col', fullBleed && 'h-dvh')}>
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/85 px-4 backdrop-blur sm:px-6 print:hidden">
           <Button
             variant="ghost"
@@ -171,8 +174,12 @@ export function AppShell({
         <div className="print:hidden">{banner}</div>
         <main
           id="main"
-          key={pathname}
-          className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8 print:max-w-none print:p-0"
+          key={fullBleed ? undefined : pathname}
+          className={
+            fullBleed
+              ? 'min-h-0 w-full flex-1 overflow-hidden'
+              : 'mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8 print:max-w-none print:p-0'
+          }
         >
           {children}
         </main>

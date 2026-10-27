@@ -132,6 +132,8 @@ try {
       ['/staff/roles', 'staff-roles'],
       ['/settings', 'settings'],
       ['/settings/selling', 'settings-selling'],
+      ['/settings/channels', 'settings-channels'],
+      ['/inbox', 'inbox'],
       ['/orders', 'orders'],
       ['/orders/new', 'orders-new'],
       ['/products', 'products'],

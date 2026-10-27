@@ -2,6 +2,7 @@
 
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { Toaster, toast } from 'sonner';
 import { ApiError, errorMessage } from '@/lib/api/errors';
@@ -36,8 +37,17 @@ declare module '@tanstack/react-query' {
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(makeClient);
+  // The chat widget sits on merchants' sites inside a transparent iframe; a dark colour
+  // scheme there would paint the iframe opaque, so it is always light.
+  const forcedTheme = usePathname().startsWith('/widget/') ? 'light' : undefined;
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+      forcedTheme={forcedTheme}
+    >
       <QueryClientProvider client={client}>
         {children}
         <Toaster richColors closeButton position="top-right" />

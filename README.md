@@ -32,14 +32,14 @@ super-admin in the panel and stored encrypted by the API.
 
 ## Scripts
 
-| Command                           | What it does                                                                                  |
-| --------------------------------- | --------------------------------------------------------------------------------------------- |
-| `npm run dev`                     | Development server with Turbopack.                                                            |
-| `npm run build` / `npm start`     | Production build (standalone output) and server.                                              |
-| `npm run typecheck`               | `tsc --noEmit` (run `npx next typegen` first on a fresh checkout for route types).            |
-| `npm run lint` / `npm run format` | ESLint (Next.js rules) and Prettier.                                                          |
-| `npm test`                        | Unit tests (Vitest): money and date formatting, credit estimates, chart ticks, order helpers. |
-| `npm run e2e`                     | Browser smoke test against a running app + API (see below).                                   |
+| Command                           | What it does                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                     | Development server with Turbopack.                                                                      |
+| `npm run build` / `npm start`     | Production build (standalone output) and server.                                                        |
+| `npm run typecheck`               | `tsc --noEmit` (run `npx next typegen` first on a fresh checkout for route types).                      |
+| `npm run lint` / `npm run format` | ESLint (Next.js rules) and Prettier.                                                                    |
+| `npm test`                        | Unit tests (Vitest): money and date formatting, credit estimates, chart ticks, order and inbox helpers. |
+| `npm run e2e`                     | Browser smoke test against a running app + API (see below).                                             |
 
 ### Browser smoke test
 
@@ -69,6 +69,21 @@ SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
 node scripts/commerce-flow.mjs
 ```
 
+### Inbox browser flow
+
+`scripts/inbox-flow.mjs` adds the website chat in Settings › Channels, embeds it on a stand-in
+merchant site served from another origin, chats as a visitor and answers from the inbox in a
+second browser, checking that both sides update live: the new conversation and its unread
+badge, typing, replies, notes staying internal, the "." command, the AI pausing when staff
+reply, the unread badge on the closed bubble, closing and reopening, dark mode, the phone
+layout, and that the browser refuses to show the chat on a site that is not allowed. Run it
+against a demo business:
+
+```bash
+SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
+node scripts/inbox-flow.mjs
+```
+
 ## Layout
 
 ```
@@ -84,6 +99,8 @@ src/
     charts/               SVG column chart (tooltips, keyboard, table view)
     billing/ auth/ layout/ marketing/
     commerce/             product form, item editor, order table, badges, print helpers
+    inbox/                conversation list, thread, customer panel, live updates (Socket.IO),
+                          the website chat widget
   lib/
     api/                  fetch wrapper (CSRF, one refresh on 401), error type, response types
     format.ts             money in minor units, credits, dates (Intl, any currency)
@@ -91,10 +108,14 @@ src/
     commerce.ts           order statuses and actions, variant combinations, order totals
     upload.ts             photo shrinking and direct-to-storage uploads
     plans.ts              which plan limits apply to which modules
+    inbox.ts              inbox views, live list placement, dot command, embed code
   config/
     site.ts               public settings from env
     marketing.ts          feature list with live/coming-soon flags
-  proxy.ts                redirects signed-out visitors away from /app and /admin
+  app/widget/[key]/       the website chat page that widget.js frames on merchants' sites
+  proxy.ts                redirects signed-out visitors away from /app and /admin; sets which
+                          sites may frame each chat widget (frame-ancestors)
+public/widget.js          the embed script merchants paste into their site
 ```
 
 ## How it fits together
@@ -108,15 +129,26 @@ src/
 - **Money.** Every amount is an integer in the currency's minor unit. `parseMoney` turns typed
   text into minor units without floating point; `formatMoney` uses `Intl` so BDT, USD and
   zero-decimal currencies all work.
+- **Live updates.** The inbox connects to the API's Socket.IO `agents` namespace through this
+  site's `/socket.io` rewrite (cookies ride along), joins the business, and writes events
+  straight into the React Query caches (`components/inbox/data.ts`). On every reconnect it
+  refetches. Visitors' widgets use the `webchat` namespace with their visitor token.
+- **Website chat.** `public/widget.js` adds an iframe of `/widget/<key>` to the merchant's
+  page and resizes it when the chat opens (postMessage, checked against this site's origin).
+  The iframe page is always light so its background stays transparent. Every other page
+  sends `X-Frame-Options: DENY`; widget pages send `frame-ancestors` with the channel's
+  allowed sites (cached for a minute in `proxy.ts`), so the browser itself refuses to show a
+  chat on a site the merchant did not allow.
 - **Honesty on the public site.** `config/marketing.ts` marks each feature `live` or `soon`, and
   `LIVE_MODULES` controls the "coming soon" tag on plan modules. Only flip a flag when the
   feature works end to end.
 
 ## What is not built yet
 
-Orders, products, customers and product photo uploads are live (M3). Pages for the inbox, AI
-agent, couriers, store builder, marketing and analytics appear in the merchant sidebar as
-disabled "Soon" items. They will be added milestone by milestone; see `docs/TRACKER.md` in
+Orders, products, customers and product photo uploads are live (M3). The inbox works with
+the website chat (M4a); Messenger, Instagram and WhatsApp come next, so the public site still
+labels the inbox "coming soon". Pages for the AI agent, couriers, store builder, marketing and
+analytics appear in the merchant sidebar as disabled "Soon" items. They will be added milestone by milestone; see `docs/TRACKER.md` in
 sellora-api.
 
 Photo uploads (`lib/upload.ts`) shrink photos to 1600 px in the browser, ask the API for an

@@ -51,6 +51,16 @@ function refresh(realm: Realm): Promise<boolean> {
   return inflightRefresh[realm];
 }
 
+/**
+ * Renews the access cookie. For connections that are not fetch calls (live updates); tells
+ * the app the session ended when it cannot be renewed.
+ */
+export async function refreshSession(realm: Realm = 'merchant'): Promise<boolean> {
+  const ok = await refresh(realm);
+  if (!ok) sessionListeners.forEach((fn) => fn(realm));
+  return ok;
+}
+
 function csrfHeaders(realm: Realm, headers: Record<string, string>): Record<string, string> {
   const token = readCookie(CSRF_COOKIE[realm]);
   return token ? { ...headers, 'x-csrf-token': token } : headers;
