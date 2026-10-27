@@ -24,7 +24,8 @@
     "depcruise": "depcruise src --config .dependency-cruiser.cjs",
     "openapi:export": "node --import @swc-node/register/esm-register scripts/export-openapi.ts",
     "keys:generate": "node scripts/generate-keys.mjs",
-    "platform:bootstrap": "node --import @swc-node/register/esm-register scripts/platform-bootstrap.ts"
+    "platform:bootstrap": "node --import @swc-node/register/esm-register scripts/platform-bootstrap.ts",
+    "db:indexes": "node --import @swc-node/register/esm-register scripts/sync-indexes.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1157.0",

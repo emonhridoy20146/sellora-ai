@@ -131,6 +131,8 @@ describe('billing', () => {
         'standard:claude-sonnet-5-5',
       ]);
 
+      // Index builds run in the background at boot; wait for them before reading.
+      await Promise.all([app.db.model('Wallet').init(), app.db.model('Subscription').init()]);
       const indexes = await app.db.db!.collection('wallets').indexes();
       expect(indexes.find((i) => JSON.stringify(i.key) === '{"orgId":1}')?.unique).toBe(true);
       const subIndexes = await app.db.db!.collection('subscriptions').indexes();
