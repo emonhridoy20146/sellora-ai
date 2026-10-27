@@ -9,3 +9,4 @@ coverage/
 storage/
 .keys/
 openapi.json.tmp
+dump.rdb
