@@ -636,9 +636,18 @@ describe('billing', () => {
       const gateways = (await P().get('/v1/platform/billing/gateways').expect(200)).body as {
         key: string;
         publicConfig: { accounts: unknown[] } | null;
+        webhookUrl: string | null;
       }[];
       // The admin panel sees the manual instructions it set, so it can edit them.
       expect(gateways.find((g) => g.key === 'manual')?.publicConfig?.accounts).toHaveLength(1);
+      // It also shows the notification address to paste into each gateway's dashboard.
+      expect(gateways.find((g) => g.key === 'stripe')?.webhookUrl).toMatch(
+        /\/v1\/payments\/stripe\/webhook$/,
+      );
+      expect(gateways.find((g) => g.key === 'sslcommerz')?.webhookUrl).toMatch(
+        /\/v1\/payments\/sslcommerz\/ipn$/,
+      );
+      expect(gateways.find((g) => g.key === 'manual')?.webhookUrl).toBeNull();
       const { owner, orgId } = await newOrg();
       const methods = (
         await app.as(owner.token).get(`/v1/orgs/${orgId}/billing/payment-methods`).expect(200)

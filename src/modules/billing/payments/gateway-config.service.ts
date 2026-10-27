@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
 import { EncryptionService } from '../../../common/crypto/encryption.service.js';
+import { AppConfig } from '../../../config/app-config.js';
 import { AppError } from '../../../common/errors/app-error.js';
 import { zodIssuesToFieldErrors } from '../../../common/filters/problem-details.filter.js';
 import { AuditService } from '../../audit/audit.service.js';
@@ -30,10 +31,22 @@ export class GatewayConfigService {
     @InjectModel('GatewayConfig') private readonly configs: Model<GatewayConfig>,
     private readonly encryption: EncryptionService,
     private readonly audit: AuditService,
+    private readonly config: AppConfig,
   ) {}
 
   private aad(key: GatewayKey) {
     return `gateway:${key}`;
+  }
+
+  /**
+   * The address the admin must paste into the gateway's dashboard for server-to-server
+   * notifications. bKash gets its callback per payment, so it has none.
+   */
+  private webhookUrl(key: GatewayKey): string | null {
+    const api = this.config.get('API_PUBLIC_URL').replace(/\/$/, '');
+    if (key === 'sslcommerz') return `${api}/v1/payments/sslcommerz/ipn`;
+    if (key === 'stripe') return `${api}/v1/payments/stripe/webhook`;
+    return null;
   }
 
   async list() {
@@ -47,6 +60,7 @@ export class GatewayConfigService {
         configured: Boolean(doc?.credentialsEnc),
         currencies: GATEWAY_CURRENCIES[key],
         updatedAt: (doc as { updatedAt?: Date } | undefined)?.updatedAt?.toISOString() ?? null,
+        webhookUrl: this.webhookUrl(key),
         // Manual transfer instructions are public (shown to merchants), so the admin panel
         // can show and edit them. Real gateway secrets are never returned.
         publicConfig:
