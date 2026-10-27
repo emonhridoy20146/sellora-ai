@@ -18,9 +18,17 @@ export const META_ANY_PERMISSIONS = 'auth:anyPermissions';
 export const META_PLATFORM_PERMISSIONS = 'auth:platformPermissions';
 export const META_REQUIRE_VERIFIED = 'auth:requireVerifiedEmail';
 export const META_MODULES = 'billing:modules';
+export const META_SIGNED_URL = 'auth:signedUrl';
 
 /** No authentication required (an access token is still read if present). */
 export const Public = () => SetMetadata(META_PUBLIC, true);
+
+/**
+ * Authorized only by a signed token in the URL (for example an upload link). Cookies are
+ * ignored, so no session is read and the CSRF check does not apply. Implies @Public.
+ */
+export const SignedUrlAuth = () =>
+  applyDecorators(SetMetadata(META_PUBLIC, true), SetMetadata(META_SIGNED_URL, true));
 
 /** Routes for the super-admin realm: platform tokens only, merchant tokens rejected. */
 export const PlatformApi = (tag: string) =>

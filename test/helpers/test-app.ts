@@ -1,3 +1,4 @@
+import { rm } from 'node:fs/promises';
 import type { Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
@@ -86,6 +87,8 @@ export class TestApp {
     if (keys.length)
       await this.redis.del(...keys.map((k) => k.slice(prefix.length))).catch(() => undefined);
     await this.app.close();
+    if (this.env.STORAGE_DRIVER === 'local')
+      await rm(this.env.STORAGE_LOCAL_DIR, { recursive: true, force: true });
   }
 
   http() {

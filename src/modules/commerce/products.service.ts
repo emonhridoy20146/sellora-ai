@@ -7,10 +7,11 @@ import type { WithId } from '../../infra/database/schema-helpers.js';
 import { TransactionService } from '../../infra/database/transaction.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { EntitlementsService } from '../billing/entitlements.service.js';
+import { FilesService } from '../files/files.service.js';
 import { OrgsService } from '../orgs/orgs.service.js';
 import { InventoryService } from './inventory.service.js';
 import { CategoryRepository, OrderRepository, ProductRepository } from './repositories.js';
-import type { Category, Product, ProductStatus, Variant } from './schemas.js';
+import type { Category, Product, ProductImage, ProductStatus, Variant } from './schemas.js';
 import { escapeRegex, searchText, slugify } from './text.js';
 
 export type ProductDoc = WithId<Product>;
@@ -36,7 +37,7 @@ export interface ProductInput {
   categoryId: string | null;
   tags: string[];
   status: ProductStatus;
-  images: { url: string; fileId?: string; alt?: string }[];
+  images: { url?: string; fileId?: string; alt?: string }[];
   options: { name: string; values: string[] }[];
   variants: VariantInput[];
 }
@@ -111,10 +112,65 @@ export class ProductsService {
     private readonly orgs: OrgsService,
     private readonly tx: TransactionService,
     private readonly audit: AuditService,
+    private readonly files: FilesService,
   ) {}
 
   private orgId(): string {
     return RequestContext.tenant()!.orgId;
+  }
+
+  // ---------------------------------------------------------------- photos
+
+  /**
+   * Marks uploaded photos as used by the product and takes their URLs from storage; linked
+   * photos keep the URL given. Run inside the product's transaction.
+   */
+  private async attachImages(
+    productId: Types.ObjectId,
+    images: ProductInput['images'],
+  ): Promise<ProductImage[]> {
+    const withFile = images.flatMap((img, index) =>
+      img.fileId ? [{ index, id: img.fileId }] : [],
+    );
+    const files = await this.files.attach(
+      withFile.map((f) => f.id),
+      { type: 'product', id: productId.toHexString() },
+      'product_image',
+      (i) => `images.${withFile[i]!.index}.fileId`,
+    );
+    return images.map((img) => {
+      const file = img.fileId ? files.get(img.fileId) : undefined;
+      return {
+        url: file ? this.files.publicUrl(file) : img.url!,
+        ...(file ? { fileId: file._id } : {}),
+        ...(img.alt ? { alt: img.alt } : {}),
+      };
+    });
+  }
+
+  /**
+   * After a save that dropped photos: deletes uploaded ones nothing uses any more, except
+   * those shown on past orders, which are kept for order history.
+   */
+  private async releaseImages(productId: Types.ObjectId, dropped: ProductImage[]): Promise<void> {
+    const keep: string[] = [];
+    const release: string[] = [];
+    for (const img of dropped) {
+      if (!img.fileId) continue;
+      const onOrders = await this.orders.exists({
+        'items.productId': productId,
+        'items.imageUrl': img.url,
+      });
+      (onOrders ? keep : release).push(img.fileId.toHexString());
+    }
+    if (keep.length)
+      await this.files.attach(
+        keep,
+        { type: 'order_history', id: productId.toHexString() },
+        'product_image',
+        (i) => `images.${i}`,
+      );
+    await this.files.removeIfUnused(release);
   }
 
   // ---------------------------------------------------------------- products
@@ -283,8 +339,11 @@ export class ProductsService {
     await this.assertSkusFree(variants.flatMap((v) => (v.sku ? [v.sku] : [])));
     const categoryId = await this.assertCategory(input.categoryId);
     const org = await this.orgs.get(orgId);
+    const productId = new Types.ObjectId();
     const product = await this.tx.run(async () => {
+      const images = await this.attachImages(productId, input.images);
       const created = await this.products.create({
+        _id: productId,
         name: input.name,
         slug: await this.uniqueSlug(input.name),
         description: input.description,
@@ -292,11 +351,7 @@ export class ProductsService {
         tags: input.tags,
         status: input.status,
         currency: org.currency,
-        images: input.images.map((i) => ({
-          url: i.url,
-          ...(i.fileId ? { fileId: new Types.ObjectId(i.fileId) } : {}),
-          ...(i.alt ? { alt: i.alt } : {}),
-        })),
+        images,
         options: input.options,
         variants,
         searchText: this.search(input.name, input.tags, variants),
@@ -363,12 +418,6 @@ export class ProductsService {
     }
     if (input.description !== undefined) set.description = input.description;
     if (input.tags !== undefined) set.tags = input.tags;
-    if (input.images !== undefined)
-      set.images = input.images.map((i) => ({
-        url: i.url,
-        ...(i.fileId ? { fileId: new Types.ObjectId(i.fileId) } : {}),
-        ...(i.alt ? { alt: i.alt } : {}),
-      }));
     if (input.status !== undefined && input.status !== before.status) {
       if (before.status === 'archived')
         await this.entitlements.assertWithinLimit(
@@ -412,6 +461,16 @@ export class ProductsService {
             writeOffs.push({ variantId: live._id, stock: live.stock, note: 'Variant removed' });
         }
       }
+      if (input.images !== undefined) {
+        set.images = await this.attachImages(before._id, input.images);
+        const kept = new Set(input.images.flatMap((i) => (i.fileId ? [i.fileId] : [])));
+        await this.files.detach(
+          before.images.flatMap((i) =>
+            i.fileId && !kept.has(i.fileId.toHexString()) ? [i.fileId.toHexString()] : [],
+          ),
+          { type: 'product', id: before._id.toHexString() },
+        );
+      }
       const updated = await this.products.findOneAndUpdate(
         { _id: before._id },
         { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
@@ -420,6 +479,13 @@ export class ProductsService {
       if (writeOffs.length) await this.inventory.recordWriteOff(before._id, writeOffs);
       return updated!;
     });
+    if (input.images !== undefined) {
+      const now = new Set(after.images.flatMap((i) => (i.fileId ? [i.fileId.toHexString()] : [])));
+      await this.releaseImages(
+        before._id,
+        before.images.filter((i) => i.fileId && !now.has(i.fileId.toHexString())),
+      );
+    }
     await this.audit.record({
       action: 'catalog.product.updated',
       orgId: this.orgId(),
@@ -436,7 +502,12 @@ export class ProductsService {
     if (sold) {
       await this.products.updateOne({ _id: p._id }, { $set: { status: 'archived' } });
     } else {
-      await this.products.deleteOne({ _id: p._id });
+      const fileIds = p.images.flatMap((i) => (i.fileId ? [i.fileId.toHexString()] : []));
+      await this.tx.run(async () => {
+        await this.products.deleteOne({ _id: p._id });
+        await this.files.detach(fileIds, { type: 'product', id: p._id.toHexString() });
+      });
+      await this.files.removeIfUnused(fileIds);
     }
     await this.audit.record({
       action: sold ? 'catalog.product.archived' : 'catalog.product.deleted',

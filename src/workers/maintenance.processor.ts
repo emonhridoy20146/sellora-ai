@@ -3,6 +3,7 @@ import { Logger, OnApplicationBootstrap } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
 import { QUEUES } from '../infra/queue/queue.constants.js';
 import { BillingJobsService } from '../modules/billing/billing-jobs.service.js';
+import { FilesService } from '../modules/files/files.service.js';
 import { OrgsService } from '../modules/orgs/orgs.service.js';
 
 /**
@@ -17,6 +18,7 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
     @InjectQueue(QUEUES.maintenance) private readonly queue: Queue,
     private readonly orgs: OrgsService,
     private readonly billing: BillingJobsService,
+    private readonly files: FilesService,
   ) {
     super();
   }
@@ -27,6 +29,7 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
       ['billing-renewals', 10 * 60_000],
       ['credit-grants', 10 * 60_000],
       ['release-ai-reservations', 15 * 60_000],
+      ['storage-sweep', 15 * 60_000],
     ];
     for (const [name, every] of schedules) {
       await this.queue.upsertJobScheduler(name, { every }, { name });
@@ -43,6 +46,8 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
         return this.billing.runCreditGrants();
       case 'release-ai-reservations':
         return this.billing.releaseStaleReservations();
+      case 'storage-sweep':
+        return this.files.sweep();
       default:
         this.logger.warn({ name: job.name }, 'Unknown maintenance job');
         return null;

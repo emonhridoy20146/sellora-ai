@@ -78,7 +78,7 @@ export abstract class TenantScopedRepository<T extends object> {
     return (await this.model.exists(this.scope(filter))) !== null;
   }
 
-  async create(data: Omit<Partial<T>, 'orgId'>): Promise<Doc<T>> {
+  async create(data: Omit<Partial<T>, 'orgId'> & { _id?: Types.ObjectId }): Promise<Doc<T>> {
     const created = (await this.model.create([
       { ...data, orgId: this.orgId() },
     ] as never)) as unknown as { toObject(): unknown }[];

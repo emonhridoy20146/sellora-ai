@@ -1,4 +1,6 @@
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { inject } from 'vitest';
 import type { Env } from '../../src/config/env.js';
 import { loadEnv } from '../../src/config/env.js';
@@ -36,6 +38,7 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     METRICS_TOKEN: 'test-metrics-token-123456',
     WEBCHAT_TOKEN_SECRET: randomBytes(32).toString('hex'),
     STORAGE_SIGNING_SECRET: randomBytes(32).toString('hex'),
+    STORAGE_LOCAL_DIR: join(tmpdir(), `sellora-test-storage-${suffix}`),
     RATE_LIMIT_IP_MULTIPLIER: '1000',
     ...overrides,
   });

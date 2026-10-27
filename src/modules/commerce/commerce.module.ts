@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BillingModule } from '../billing/billing.module.js';
+import { FilesModule } from '../files/files.module.js';
 import { OrgsModule } from '../orgs/orgs.module.js';
 import {
   CatalogController,
@@ -35,6 +36,7 @@ import { ShopSettingsService } from './shop-settings.service.js';
   imports: [
     OrgsModule,
     BillingModule,
+    FilesModule,
     MongooseModule.forFeature([
       { name: 'Category', schema: categorySchema },
       { name: 'Product', schema: productSchema },

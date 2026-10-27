@@ -9,6 +9,7 @@ import { AppConfigModule } from './config/config.module.js';
 import type { Env } from './config/env.js';
 import { DatabaseModule } from './infra/database/database.module.js';
 import { MailModule } from './infra/mail/mail.module.js';
+import { StorageModule } from './infra/storage/storage.module.js';
 import { MetricsController } from './infra/metrics/metrics.js';
 import { QueueModule } from './infra/queue/queue.module.js';
 import { RedisModule } from './infra/redis/redis.module.js';
@@ -17,6 +18,7 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { AuthCoreModule } from './modules/auth/core/auth-core.module.js';
 import { BillingModule } from './modules/billing/billing.module.js';
 import { CommerceModule } from './modules/commerce/commerce.module.js';
+import { FilesModule } from './modules/files/files.module.js';
 import { AccessGuard } from './modules/auth/guards/access.guard.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
@@ -71,6 +73,7 @@ export function coreImports(env?: Env) {
     RedisModule,
     QueueModule,
     MailModule,
+    StorageModule,
     AuditModule,
     PlatformSettingsModule,
     AuthCoreModule,
@@ -90,6 +93,7 @@ export class AppModule {
         AuthModule,
         PlatformModule,
         BillingModule,
+        FilesModule,
         CommerceModule,
       ],
       controllers: [MetricsController],

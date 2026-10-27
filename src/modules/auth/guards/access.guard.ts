@@ -26,6 +26,7 @@ import {
   META_PERMISSIONS,
   META_PLATFORM_PERMISSIONS,
   META_PUBLIC,
+  META_SIGNED_URL,
   META_REALM,
 } from '../decorators.js';
 
@@ -61,6 +62,8 @@ export class AccessGuard implements CanActivate {
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
     if (ctx.getType() !== 'http') return true;
     const req = ctx.switchToHttp().getRequest<AuthenticatedRequest>();
+    // The URL's own signature is the authority; the handler verifies it.
+    if (this.meta<boolean>(META_SIGNED_URL, ctx) === true) return true;
     const isPublic = this.meta<boolean>(META_PUBLIC, ctx) === true;
     const realm = this.meta<Realm>(META_REALM, ctx) ?? 'merchant';
 

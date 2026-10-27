@@ -33,13 +33,21 @@ const variantBody = z
   })
   .strict();
 
+/** An uploaded photo (fileId; its URL comes from storage) or a link to one hosted elsewhere. */
 const imageBody = z
   .object({
-    url: z.url({ protocol: /^https?$/ }).max(2000),
+    url: z
+      .url({ protocol: /^https?$/ })
+      .max(2000)
+      .optional(),
     fileId: objectIdSchema.optional(),
     alt: text(200).optional(),
   })
-  .strict();
+  .strict()
+  .refine((i) => i.url !== undefined || i.fileId !== undefined, {
+    message: 'Give an uploaded file or a link',
+    path: ['url'],
+  });
 
 const optionBody = z
   .object({ name: label(40), values: z.array(optionValue).min(1).max(50) })

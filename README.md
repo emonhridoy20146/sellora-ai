@@ -78,6 +78,14 @@ including forged and mismatched ones; and checks that merchant responses never c
 provider cost or model fields. Payment gateways are faked in tests
 (`test/helpers/fake-gateways.ts`); see the tracker for what that does and does not prove.
 
+The S3 storage driver has its own suite (`test/e2e/files-s3.e2e.ts`) that runs against a real
+MinIO server. It runs when `MINIO_BINARY` points at a `minio` server binary and is skipped
+otherwise:
+
+```bash
+MINIO_BINARY=/path/to/minio npm test
+```
+
 ## Layout
 
 ```
@@ -87,7 +95,7 @@ src/
   config/                    env schema (Zod) and typed AppConfig
   common/                    request context, crypto, errors (RFC 9457), money, validation
   infra/                     database (tenant guard plugin, transactions), redis, queues,
-                             mail, metrics (storage and telegram folders are placeholders)
+                             mail, metrics, storage (local disk or S3-compatible driver)
   modules/
     auth/                    merchant sign-up, login, 2FA, sessions, AccessGuard
     users/ orgs/ iam/        people, businesses, staff, roles, permissions
@@ -95,6 +103,8 @@ src/
     audit/                   hash-chained audit log
     billing/                 plans, entitlements, wallet + ledger, AI credits, payments,
                              invoices, withdrawals, platform analytics, jobs
+    files/                   uploads, per-business storage limit, file serving, cleanup
+    commerce/                products, stock, customers, orders, printing
 test/
   e2e/                       HTTP tests per area, including tenancy.e2e.ts
   helpers/                   test app, fake gateways, route inventory
@@ -108,6 +118,14 @@ several instances are fine) and `node dist/worker.js` (one or more). Use MongoDB
 three-node replica set, and Redis with persistence (a separate Redis for queues is
 recommended, see `REDIS_QUEUE_URL`). Set `NODE_ENV=production`, `COOKIE_SECURE=true`,
 `COOKIE_DOMAIN` to the shared parent domain, `TRUST_PROXY_HOPS` to the number of proxies,
-`MAIL_TRANSPORT=smtp`, and run `npm run db:indexes` on each release. `/v1/health/live` and
+`MAIL_TRANSPORT=smtp`, and run `npm run db:indexes` on each release.
+
+File storage: with `STORAGE_DRIVER=local` (one server) set `STORAGE_SIGNING_SECRET` and keep
+`STORAGE_LOCAL_DIR` on a persistent disk that is backed up. With `STORAGE_DRIVER=s3` (several
+servers, or a CDN), create a bucket, give it a CORS rule that allows `PUT` from `WEB_APP_URL`
+with the `content-type` header, and either make the bucket public behind a CDN and set
+`S3_PUBLIC_BASE_URL`, or leave that empty and the API serves files itself. Photo URLs are
+saved on products when they are added, so changing `S3_PUBLIC_BASE_URL` later needs the stored
+URLs rewritten. `/v1/health/live` and
 `/v1/health/ready` are for the load balancer; `/metrics` serves Prometheus metrics when
 `METRICS_TOKEN` is set.

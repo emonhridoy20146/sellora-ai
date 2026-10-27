@@ -74,6 +74,10 @@ export const envSchema = z
     S3_SECRET_ACCESS_KEY: z.string().optional(),
     S3_FORCE_PATH_STYLE: bool.default(true),
     S3_PUBLIC_BASE_URL: z.string().optional(),
+    /** Largest photo a merchant may upload, in megabytes. */
+    FILE_MAX_IMAGE_MB: z.coerce.number().min(1).max(100).default(10),
+    /** How long an upload link stays valid. */
+    STORAGE_UPLOAD_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
 
     METRICS_TOKEN: z.string().min(16).optional(),
 
@@ -122,16 +126,24 @@ export const envSchema = z
           message: 'log transport is not allowed in production',
         });
       }
-      if (
-        env.STORAGE_DRIVER === 's3' &&
-        (!env.S3_BUCKET || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY)
-      ) {
+      if (env.STORAGE_DRIVER === 'local' && !env.STORAGE_SIGNING_SECRET) {
         ctx.addIssue({
           code: 'custom',
-          path: ['S3_BUCKET'],
-          message: 'S3 settings are required for the s3 driver',
+          path: ['STORAGE_SIGNING_SECRET'],
+          message: 'required in production when STORAGE_DRIVER=local',
         });
       }
+    }
+    if (
+      env.STORAGE_DRIVER === 's3' &&
+      (!env.S3_BUCKET || !env.S3_ACCESS_KEY_ID || !env.S3_SECRET_ACCESS_KEY)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['S3_BUCKET'],
+        message:
+          'S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required for the s3 driver',
+      });
     }
     if (env.MAIL_TRANSPORT === 'smtp' && !env.SMTP_URL) {
       ctx.addIssue({
