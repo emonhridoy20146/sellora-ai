@@ -625,6 +625,12 @@ describe('billing', () => {
           },
         })
         .expect(200);
+      const gateways = (await P().get('/v1/platform/billing/gateways').expect(200)).body as {
+        key: string;
+        publicConfig: { accounts: unknown[] } | null;
+      }[];
+      // The admin panel sees the manual instructions it set, so it can edit them.
+      expect(gateways.find((g) => g.key === 'manual')?.publicConfig?.accounts).toHaveLength(1);
       const { owner, orgId } = await newOrg();
       const methods = (
         await app.as(owner.token).get(`/v1/orgs/${orgId}/billing/payment-methods`).expect(200)
@@ -680,6 +686,10 @@ describe('billing', () => {
         .expect(200);
       const list = await P().get('/v1/platform/billing/gateways').expect(200);
       expect(JSON.stringify(list.body)).not.toContain('store-secret-pass');
+      expect(
+        (list.body as { key: string; publicConfig: unknown }[]).find((g) => g.key === 'sslcommerz')
+          ?.publicConfig,
+      ).toBeNull();
 
       const { owner, orgId } = await newOrg();
       const pay = await app

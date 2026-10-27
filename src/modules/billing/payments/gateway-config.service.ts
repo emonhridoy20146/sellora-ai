@@ -47,6 +47,12 @@ export class GatewayConfigService {
         configured: Boolean(doc?.credentialsEnc),
         currencies: GATEWAY_CURRENCIES[key],
         updatedAt: (doc as { updatedAt?: Date } | undefined)?.updatedAt?.toISOString() ?? null,
+        // Manual transfer instructions are public (shown to merchants), so the admin panel
+        // can show and edit them. Real gateway secrets are never returned.
+        publicConfig:
+          key === 'manual' && doc?.credentialsEnc
+            ? (JSON.parse(this.encryption.decrypt(doc.credentialsEnc, this.aad(key))) as unknown)
+            : null,
       };
     });
   }
