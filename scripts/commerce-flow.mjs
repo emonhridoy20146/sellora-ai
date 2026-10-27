@@ -116,6 +116,61 @@ try {
     await shot(page, '03-product-page');
   });
 
+  await step('upload photos to the product', async () => {
+    await page.goto(`${BASE}${kurtiUrl}`, { waitUntil: 'networkidle' });
+    // Two large phone-sized photos, drawn in the page so no image files are needed.
+    const photos = await page.evaluate(() =>
+      [20, 200].map((hue) => {
+        const c = document.createElement('canvas');
+        c.width = 2400;
+        c.height = 1800;
+        const g = c.getContext('2d');
+        const grad = g.createLinearGradient(0, 0, 2400, 1800);
+        grad.addColorStop(0, `hsl(${hue} 70% 55%)`);
+        grad.addColorStop(1, `hsl(${hue + 60} 70% 35%)`);
+        g.fillStyle = grad;
+        g.fillRect(0, 0, 2400, 1800);
+        g.fillStyle = 'white';
+        g.font = 'bold 220px sans-serif';
+        g.fillText(hue === 20 ? 'Front' : 'Back', 200, 400);
+        return c.toDataURL('image/png').split(',')[1];
+      }),
+    );
+    const input = page.locator('input[type=file]');
+    await input.setInputFiles({
+      name: 'notes.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('not a photo'),
+    });
+    await page.getByText('Only photos can be added here.').waitFor();
+    await input.setInputFiles([
+      { name: 'front.png', mimeType: 'image/png', buffer: Buffer.from(photos[0], 'base64') },
+      { name: 'back.png', mimeType: 'image/png', buffer: Buffer.from(photos[1], 'base64') },
+    ]);
+    const stored = page.locator('ul[aria-label="Product photos"] img[src*="/v1/storage/"]');
+    await stored.nth(1).waitFor({ timeout: 30_000 });
+    // Shrunk before upload: 2400 px wide becomes 1600.
+    const width = await stored
+      .first()
+      .evaluate((img) =>
+        img.complete && img.naturalWidth
+          ? img.naturalWidth
+          : new Promise((r) => (img.onload = () => r(img.naturalWidth))),
+      );
+    if (width !== 1600) throw new Error(`uploaded photo is ${width}px wide, expected 1600`);
+    const backSrc = await stored.nth(1).getAttribute('src');
+    await page.getByRole('button', { name: 'Make main' }).first().click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
+    await page.getByText('Saved.').waitFor();
+    await page.reload({ waitUntil: 'networkidle' });
+    const main = await page
+      .locator('ul[aria-label="Product photos"] img')
+      .first()
+      .getAttribute('src');
+    if (main !== backSrc) throw new Error('the chosen main photo was not saved first');
+    await shot(page, '03b-product-photos');
+  });
+
   await step('add a simple product', async () => {
     await page.goto(`${BASE}${org}/products/new`, { waitUntil: 'networkidle' });
     await page.fill('#p-name', `Flow Scarf ${stamp}`);

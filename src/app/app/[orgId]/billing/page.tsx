@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Sparkles, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { INTERVAL_LABEL, TIER_LABEL } from '@/components/billing/labels';
@@ -20,8 +21,9 @@ import {
 import { ErrorState } from '@/components/ui/empty-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
+import { api } from '@/lib/api/client';
 import { useBillingSummary } from '@/lib/api/queries';
-import { daysUntil, formatDate, formatMoney, formatNumber } from '@/lib/format';
+import { daysUntil, formatDate, formatMoney, formatNumber, formatStorage } from '@/lib/format';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -35,6 +37,11 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export default function BillingOverviewPage() {
   const { org, can } = useOrg();
   const q = useBillingSummary(org.id);
+  const storage = useQuery({
+    queryKey: ['org', org.id, 'files', 'usage'],
+    queryFn: () =>
+      api<{ usedBytes: number; limitBytes: number | null }>(`/orgs/${org.id}/files/usage`),
+  });
   const base = `/app/${org.id}/billing`;
   if (q.isPending) return <Skeleton className="h-96" />;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => void q.refetch()} />;
@@ -83,7 +90,35 @@ export default function BillingOverviewPage() {
               {s.nextCreditGrantAt && (
                 <Row label="Next free credits">{formatDate(s.nextCreditGrantAt, org.timezone)}</Row>
               )}
+              {storage.data && (
+                <Row label="File storage">
+                  {storage.data.limitBytes === null
+                    ? `${formatStorage(storage.data.usedBytes)} used`
+                    : `${formatStorage(storage.data.usedBytes)} of ${formatStorage(storage.data.limitBytes)}`}
+                </Row>
+              )}
             </dl>
+            {storage.data?.limitBytes ? (
+              <div
+                className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"
+                role="meter"
+                aria-label="File storage used"
+                aria-valuemin={0}
+                aria-valuemax={storage.data.limitBytes}
+                aria-valuenow={storage.data.usedBytes}
+              >
+                <div
+                  className={
+                    storage.data.usedBytes / storage.data.limitBytes > 0.9
+                      ? 'h-full rounded-full bg-warning'
+                      : 'h-full rounded-full bg-primary'
+                  }
+                  style={{
+                    width: `${Math.min(100, Math.max(1, (storage.data.usedBytes / storage.data.limitBytes) * 100))}%`,
+                  }}
+                />
+              </div>
+            ) : null}
             {s.cancelAtPeriodEnd && (
               <Alert tone="info" className="mt-3">
                 This plan will not renew. The business moves to Free on{' '}

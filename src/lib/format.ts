@@ -127,3 +127,17 @@ export function humanize(key: string): string {
   const s = key.replace(/[_.-]+/g, ' ').trim();
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+/**
+ * Storage as plans describe it: limits are set in MB (1 MB = 1024 × 1024 bytes) and 1,000 MB
+ * is shown as 1 GB, so a 100,000 MB plan reads "100 GB" and usage is measured the same way.
+ */
+export function formatStorage(bytes: number): string {
+  const b = Math.max(0, bytes);
+  if (b < 1024) return `${formatNumber(b, { digits: 0 })} bytes`;
+  if (b < 1024 * 1024) return `${formatNumber(b / 1024, { digits: 1 })} KB`;
+  const mb = b / (1024 * 1024);
+  if (mb < 1000) return `${formatNumber(mb, { digits: mb < 10 ? 1 : 0 })} MB`;
+  const gb = mb / 1000;
+  return `${formatNumber(gb, { digits: gb < 10 ? 2 : gb < 100 ? 1 : 0 })} GB`;
+}

@@ -18,7 +18,8 @@ import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import { qk, useBillingSummary } from '@/lib/api/queries';
 import type { BillingInterval, Payment, PaymentMethods, Plan } from '@/lib/api/types';
-import { formatMoney, formatNumber } from '@/lib/format';
+import { formatMoney, formatNumber, formatStorage } from '@/lib/format';
+import { limitApplies } from '@/lib/plans';
 import { cn, randomKey } from '@/lib/utils';
 
 const LIMIT_LABELS: [keyof Plan['limits'], string, string][] = [
@@ -147,8 +148,20 @@ export default function PlansPage() {
                       {m.name}
                     </li>
                   ))}
+                  {plan.limits.storageMb !== 0 && limitApplies(plan.modules, 'storageMb') && (
+                    <li className="flex gap-2 text-muted-foreground">
+                      <span className="w-4 shrink-0 text-center" aria-hidden>
+                        ·
+                      </span>
+                      {plan.limits.storageMb === null
+                        ? 'Unlimited photo storage'
+                        : `${formatStorage(plan.limits.storageMb * 1024 * 1024)} photo storage`}
+                    </li>
+                  )}
                   {LIMIT_LABELS.map(([k, one, many]) => {
-                    const t = limitText(plan.limits[k], one, many);
+                    const t = limitApplies(plan.modules, k)
+                      ? limitText(plan.limits[k], one, many)
+                      : null;
                     return t ? (
                       <li key={k} className="flex gap-2 text-muted-foreground">
                         <span className="w-4 shrink-0 text-center" aria-hidden>

@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
 import { LIVE_MODULES } from '@/config/marketing';
 import type { Plan, PlanLimits } from '@/lib/api/types';
-import { formatMoney, formatNumber } from '@/lib/format';
+import { formatMoney, formatNumber, formatStorage } from '@/lib/format';
+import { limitApplies } from '@/lib/plans';
 import { cn } from '@/lib/utils';
 
 const LIMIT_COPY: Partial<Record<keyof PlanLimits, (n: number) => string>> = {
@@ -16,12 +17,14 @@ const LIMIT_COPY: Partial<Record<keyof PlanLimits, (n: number) => string>> = {
   conversationsPerMonth: (n) => `${formatNumber(n)} conversations a month`,
   ordersPerMonth: (n) => `${formatNumber(n)} orders a month`,
   products: (n) => `${formatNumber(n)} products`,
+  storageMb: (n) => `${formatStorage(n * 1024 * 1024)} photo storage`,
 };
 
 const UNLIMITED_COPY: Partial<Record<keyof PlanLimits, string>> = {
   seats: 'Unlimited staff',
   conversationsPerMonth: 'Unlimited conversations',
   ordersPerMonth: 'Unlimited orders',
+  storageMb: 'Unlimited photo storage',
 };
 
 /** Plans from the API, with a monthly/yearly switch. Prices shown are exactly what checkout charges. */
@@ -63,6 +66,7 @@ export function Pricing({ plans, trialDays }: { plans: Plan[]; trialDays: number
               ? Math.round(price.amountMinor / 12)
               : null;
           const limits = (Object.keys(LIMIT_COPY) as (keyof PlanLimits)[])
+            .filter((k) => limitApplies(p.modules, k))
             .map((k) => {
               const v = p.limits[k];
               if (v === null) return UNLIMITED_COPY[k] ?? null;

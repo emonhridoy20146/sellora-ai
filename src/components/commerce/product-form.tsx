@@ -1,6 +1,6 @@
 'use client';
 
-import { ImagePlus, Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useOrg } from '@/components/org-context';
@@ -17,6 +17,13 @@ import { combinations, comboKey, splitValues } from '@/lib/commerce';
 import { minorToInput, parseMoney } from '@/lib/format';
 import { useCategories } from './hooks';
 import { MoneyInput } from './money-input';
+import {
+  PhotoManager,
+  photosBusy,
+  photosFromProduct,
+  photosPayload,
+  type PhotoItem,
+} from './photo-manager';
 
 interface Row {
   id?: string;
@@ -74,8 +81,7 @@ export function ProductForm({
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? '');
   const [tags, setTags] = useState(product?.tags.join(', ') ?? '');
   const [status, setStatus] = useState<ProductStatus>(product?.status ?? 'active');
-  const [images, setImages] = useState<string[]>(product?.images.map((i) => i.url) ?? []);
-  const [imageUrl, setImageUrl] = useState('');
+  const [photos, setPhotos] = useState<PhotoItem[]>(() => photosFromProduct(product));
   const [hasOptions, setHasOptions] = useState((product?.options.length ?? 0) > 0);
   const [options, setOptions] = useState<OptionDraft[]>(
     product?.options.length
@@ -159,13 +165,18 @@ export function ProductForm({
       setFormError('Check the highlighted fields.');
       return;
     }
+    const photoProblem = photosBusy(photos);
+    if (photoProblem) {
+      setFormError(photoProblem);
+      return;
+    }
     const body = {
       name: name.trim(),
       description,
       categoryId: categoryId || null,
       tags: splitValues(tags),
       status,
-      images: images.map((url) => ({ url })),
+      images: photosPayload(photos),
       options: parsedOptions,
       variants: combos.map((c) => {
         const r = rowFor(c);
@@ -383,63 +394,12 @@ export function ProductForm({
           <CardHeader>
             <CardTitle>Photos</CardTitle>
             <CardDescription>
-              Paste links to product photos. Uploading photos straight from your phone is coming
-              with file storage.
+              The first photo is the main one. Large photos are made smaller before they upload, so
+              they load fast for your customers.
             </CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-4">
-            {images.length > 0 && (
-              <ul className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-                {images.map((url, i) => (
-                  <li
-                    key={url}
-                    className="group relative aspect-square overflow-hidden rounded-md border bg-muted"
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- merchant-supplied URLs */}
-                    <img src={url} alt="" className="size-full object-cover" />
-                    {i === 0 && (
-                      <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 text-[11px] text-white">
-                        Main
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setImages((list) => list.filter((u) => u !== url))}
-                      className="absolute top-1 right-1 rounded-full bg-black/60 p-1 text-white"
-                      aria-label={`Remove photo ${i + 1}`}
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {images.length < 20 && (
-              <div className="flex gap-2">
-                <label htmlFor="p-img" className="sr-only">
-                  Photo link
-                </label>
-                <Input
-                  id="p-img"
-                  type="url"
-                  placeholder="https://…/photo.jpg"
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!/^https?:\/\/\S+$/i.test(imageUrl.trim())}
-                  onClick={() => {
-                    const url = imageUrl.trim();
-                    if (!images.includes(url)) setImages((list) => [...list, url]);
-                    setImageUrl('');
-                  }}
-                >
-                  <ImagePlus /> Add
-                </Button>
-              </div>
-            )}
+          <CardContent>
+            <PhotoManager orgId={org.id} items={photos} setItems={setPhotos} disabled={!editable} />
           </CardContent>
         </Card>
 

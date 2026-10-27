@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoney, humanize, minorToInput, parseMoney } from './format';
+import { formatMoney, formatStorage, humanize, minorToInput, parseMoney } from './format';
 
 describe('money', () => {
   it('formats minor units with the currency decimals', () => {
@@ -31,5 +31,16 @@ describe('humanize', () => {
   it('turns keys into labels', () => {
     expect(humanize('inbox_reply')).toBe('Inbox reply');
     expect(humanize('platform.auth.login')).toBe('Platform auth login');
+  });
+
+  it('formats storage the way plan limits are written', () => {
+    const MB = 1024 * 1024;
+    expect(formatStorage(0)).toBe('0 bytes');
+    expect(formatStorage(512)).toBe('512 bytes');
+    expect(formatStorage(1536)).toBe('1.5 KB');
+    expect(formatStorage(200 * MB)).toBe('200 MB');
+    expect(formatStorage(2_000 * MB)).toBe('2 GB');
+    expect(formatStorage(100_000 * MB)).toBe('100 GB');
+    expect(formatStorage(2_500 * MB)).toBe('2.5 GB');
   });
 });
