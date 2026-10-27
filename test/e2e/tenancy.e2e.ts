@@ -182,7 +182,7 @@ describe('tenant isolation and route security', () => {
         { requestId: 't', actor: { type: 'system', id: 't' } },
         () =>
           RequestContext.withTenant(orgB.id, () =>
-            repo.find({ orgId: new Types.ObjectId(orgA.id) } as never),
+            repo.find({ orgId: new Types.ObjectId(orgA.id) }),
           ),
       );
       expect(fromB.every((m) => m.orgId.toHexString() === orgB.id)).toBe(true);
