@@ -1037,6 +1037,12 @@ describe('billing', () => {
     });
 
     it('edits plans and publishes a new credit price list that applies to new usage', async () => {
+      const catalogue = (await P().get('/v1/platform/billing/modules').expect(200)).body as {
+        modules: { key: string; name: string }[];
+        limits: string[];
+      };
+      expect(catalogue.modules.map((m) => m.key)).toContain('ai_agent');
+      expect(catalogue.limits).toContain('seats');
       const created = await P()
         .post('/v1/platform/billing/plans')
         .send({

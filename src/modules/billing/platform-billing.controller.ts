@@ -8,7 +8,7 @@ import { PlatformApi, RequirePlatformPermissions } from '../auth/decorators.js';
 import * as dto from './billing.dto.js';
 import { CreditsService, toAiModelDto, toPlatformRateDto } from './credits.service.js';
 import type { AiModel } from './credit-schemas.js';
-import { UNLIMITED } from './feature-modules.js';
+import { FEATURE_MODULES, LIMIT_KEYS, UNLIMITED } from './feature-modules.js';
 import { GatewayConfigService } from './payments/gateway-config.service.js';
 import { PaymentsService, toPlatformPaymentDto } from './payments/payments.service.js';
 import { PlatformBillingService } from './platform-billing.service.js';
@@ -97,6 +97,16 @@ export class PlatformBillingController {
   }
 
   // ---------------------------------------------------------------- plans
+
+  @Get('modules')
+  @RequirePlatformPermissions('platform.billing.view')
+  @ApiOperation({ summary: 'The sellable modules and plan limit keys, for the plan editor' })
+  modules() {
+    return {
+      modules: Object.entries(FEATURE_MODULES).map(([key, m]) => ({ key, ...m })),
+      limits: LIMIT_KEYS,
+    };
+  }
 
   @Get('plans')
   @RequirePlatformPermissions('platform.billing.view')
