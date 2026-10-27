@@ -88,6 +88,18 @@ export const envSchema = z
 
     /** Insert the starter plans, AI models and credit price list when missing (never overwrites). */
     BILLING_SEED_DEFAULTS: bool.default(true),
+    /** Time zone that platform-wide reports (AI profit per day) use to cut days. */
+    PLATFORM_REPORT_TIMEZONE: z
+      .string()
+      .refine((tz) => {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: tz });
+          return true;
+        } catch {
+          return false;
+        }
+      }, 'Unknown time zone')
+      .default('Asia/Dhaka'),
 
     RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().min(10).default(600),
     RATE_LIMIT_AUTH_PER_15MIN: z.coerce.number().int().min(3).default(20),

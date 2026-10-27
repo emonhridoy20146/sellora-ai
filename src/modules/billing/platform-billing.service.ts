@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Types, type Model, type PipelineStage } from 'mongoose';
 import { RequestContext } from '../../common/context/request-context.js';
 import { AppError } from '../../common/errors/app-error.js';
+import { AppConfig } from '../../config/app-config.js';
 import { CROSS_TENANT } from '../../infra/database/tenant-guard.plugin.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { Organization } from '../orgs/schemas.js';
@@ -83,6 +84,7 @@ export class PlatformBillingService {
     private readonly entitlements: EntitlementsService,
     private readonly credits: CreditsService,
     private readonly audit: AuditService,
+    private readonly config: AppConfig,
   ) {}
 
   private agg<R>(model: Model<never>, pipeline: PipelineStage[]): Promise<R[]> {
@@ -221,10 +223,14 @@ export class PlatformBillingService {
     };
   }
 
+  private get timezone(): string {
+    return this.config.get('PLATFORM_REPORT_TIMEZONE');
+  }
+
   /** AI revenue vs real provider cost for a period, grouped as asked. */
   async profit(from: Date, to: Date, groupBy: ProfitGroupBy, orgId?: string) {
     const key: Record<ProfitGroupBy, unknown> = {
-      day: { $dateToString: { format: '%Y-%m-%d', date: '$settledAt', timezone: 'Asia/Dhaka' } },
+      day: { $dateToString: { format: '%Y-%m-%d', date: '$settledAt', timezone: this.timezone } },
       org: { $toString: '$orgId' },
       model: {
         $concat: [{ $ifNull: ['$provider', 'unknown'] }, '/', { $ifNull: ['$model', 'unknown'] }],
@@ -270,6 +276,7 @@ export class PlatformBillingService {
       from: from.toISOString(),
       to: to.toISOString(),
       groupBy,
+      timezone: this.timezone,
       rows: rows.map((r) => {
         const { _id, ...rest } = r;
         return withMargin({

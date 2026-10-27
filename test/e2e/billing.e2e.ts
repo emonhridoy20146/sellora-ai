@@ -445,6 +445,14 @@ describe('billing', () => {
         await P().get(`/v1/platform/billing/ai-profit?groupBy=org&orgId=${orgId}`).expect(200)
       ).body as { rows: { label: string }[] };
       expect(byOrg.rows[0]!.label).toMatch(/^Shop /);
+      const byDay = (
+        await P().get(`/v1/platform/billing/ai-profit?groupBy=day&orgId=${orgId}`).expect(200)
+      ).body as { timezone: string; rows: { key: string }[] };
+      // Days are cut in the configured report time zone, and the response says which one.
+      expect(byDay.timezone).toBe('Asia/Dhaka');
+      expect(byDay.rows[0]!.key).toBe(
+        new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dhaka' }).format(new Date()),
+      );
     });
 
     it('refuses to start a call the wallet cannot cover, and records a shortfall instead of failing a finished call', async () => {
