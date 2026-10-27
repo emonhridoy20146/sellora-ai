@@ -21,7 +21,7 @@ Last updated: 2026-10-27.
 | Super-admin realm: login, setup link, admins and roles                                              | Done    |                                                                                                                                        |
 | Super-admin: businesses (suspend, demo access), merchant users (lock, disable, sign out, reset 2FA) | Done    |                                                                                                                                        |
 | Platform settings (sign-up, trial, maintenance notice, support, billing rules)                      | Done    |                                                                                                                                        |
-| Rate limiting (global and auth)                                                                     | Done    |                                                                                                                                        |
+| Rate limiting (global and auth) | Done | The sign-in limit and account lockout are tested; the global per-minute limit is configured but has no dedicated test. |
 | Public marketing site with live plan prices                                                         | Done    | Feature cards are flagged live / coming soon in `sellora-web/src/config/marketing.ts`.                                                 |
 | Terms and privacy pages                                                                             | Partial | Draft text; needs a lawyer's review before launch.                                                                                     |
 
