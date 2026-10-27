@@ -150,6 +150,21 @@ export class ConversationsController {
   }
 }
 
+@ApiTags('inbox: conversations')
+@OrgScoped()
+@RequireModule('inbox')
+@RequireAnyPermission('inbox.view', 'inbox.view_assigned')
+@Controller({ path: 'orgs/:orgId/inbox', version: '1' })
+export class InboxTeamController {
+  constructor(private readonly conversations: ConversationsService) {}
+
+  @Get('team')
+  @ApiOperation({ summary: 'Team members who can reply, for assigning and showing names' })
+  async team() {
+    return { items: await this.conversations.team() };
+  }
+}
+
 const widgetKey = z.string().regex(/^wc_[A-Za-z0-9_-]{24}$/);
 
 function bearer(header: string | undefined): string | undefined {

@@ -596,6 +596,18 @@ describe('inbox: channels, conversations, web chat and live updates', () => {
         .expect(403);
     });
 
+    it('lists the team members who can take conversations', async () => {
+      const res = await t.as(agent.token).get(url('/inbox/team')).expect(200);
+      const names = (res.body.items as { name: string; isYou: boolean }[]).map((m) => [
+        m.name,
+        m.isYou,
+      ]);
+      expect(names).toEqual([
+        ['Owner Rahman', false],
+        ['Agent Karim', true],
+      ]);
+    });
+
     it('fulfillment staff without inbox access are refused', async () => {
       await t.as(fulfillment.token).get(url('/conversations')).expect(403);
     });

@@ -16,6 +16,9 @@ export class RealtimeIoAdapter extends IoAdapter {
     return super.createIOServer(port, {
       ...options!,
       path: '/socket.io',
+      // Clients use /socket.io?EIO=… (no slash) so proxies with slash redirects (Next.js)
+      // pass it through; /socket.io/?EIO=… keeps working too.
+      addTrailingSlash: false,
       serveClient: false,
       // Messages go over HTTP; sockets only carry small events and acks.
       maxHttpBufferSize: 64 * 1024,

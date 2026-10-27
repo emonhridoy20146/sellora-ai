@@ -5,6 +5,7 @@ import { AppError } from '../../common/errors/app-error.js';
 import { normalizePhone } from '../../common/validation/schemas.js';
 import { EntitlementsService } from '../billing/entitlements.service.js';
 import { escapeRegex } from '../commerce/text.js';
+import { MembersService } from '../orgs/members.service.js';
 import { OrgsService } from '../orgs/orgs.service.js';
 import { TenantAccessService } from '../orgs/tenant-access.service.js';
 import { UsersService } from '../users/users.service.js';
@@ -56,6 +57,7 @@ export class ConversationsService {
     private readonly access: TenantAccessService,
     private readonly users: UsersService,
     private readonly entitlements: EntitlementsService,
+    private readonly members: MembersService,
   ) {}
 
   private can(permission: string): boolean {
@@ -97,6 +99,19 @@ export class ConversationsService {
   private async staffName(): Promise<string> {
     const user = await this.users.findById(RequestContext.actor().id);
     return user?.name ?? 'A team member';
+  }
+
+  /** Active members who can answer customers: the people a conversation can go to. */
+  async team(): Promise<{ userId: string; name: string; isYou: boolean }[]> {
+    const orgId = RequestContext.tenant()!.orgId;
+    const active = (await this.members.list()).filter((m) => m.status === 'active');
+    const access = await Promise.all(active.map((m) => this.access.resolve(orgId, m.userId)));
+    return active
+      .filter((_, i) => {
+        const p = access[i]?.permissions ?? [];
+        return p.includes('*') || p.includes('inbox.reply');
+      })
+      .map((m) => ({ userId: m.userId, name: m.name, isYou: m.isYou }));
   }
 
   // ------------------------------------------------------------------- reads

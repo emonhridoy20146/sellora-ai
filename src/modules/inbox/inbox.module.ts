@@ -10,6 +10,7 @@ import { InboxRealtime } from './inbox-realtime.service.js';
 import {
   ChannelsController,
   ConversationsController,
+  InboxTeamController,
   WebchatController,
 } from './inbox.controller.js';
 import { AgentsGateway, WebchatGateway } from './inbox.gateways.js';
@@ -51,7 +52,12 @@ export class InboxCoreModule {}
 /** The unified inbox: channels, conversations, the website chat and live updates. */
 @Module({
   imports: [InboxCoreModule, OrgsModule, BillingModule, UsersModule],
-  controllers: [ChannelsController, ConversationsController, WebchatController],
+  controllers: [
+    ChannelsController,
+    ConversationsController,
+    InboxTeamController,
+    WebchatController,
+  ],
   providers: [ConversationsService, WebchatService, RealtimeRelay, AgentsGateway, WebchatGateway],
   exports: [ConversationsService],
 })
