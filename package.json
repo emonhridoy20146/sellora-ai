@@ -12,7 +12,8 @@
     "build": "swc src -d dist --strip-leading-paths --copy-files",
     "start": "node dist/main.js",
     "start:worker": "node dist/worker.js",
-    "dev": "node --watch --import @swc-node/register/esm-register src/main.ts",
+    "dev": "node --env-file-if-exists=.env --watch --import @swc-node/register/esm-register src/main.ts",
+    "dev:worker": "node --env-file-if-exists=.env --watch --import @swc-node/register/esm-register src/worker.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -22,10 +23,11 @@
     "test:e2e": "vitest run --project e2e",
     "test:cov": "vitest run --coverage",
     "depcruise": "depcruise src --config .dependency-cruiser.cjs",
-    "openapi:export": "node --import @swc-node/register/esm-register scripts/export-openapi.ts",
+    "openapi:export": "node --env-file-if-exists=.env --import @swc-node/register/esm-register scripts/export-openapi.ts",
     "keys:generate": "node scripts/generate-keys.mjs",
-    "platform:bootstrap": "node --import @swc-node/register/esm-register scripts/platform-bootstrap.ts",
-    "db:indexes": "node --import @swc-node/register/esm-register scripts/sync-indexes.ts"
+    "platform:bootstrap": "node --env-file-if-exists=.env --import @swc-node/register/esm-register scripts/platform-bootstrap.ts",
+    "db:indexes": "node --env-file-if-exists=.env --import @swc-node/register/esm-register scripts/sync-indexes.ts",
+    "dev:seed": "node --env-file-if-exists=.env --import @swc-node/register/esm-register scripts/dev-seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1157.0",

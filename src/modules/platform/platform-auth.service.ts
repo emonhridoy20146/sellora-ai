@@ -345,6 +345,6 @@ export class PlatformAuthService {
   }
 
   setupUrl(token: string): string {
-    return `${this.config.get('WEB_APP_URL')}/platform/setup?token=${encodeURIComponent(token)}`;
+    return `${this.config.get('WEB_APP_URL')}/admin/setup?token=${encodeURIComponent(token)}`;
   }
 }
