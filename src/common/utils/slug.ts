@@ -42,7 +42,7 @@ export function isReservedSlug(slug: string): boolean {
 }
 
 /** Converts a business name (English or Bangla) into a URL-safe slug. */
-export function slugify(input: string, maxLength = 40): string {
+export function slugify(input: string, maxLength = 40, minLength = 3): string {
   const ascii = input
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
@@ -52,7 +52,7 @@ export function slugify(input: string, maxLength = 40): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, maxLength)
     .replace(/-+$/g, '');
-  return ascii.length >= 3 ? ascii : `${ascii || 'shop'}-${randomInt(1000, 9999)}`;
+  return ascii.length >= minLength ? ascii : `${ascii || 'shop'}-${randomInt(1000, 9999)}`;
 }
 
 export function withRandomSuffix(slug: string): string {

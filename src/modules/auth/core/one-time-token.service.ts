@@ -48,7 +48,7 @@ export class OneTimeTokenService {
           expiresAt: { $gt: new Date() },
         },
         { $set: { usedAt: new Date() } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean()
       .exec();

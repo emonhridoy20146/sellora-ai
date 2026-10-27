@@ -127,7 +127,7 @@ export class PlatformAdminsService {
     this.assertCanManage({ role: target.role, id }, role);
     if (target.role === 'owner' && role !== 'owner') await this.assertNotLastOwner(target);
     const updated = await this.users
-      .findByIdAndUpdate(id, { $set: { role } }, { new: true })
+      .findByIdAndUpdate(id, { $set: { role } }, { returnDocument: 'after' })
       .lean<PlatformUserDoc>()
       .exec();
     // Role is embedded in access tokens; end sessions so the change applies immediately.
@@ -147,7 +147,7 @@ export class PlatformAdminsService {
     if (status === 'active' && !target.passwordChangedAt)
       throw AppError.conflict('setup_pending', 'This admin has not finished account setup yet.');
     const updated = await this.users
-      .findByIdAndUpdate(id, { $set: { status } }, { new: true })
+      .findByIdAndUpdate(id, { $set: { status } }, { returnDocument: 'after' })
       .lean<PlatformUserDoc>()
       .exec();
     if (status === 'disabled') await this.sessions.revokeAll(id, 'platform', 'disabled');

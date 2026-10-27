@@ -124,7 +124,7 @@ export function tenantGuardPlugin(schema: Schema): void {
     );
   });
 
-  schema.pre('insertMany', function tenantGuardInsertMany(_next: unknown, docs: unknown) {
+  schema.pre('insertMany', function tenantGuardInsertMany(docs: unknown) {
     const list = Array.isArray(docs) ? docs : [docs];
     for (const doc of list as Record<string, unknown>[]) {
       const orgId = idString(doc.orgId);
@@ -133,7 +133,7 @@ export function tenantGuardPlugin(schema: Schema): void {
     }
   });
 
-  schema.pre('bulkWrite', function tenantGuardBulkWrite(_next: unknown, ops: unknown) {
+  schema.pre('bulkWrite', function tenantGuardBulkWrite(ops: unknown) {
     for (const op of (ops ?? []) as Record<string, Record<string, unknown>>[]) {
       const [kind, body] = Object.entries(op)[0] ?? [];
       if (!kind || !body) continue;

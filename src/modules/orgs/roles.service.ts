@@ -115,7 +115,7 @@ export class RolesService {
         'role_limit_reached',
         'A business can have at most 50 custom roles.',
       );
-    let key = `custom-${slugify(input.name, 30)}`;
+    let key = `custom-${slugify(input.name, 30, 1)}`;
     if (systemRole(key) || (await this.roles.exists({ key })))
       key = `${key}-${Date.now().toString(36).slice(-4)}`;
     const actor = RequestContext.actor();

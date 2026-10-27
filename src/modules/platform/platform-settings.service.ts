@@ -32,7 +32,7 @@ export class PlatformSettingsService {
       .findOneAndUpdate(
         { _id: ID },
         { $setOnInsert: { _id: ID } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
       )
       .lean()
       .exec();

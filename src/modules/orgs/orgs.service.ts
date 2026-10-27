@@ -229,7 +229,7 @@ export class OrgsService {
             ...(Object.keys($set).length ? { $set } : {}),
             ...(Object.keys($unset).length ? { $unset } : {}),
           },
-          { new: true, runValidators: true },
+          { returnDocument: 'after', runValidators: true },
         )
         .lean<OrganizationDoc>()
         .exec();
@@ -264,7 +264,7 @@ export class OrgsService {
               statusChangedBy: actorId,
             },
           },
-          { new: true },
+          { returnDocument: 'after' },
         )
         .lean<OrganizationDoc>()
         .exec();
@@ -289,7 +289,7 @@ export class OrgsService {
         demoExpiresAt
           ? { $set: { isDemo: true, demoExpiresAt } }
           : { $set: { isDemo: false }, $unset: { demoExpiresAt: '' } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<OrganizationDoc>()
       .exec();

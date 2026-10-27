@@ -25,11 +25,11 @@ export default defineConfig({
     },
     projects: [
       {
-        plugins: [swcPlugin],
+        extends: true,
         test: { name: 'unit', include: ['src/**/*.spec.ts'], environment: 'node' },
       },
       {
-        plugins: [swcPlugin],
+        extends: true,
         test: {
           name: 'e2e',
           include: ['test/**/*.e2e.ts'],

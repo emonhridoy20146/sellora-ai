@@ -71,7 +71,7 @@ export class UsersService {
 
   async update(id: string | Types.ObjectId, update: UpdateQuery<User>): Promise<UserDoc | null> {
     return this.users
-      .findByIdAndUpdate(id, update, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, update, { returnDocument: 'after', runValidators: true })
       .lean<UserDoc>()
       .exec();
   }

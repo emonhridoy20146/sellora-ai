@@ -171,7 +171,7 @@ export class SessionService {
           $inc: { generation: 1 },
           $push: { previousTokenHashes: { $each: [session.tokenHash], $slice: -KEEP_PREVIOUS } },
         },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<SessionDoc>()
       .exec();

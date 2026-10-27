@@ -118,7 +118,11 @@ export abstract class TenantScopedRepository<T extends object> {
     options: QueryOptions<T> = {},
   ): Promise<Doc<T> | null> {
     return this.model
-      .findOneAndUpdate(this.scope(filter), update, { new: true, runValidators: true, ...options })
+      .findOneAndUpdate(this.scope(filter), update, {
+        returnDocument: 'after',
+        runValidators: true,
+        ...options,
+      })
       .lean<Doc<T>>()
       .exec();
   }
