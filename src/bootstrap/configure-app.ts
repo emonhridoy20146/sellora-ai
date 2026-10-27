@@ -9,6 +9,7 @@ import { RequestContext } from '../common/context/request-context.js';
 import { clientIp, userAgent } from '../common/http/client-info.js';
 import { AppConfig } from '../config/app-config.js';
 import { httpMetricsMiddleware } from '../infra/metrics/metrics.js';
+import { RealtimeIoAdapter } from '../infra/realtime/io.adapter.js';
 
 const REQUEST_ID = /^[A-Za-z0-9._-]{8,128}$/;
 
@@ -69,6 +70,7 @@ export function configureApp(app: NestExpressApplication): void {
     maxAge: 600,
   });
   app.enableVersioning({ type: VersioningType.URI });
+  app.useWebSocketAdapter(new RealtimeIoAdapter(app, config));
   app.enableShutdownHooks();
 }
 

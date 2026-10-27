@@ -64,11 +64,17 @@ Last updated: 2026-10-27.
 
 ## M4 — Inbox and AI agent
 
-| Feature                                                                     | Status      |
-| --------------------------------------------------------------------------- | ----------- |
-| Unified inbox: Messenger, Instagram, WhatsApp, web chat                     | Not started |
-| AI sales agent (replies, product suggestions, customer memory, dot command) | Not started |
-| Human handover and AI on/off rules                                          | Not started |
+| Feature                                                                                               | Status      | Notes                                                                                                                                                   |
+| ----------------------------------------------------------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Channels: website chat widget (create, settings, allowed sites, turn off, remove, plan channel limit) | Partial     | API done and tested. Widget and settings screens in progress.                                                                                           |
+| Website chat for visitors: start or resume a chat, send, history, name and phone form, rate limits    | Partial     | API done and tested (signed visitor tokens, dedupe of retried sends). The widget itself is in progress.                                                 |
+| Team inbox: list and filters, thread, replies, internal notes, assign, close and reopen, unread       | Partial     | API done and tested. Screens in progress.                                                                                                               |
+| Who sees what: all conversations, or only the ones assigned to you                                    | Done        | Same rule for lists, threads and live events; tested, including a check that the test catches a leak.                                                   |
+| Live updates (new messages, replies, typing) for staff and visitors                                   | Partial     | Socket.IO through Redis pub/sub, tested with real socket clients. Browser side in progress.                                                             |
+| Monthly conversation limit                                                                            | Done        | Over the limit the message is kept but the thread is locked until the plan has room. Soft limit: two first messages at the same instant can both count. |
+| Dot command and human handover (a staff reply pauses the AI)                                          | Partial     | Rules done and tested. Nothing to pause until the AI agent exists.                                                                                      |
+| Messenger, Instagram, WhatsApp                                                                        | Not started | Sending on them answers 409 until built.                                                                                                                |
+| AI sales agent (replies, product suggestions, customer memory, takes orders)                          | Not started |                                                                                                                                                         |
 
 ## Later milestones
 

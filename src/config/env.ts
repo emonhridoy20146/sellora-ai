@@ -126,6 +126,13 @@ export const envSchema = z
           message: 'log transport is not allowed in production',
         });
       }
+      if (!env.WEBCHAT_TOKEN_SECRET) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['WEBCHAT_TOKEN_SECRET'],
+          message: 'required in production (signs website chat visitor tokens)',
+        });
+      }
       if (env.STORAGE_DRIVER === 'local' && !env.STORAGE_SIGNING_SECRET) {
         ctx.addIssue({
           code: 'custom',

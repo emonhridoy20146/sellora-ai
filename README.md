@@ -95,7 +95,8 @@ src/
   config/                    env schema (Zod) and typed AppConfig
   common/                    request context, crypto, errors (RFC 9457), money, validation
   infra/                     database (tenant guard plugin, transactions), redis, queues,
-                             mail, metrics, storage (local disk or S3-compatible driver)
+                             mail, metrics, storage (local disk or S3-compatible driver),
+                             realtime (Redis pub/sub relay to Socket.IO)
   modules/
     auth/                    merchant sign-up, login, 2FA, sessions, AccessGuard
     users/ orgs/ iam/        people, businesses, staff, roles, permissions
@@ -105,6 +106,8 @@ src/
                              invoices, withdrawals, platform analytics, jobs
     files/                   uploads, per-business storage limit, file serving, cleanup
     commerce/                products, stock, customers, orders, printing
+    inbox/                   channels, contacts, conversations, messages, website chat,
+                             live updates (Socket.IO gateways)
 test/
   e2e/                       HTTP tests per area, including tenancy.e2e.ts
   helpers/                   test app, fake gateways, route inventory
@@ -127,5 +130,8 @@ with the `content-type` header, and either make the bucket public behind a CDN a
 `S3_PUBLIC_BASE_URL`, or leave that empty and the API serves files itself. Photo URLs are
 saved on products when they are added, so changing `S3_PUBLIC_BASE_URL` later needs the stored
 URLs rewritten. `/v1/health/live` and
-`/v1/health/ready` are for the load balancer; `/metrics` serves Prometheus metrics when
+`/v1/health/ready` are for the load balancer;
+live updates use Socket.IO on `/socket.io` (proxy WebSocket upgrades; with several API
+instances turn on sticky sessions for it). Set `WEBCHAT_TOKEN_SECRET` (required in
+production); `/metrics` serves Prometheus metrics when
 `METRICS_TOKEN` is set.

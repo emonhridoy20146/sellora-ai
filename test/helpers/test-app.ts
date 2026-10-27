@@ -95,6 +95,13 @@ export class TestApp {
     return request(this.app.getHttpServer());
   }
 
+  /** Starts listening on a free local port (for Socket.IO clients). Returns the base URL. */
+  async listen(): Promise<string> {
+    await this.app.listen(0, '127.0.0.1');
+    const address = this.app.getHttpServer().address() as { port: number };
+    return `http://127.0.0.1:${address.port}`;
+  }
+
   /** Request with a bearer token, as a mobile or API client would send it. */
   as(token: string | undefined) {
     const server = this.app.getHttpServer();

@@ -30,6 +30,13 @@ export const Public = () => SetMetadata(META_PUBLIC, true);
 export const SignedUrlAuth = () =>
   applyDecorators(SetMetadata(META_PUBLIC, true), SetMetadata(META_SIGNED_URL, true));
 
+/**
+ * Public route that authenticates with its own token in a header (the website chat's
+ * visitor token). Like SignedUrlAuth, the guard steps aside: there is no cookie session
+ * to protect, so the CSRF check does not apply.
+ */
+export const OwnTokenAuth = SignedUrlAuth;
+
 /** Routes for the super-admin realm: platform tokens only, merchant tokens rejected. */
 export const PlatformApi = (tag: string) =>
   applyDecorators(
