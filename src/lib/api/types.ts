@@ -1,0 +1,613 @@
+/**
+ * Response shapes of the Sellora API, written to match what the API returns (checked against
+ * a running server). Money is always an integer in the currency's minor unit (paisa, cents).
+ */
+
+export type Locale = 'en' | 'bn';
+export type IsoDate = string;
+
+export interface Page<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+export interface OffsetPage<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// ------------------------------------------------------------------ merchant auth
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  phone: string | null;
+  locale: Locale;
+  timezone: string;
+  emailVerified: boolean;
+  mfaEnabled: boolean;
+  createdAt: IsoDate;
+}
+
+export type LoginResult =
+  | { status: 'ok'; user: User; accessToken: string; expiresIn: number; csrfToken?: string }
+  | { status: 'mfa_required'; mfaToken: string };
+
+export interface OrgContact {
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  website: string | null;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  legalName: string | null;
+  category: string;
+  country: string;
+  currency: string;
+  timezone: string;
+  locale: Locale;
+  contact: OrgContact;
+  status: 'active' | 'suspended' | 'closed';
+  isDemo: boolean;
+  demoExpiresAt: IsoDate | null;
+  settings: { orderNumberPrefix: string };
+  createdAt: IsoDate;
+}
+
+export interface OrgWithRole extends Organization {
+  role: { key: string; name: string };
+  permissions: string[];
+}
+
+export interface Me {
+  user: User;
+  organizations: OrgWithRole[];
+}
+
+export interface MfaStatus {
+  enabled: boolean;
+  enabledAt: IsoDate | null;
+  recoveryCodesRemaining: number;
+}
+
+export interface Session {
+  id: string;
+  ip: string | null;
+  userAgent: string | null;
+  createdAt: IsoDate;
+  lastUsedAt: IsoDate;
+  current: boolean;
+}
+
+export interface BusinessCategory {
+  key: string;
+  label: { en: string; bn: string };
+}
+
+// ------------------------------------------------------------------ staff
+
+export interface Member {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  role: { key: string; name: string };
+  status: 'active' | 'suspended';
+  mfaEnabled: boolean;
+  joinedAt: IsoDate;
+  isYou: boolean;
+}
+
+export interface Role {
+  key: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  system: boolean;
+  memberCount: number;
+}
+
+export interface PermissionGroup {
+  key: string;
+  label: string;
+  permissions: { key: string; description: string }[];
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: { key: string; name: string };
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  expiresAt: IsoDate;
+  createdAt: IsoDate;
+}
+
+export interface InvitationPreview {
+  orgName: string;
+  roleName: string;
+  /** Masked, e.g. ra***@gmail.com */
+  email: string;
+  status: Invitation['status'];
+}
+
+export interface AuditEvent {
+  id: string;
+  seq: number;
+  scope?: string;
+  orgId?: string | null;
+  action: string;
+  outcome: 'success' | 'failure';
+  actor: { type: string; id: string; label?: string; sessionId?: string };
+  target: { type: string; id: string; label?: string } | null;
+  ip: string | null;
+  metadata: Record<string, unknown>;
+  at: IsoDate;
+}
+
+// ------------------------------------------------------------------ billing
+
+export type BillingInterval = 'month' | 'year' | 'lifetime';
+export type ModelTier = 'fast' | 'standard' | 'advanced';
+
+export interface PlanLimits {
+  seats: number | null;
+  stores: number | null;
+  products: number | null;
+  channels: number | null;
+  ordersPerMonth: number | null;
+  conversationsPerMonth: number | null;
+  landingPages: number | null;
+  storageMb: number | null;
+}
+
+export interface PlanPrice {
+  interval: BillingInterval;
+  currency: string;
+  amountMinor: number;
+}
+
+export interface Plan {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  modules: { key: string; name: string }[];
+  limits: PlanLimits;
+  prices: PlanPrice[];
+  includedCreditsPerMonth: number;
+  trialEligible: boolean;
+  highlight: boolean;
+  sortOrder: number;
+}
+
+export interface PlatformPlan extends Plan {
+  isPublic: boolean;
+  isActive: boolean;
+  version: number;
+  updatedAt: IsoDate;
+}
+
+export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'expired';
+
+export interface Entitlements {
+  planCode: string;
+  paidAccess: boolean;
+  inGracePeriod: boolean;
+  modules: string[];
+  limits: PlanLimits;
+}
+
+export interface Subscription {
+  plan: { code: string; name: string };
+  status: SubscriptionStatus;
+  interval: BillingInterval | 'trial' | 'free';
+  currency: string;
+  priceMinor: number;
+  currentPeriodStart: IsoDate;
+  currentPeriodEnd: IsoDate | null;
+  trialEndsAt: IsoDate | null;
+  autoRenew: boolean;
+  cancelAtPeriodEnd: boolean;
+  includedCreditsPerMonth: number;
+  nextCreditGrantAt: IsoDate | null;
+  entitlements: Entitlements;
+}
+
+export interface WalletBalance {
+  currency: string;
+  balanceMinor: number;
+  heldMinor: number;
+  availableMinor: number;
+  bonusMinor: number;
+  withdrawableMinor: number;
+  status: 'active' | 'frozen';
+  lifetimeTopupMinor: number;
+  lifetimeSpentMinor: number;
+}
+
+export interface CreditRate {
+  version: number;
+  currency: string;
+  creditPriceMinor: number;
+  minimumCreditsPerRequest: number;
+  tiers: { tier: ModelTier; inputCreditsPer1k: number; outputCreditsPer1k: number }[];
+  effectiveFrom: IsoDate;
+}
+
+export interface PlatformCreditRate extends CreditRate {
+  id: string;
+  usdRateScaled: number;
+  usdRate: number;
+  note: string | null;
+  createdBy: string;
+  createdAt: IsoDate;
+}
+
+export interface BillingSummary {
+  subscription: Subscription;
+  wallet: WalletBalance;
+  creditRate: CreditRate | null;
+  withdrawalsEnabled: boolean;
+}
+
+export type LedgerType =
+  'topup' | 'bonus' | 'ai_usage' | 'subscription' | 'refund' | 'adjustment' | 'withdrawal';
+
+export interface LedgerEntry {
+  id: string;
+  type: LedgerType | string;
+  amountMinor: number;
+  balanceAfterMinor: number;
+  currency?: string;
+  description: string;
+  credits: number | null;
+  reference?: { type: string; id: string } | null;
+  actor?: { type: string; id: string };
+  at: IsoDate;
+}
+
+export type GatewayKey = 'sslcommerz' | 'bkash' | 'stripe' | 'manual';
+export type OnlineGateway = Exclude<GatewayKey, 'manual'>;
+export type ManualMethod = 'bkash' | 'nagad' | 'rocket' | 'bank';
+
+export interface ManualInstructions {
+  instructions: string;
+  accounts: { method: ManualMethod; label: string; account: string }[];
+}
+
+export interface PaymentMethods {
+  currency: string;
+  minTopupMinor: number;
+  maxTopupMinor: number;
+  online: { key: OnlineGateway; sandbox: boolean }[];
+  manual: ManualInstructions | null;
+}
+
+export type PaymentStatus = 'pending' | 'succeeded' | 'failed' | 'canceled' | 'refunded';
+
+export interface Payment {
+  id: string;
+  purpose: 'wallet_topup' | 'subscription';
+  amountMinor: number;
+  currency: string;
+  gateway: GatewayKey;
+  status: PaymentStatus;
+  checkoutUrl: string | null;
+  plan: { code: string; interval: BillingInterval } | null;
+  manual: {
+    method: ManualMethod | 'cash';
+    senderAccount: string;
+    transactionRef: string;
+    note?: string;
+  } | null;
+  gatewayRef: string | null;
+  failureReason: string | null;
+  reviewNote: string | null;
+  createdAt: IsoDate;
+  succeededAt: IsoDate | null;
+}
+
+export interface PlatformPayment extends Payment {
+  orgId: string;
+  gatewaySessionId: string | null;
+  reviewedBy: string | null;
+  events: { at: IsoDate; type: string }[];
+}
+
+export interface UsageSummary {
+  from: IsoDate;
+  to: IsoDate;
+  totals: { credits: number; chargedMinor: number; requests: number };
+  byDay: { date: string; credits: number; chargedMinor: number; requests: number }[];
+  byFeature: { feature: string; credits: number; chargedMinor: number; requests: number }[];
+}
+
+export interface UsageRequest {
+  id: string;
+  requestId: string;
+  feature: string;
+  tier: ModelTier;
+  status: 'reserved' | 'settled' | 'released';
+  tokens: { input: number; output: number };
+  credits: number;
+  chargedMinor: number;
+  reference: { type: string; id: string } | null;
+  at: IsoDate;
+}
+
+export interface Invoice {
+  id: string;
+  number: string;
+  kind: 'subscription' | 'wallet_topup';
+  currency: string;
+  lines: { description: string; quantity: number; unitMinor: number }[];
+  subtotalMinor: number;
+  taxMinor: number;
+  taxRateBps: number;
+  taxLabel: string;
+  totalMinor: number;
+  paidWith: string;
+  issuedAt: IsoDate;
+  billTo: {
+    name: string;
+    legalName?: string | null;
+    email?: string | null;
+    address?: string | null;
+  };
+}
+
+export type WithdrawalStatus = 'requested' | 'approved' | 'paid' | 'rejected' | 'canceled';
+
+export interface Withdrawal {
+  id: string;
+  amountMinor: number;
+  currency: string;
+  method: 'bkash' | 'nagad' | 'bank' | 'original_method';
+  destination: string;
+  status: WithdrawalStatus;
+  reviewNote: string | null;
+  payoutRef: string | null;
+  createdAt: IsoDate;
+  reviewedAt: IsoDate | null;
+  paidAt: IsoDate | null;
+  orgId?: string;
+  org?: { id: string; name: string } | null;
+}
+
+// ------------------------------------------------------------------ platform (super-admin)
+
+export type PlatformRole = 'owner' | 'admin' | 'finance' | 'support' | 'readonly';
+
+export interface PlatformUser {
+  id: string;
+  email: string;
+  name: string;
+  role: PlatformRole;
+  status: 'invited' | 'active' | 'disabled';
+  mfaEnabled: boolean;
+  lastLoginAt: IsoDate | null;
+  createdAt: IsoDate;
+}
+
+export interface PlatformMe extends PlatformUser {
+  permissions: string[];
+}
+
+export type PlatformLoginResult =
+  | { status: 'mfa_required'; mfaToken: string }
+  | { status: 'mfa_setup_required'; setupToken: string };
+
+export interface PlatformOverview {
+  tenants: number;
+  activeTenants: number;
+  suspendedTenants: number;
+  demoTenants: number;
+  users: number;
+  newUsersToday: number;
+  newTenantsWeek: number;
+}
+
+export interface Tenant extends Organization {
+  memberCount: number;
+  owner: { id: string; name: string; email: string } | null;
+  statusReason: string | null;
+}
+
+export interface TenantDetail extends Organization {
+  statusReason: string | null;
+  statusChangedAt: IsoDate | null;
+  members: {
+    id: string;
+    userId: string;
+    name: string;
+    email: string;
+    roleKey: string;
+    status: string;
+  }[];
+}
+
+export interface MerchantUserRow extends User {
+  status: 'active' | 'locked' | 'disabled';
+  lastLoginAt: IsoDate | null;
+}
+
+export interface MerchantUserDetail extends MerchantUserRow {
+  statusReason: string | null;
+  lastLoginIp: string | null;
+  organizations: { id: string; name: string; roleKey: string; status: string }[];
+  activeSessions: number;
+}
+
+export interface PlatformRoleCatalogue {
+  permissions: { key: string; description: string }[];
+  roles: { key: PlatformRole; permissions: string[] }[];
+}
+
+export interface AuditChainCheck {
+  ok: boolean;
+  checked: number;
+  brokenAt?: number;
+  reason?: 'missing_event' | 'prev_hash_mismatch' | 'hash_mismatch' | 'head_mismatch';
+}
+
+/** Sellable modules and plan limit keys, as the API defines them (plan editor, overrides). */
+export interface ModuleCatalogue {
+  modules: { key: string; name: string; description: string }[];
+  limits: (keyof PlanLimits)[];
+}
+
+export interface PlatformSettings {
+  signupEnabled: boolean;
+  trial: { enabled: boolean; days: number; planCode: string };
+  demo: { defaultHours: number };
+  maintenance: { enabled: boolean; message: string };
+  support: { email: string; whatsapp: string };
+  billing: {
+    withdrawalsEnabled: boolean;
+    graceDays: number;
+    taxRateBps: number;
+    taxLabel: string;
+    minTopupMinor: number;
+    maxTopupMinor: number;
+  };
+  updatedAt?: IsoDate;
+}
+
+export interface PublicPlatformStatus {
+  signupEnabled: boolean;
+  trial: { enabled: boolean; days: number; planCode: string };
+  maintenance: { enabled: boolean; message: string };
+  support: { email: string; whatsapp: string };
+}
+
+export interface BillingOverview {
+  from: IsoDate;
+  to: IsoDate;
+  subscriptions: { status: SubscriptionStatus; planCode: string; count: number }[];
+  mrr: { currency: string; mrrMinor: number; payingBusinesses: number }[];
+  wallets: {
+    currency: string;
+    balanceMinor: number;
+    heldMinor: number;
+    bonusMinor: number;
+    cashMinor: number;
+    wallets: number;
+  }[];
+  payments: { currency: string; gateway: GatewayKey; amountMinor: number; count: number }[];
+  ai: {
+    currency: string;
+    requests: number;
+    credits: number;
+    collectedMinor: number;
+    billedMinor: number;
+    costMinor: number;
+    profitMinor: number;
+    marginPct: number | null;
+  }[];
+  queues: { pendingManualPayments: number; openWithdrawals: number };
+}
+
+export interface ProfitRow {
+  key: string;
+  label?: string | null;
+  currency: string;
+  requests: number;
+  credits: number;
+  billedMinor: number;
+  collectedMinor: number;
+  costMinor: number;
+  costUsdMicros: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  profitMinor: number;
+  marginPct: number | null;
+}
+
+export interface ProfitReport {
+  from: IsoDate;
+  to: IsoDate;
+  groupBy: 'day' | 'org' | 'model' | 'feature' | 'tier';
+  /** Time zone the API used to cut days. */
+  timezone: string;
+  rows: ProfitRow[];
+}
+
+export interface PlatformUsage {
+  id: string;
+  orgId: string;
+  requestId: string;
+  feature: string;
+  tier: ModelTier;
+  status: string;
+  provider: string;
+  model: string | null;
+  tokens: { input: number; cachedInput: number; output: number };
+  credits: number;
+  currency: string;
+  billedMinor: number;
+  shortfallMinor: number;
+  costUsdMicros: number;
+  costMinor: number;
+  profitMinor: number;
+  creditRateVersion: number;
+  at: IsoDate;
+}
+
+export interface AiModel {
+  id: string;
+  provider: 'anthropic' | 'openai' | 'google' | 'other';
+  model: string;
+  label: string;
+  tier: ModelTier;
+  inputUsdPerMTok: number;
+  outputUsdPerMTok: number;
+  cachedInputUsdPerMTok: number;
+  longContext: {
+    thresholdTokens: number;
+    inputUsdPerMTok: number;
+    outputUsdPerMTok: number;
+  } | null;
+  contextWindow: number;
+  enabled: boolean;
+  isDefaultForTier: boolean;
+}
+
+export interface GatewayStatus {
+  key: GatewayKey;
+  enabled: boolean;
+  sandbox: boolean;
+  configured: boolean;
+  currencies: string[] | 'any';
+  updatedAt: IsoDate | null;
+  /** Address to paste into the gateway's dashboard for server notifications, if it needs one. */
+  webhookUrl: string | null;
+  publicConfig: ManualInstructions | null;
+}
+
+export interface TenantBilling {
+  org: { id: string; name: string; currency: string };
+  subscription: Subscription & {
+    overrides: {
+      addModules: string[];
+      removeModules: string[];
+      limits: PlanLimits;
+      expiresAt?: IsoDate | null;
+      note?: string | null;
+    };
+    source: string;
+  };
+  wallet: WalletBalance & {
+    lowBalanceThresholdMinor: number;
+    reconciled: boolean;
+    ledgerSumMinor: number;
+  };
+  ledger: LedgerEntry[];
+}
