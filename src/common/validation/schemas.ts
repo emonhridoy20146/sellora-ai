@@ -105,3 +105,26 @@ export const otpCodeSchema = z
   .string()
   .trim()
   .regex(/^\d{6}$/, 'Enter the 6 digit code');
+
+/**
+ * A phone number as typed. Services normalise it to E.164 with `normalizePhone`, using the
+ * business's own country for numbers written without a country code.
+ */
+export const rawPhoneSchema = z
+  .string()
+  .trim()
+  .min(4)
+  .max(32)
+  .regex(/^[+\d\s().-]+$/, 'Invalid phone number');
+
+/** E.164 form of `value`, or null when it is not a valid number. */
+export function normalizePhone(value: string, defaultCountry: string): string | null {
+  const phone = parsePhoneNumberFromString(value, defaultCountry as CountryCode);
+  return phone?.isValid() ? phone.number : null;
+}
+
+/** Digits of the number as dialled inside its own country (01712345678 for +8801712345678). */
+export function nationalDigits(e164: string): string | null {
+  const phone = parsePhoneNumberFromString(e164);
+  return phone ? phone.formatNational().replace(/\D/g, '') : null;
+}

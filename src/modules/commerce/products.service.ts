@@ -1,0 +1,494 @@
+import { Injectable } from '@nestjs/common';
+import { Types } from 'mongoose';
+import { RequestContext } from '../../common/context/request-context.js';
+import { AppError } from '../../common/errors/app-error.js';
+import { isDuplicateKey } from '../../common/filters/problem-details.filter.js';
+import type { WithId } from '../../infra/database/schema-helpers.js';
+import { TransactionService } from '../../infra/database/transaction.service.js';
+import { AuditService } from '../audit/audit.service.js';
+import { EntitlementsService } from '../billing/entitlements.service.js';
+import { OrgsService } from '../orgs/orgs.service.js';
+import { InventoryService } from './inventory.service.js';
+import { CategoryRepository, OrderRepository, ProductRepository } from './repositories.js';
+import type { Category, Product, ProductStatus, Variant } from './schemas.js';
+import { escapeRegex, searchText, slugify } from './text.js';
+
+export type ProductDoc = WithId<Product>;
+export type CategoryDoc = WithId<Category>;
+
+export interface VariantInput {
+  id?: string;
+  optionValues: string[];
+  sku?: string | null;
+  barcode?: string | null;
+  priceMinor: number;
+  compareAtPriceMinor?: number | null;
+  costMinor?: number | null;
+  trackStock: boolean;
+  /** Opening stock; only used for new variants. Existing stock changes go through inventory. */
+  stock?: number;
+  weightGrams?: number | null;
+}
+
+export interface ProductInput {
+  name: string;
+  description: string;
+  categoryId: string | null;
+  tags: string[];
+  status: ProductStatus;
+  images: { url: string; fileId?: string; alt?: string }[];
+  options: { name: string; values: string[] }[];
+  variants: VariantInput[];
+}
+
+export function toProductDto(p: ProductDoc, lowStockThreshold?: number) {
+  const tracked = p.variants.filter((v) => v.trackStock);
+  const totalStock = tracked.reduce((a, v) => a + v.stock, 0);
+  const prices = p.variants.map((v) => v.priceMinor);
+  return {
+    id: p._id.toHexString(),
+    name: p.name,
+    slug: p.slug,
+    description: p.description,
+    categoryId: p.categoryId?.toHexString() ?? null,
+    tags: p.tags,
+    status: p.status,
+    currency: p.currency,
+    images: p.images.map((i) => ({
+      url: i.url,
+      fileId: i.fileId?.toHexString() ?? null,
+      alt: i.alt ?? '',
+    })),
+    options: p.options,
+    variants: p.variants.map((v) => ({
+      id: v._id.toHexString(),
+      title: v.title,
+      optionValues: v.optionValues,
+      sku: v.sku ?? null,
+      barcode: v.barcode ?? null,
+      priceMinor: v.priceMinor,
+      compareAtPriceMinor: v.compareAtPriceMinor ?? null,
+      costMinor: v.costMinor ?? null,
+      trackStock: v.trackStock,
+      stock: v.stock,
+      weightGrams: v.weightGrams ?? null,
+    })),
+    priceRange: { minMinor: Math.min(...prices), maxMinor: Math.max(...prices) },
+    stock: {
+      tracked: tracked.length > 0,
+      total: totalStock,
+      lowVariants:
+        lowStockThreshold === undefined
+          ? null
+          : tracked.filter((v) => v.stock <= lowStockThreshold).length,
+    },
+    soldCount: p.soldCount,
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+  };
+}
+
+export function toCategoryDto(c: CategoryDoc, productCount?: number) {
+  return {
+    id: c._id.toHexString(),
+    name: c.name,
+    slug: c.slug,
+    sortOrder: c.sortOrder,
+    ...(productCount !== undefined ? { productCount } : {}),
+  };
+}
+
+const DEFAULT_TITLE = 'Default';
+
+@Injectable()
+export class ProductsService {
+  constructor(
+    private readonly products: ProductRepository,
+    private readonly categories: CategoryRepository,
+    private readonly orders: OrderRepository,
+    private readonly inventory: InventoryService,
+    private readonly entitlements: EntitlementsService,
+    private readonly orgs: OrgsService,
+    private readonly tx: TransactionService,
+    private readonly audit: AuditService,
+  ) {}
+
+  private orgId(): string {
+    return RequestContext.tenant()!.orgId;
+  }
+
+  // ---------------------------------------------------------------- products
+
+  async list(query: {
+    q?: string;
+    status?: ProductStatus | 'all';
+    categoryId?: string;
+    stock?: 'low' | 'out';
+    lowStockThreshold: number;
+    limit: number;
+    cursor?: string;
+  }) {
+    const filter: Record<string, unknown> = {};
+    if (!query.status) filter.status = { $ne: 'archived' };
+    else if (query.status !== 'all') filter.status = query.status;
+    if (query.categoryId) filter.categoryId = new Types.ObjectId(query.categoryId);
+    if (query.q) filter.searchText = { $regex: escapeRegex(query.q.toLowerCase()) };
+    if (query.stock === 'out')
+      filter.variants = { $elemMatch: { trackStock: true, stock: { $lte: 0 } } };
+    if (query.stock === 'low')
+      filter.variants = {
+        $elemMatch: { trackStock: true, stock: { $lte: query.lowStockThreshold } },
+      };
+    return this.products.paginate(filter, query, 'updatedAt');
+  }
+
+  async get(id: string): Promise<ProductDoc> {
+    const p = await this.products.findById(id);
+    if (!p) throw AppError.notFound('product');
+    return p;
+  }
+
+  /** Several products by id, for order building (missing ids are left out). */
+  async getMany(ids: string[]): Promise<ProductDoc[]> {
+    const valid = [...new Set(ids)].filter((i) => Types.ObjectId.isValid(i));
+    if (!valid.length) return [];
+    return this.products.find({ _id: { $in: valid.map((i) => new Types.ObjectId(i)) } });
+  }
+
+  private validateShape(input: Pick<ProductInput, 'options' | 'variants'>): void {
+    const errors: { path: string; message: string }[] = [];
+    const optionNames = input.options.map((o) => o.name.trim().toLowerCase());
+    if (new Set(optionNames).size !== optionNames.length)
+      errors.push({ path: 'options', message: 'Option names must be different' });
+    input.options.forEach((o, i) => {
+      const values = o.values.map((v) => v.trim().toLowerCase());
+      if (new Set(values).size !== values.length)
+        errors.push({ path: `options.${i}.values`, message: 'Values must be different' });
+    });
+    if (input.options.length === 0 && input.variants.length !== 1)
+      errors.push({ path: 'variants', message: 'A product without options has one variant' });
+    const combos = new Set<string>();
+    input.variants.forEach((v, i) => {
+      if (v.optionValues.length !== input.options.length) {
+        errors.push({
+          path: `variants.${i}.optionValues`,
+          message: 'Pick a value for each option',
+        });
+        return;
+      }
+      v.optionValues.forEach((val, j) => {
+        if (!input.options[j]!.values.includes(val))
+          errors.push({
+            path: `variants.${i}.optionValues.${j}`,
+            message: `"${val}" is not a value of ${input.options[j]!.name}`,
+          });
+      });
+      const key = v.optionValues.join('\u0000').toLowerCase();
+      if (combos.has(key))
+        errors.push({
+          path: `variants.${i}.optionValues`,
+          message: 'This combination is listed twice',
+        });
+      combos.add(key);
+      if (
+        v.compareAtPriceMinor !== undefined &&
+        v.compareAtPriceMinor !== null &&
+        v.compareAtPriceMinor <= v.priceMinor
+      )
+        errors.push({
+          path: `variants.${i}.compareAtPriceMinor`,
+          message: 'The old price must be higher than the price',
+        });
+    });
+    const skus = input.variants.map((v) => v.sku?.trim()).filter((s): s is string => Boolean(s));
+    if (new Set(skus.map((s) => s.toLowerCase())).size !== skus.length)
+      errors.push({ path: 'variants', message: 'Each variant needs its own SKU' });
+    if (errors.length) throw AppError.validation(errors);
+  }
+
+  private async assertSkusFree(skus: string[], exceptId?: Types.ObjectId): Promise<void> {
+    if (!skus.length) return;
+    const clash = await this.products.findOne(
+      {
+        'variants.sku': { $in: skus },
+        ...(exceptId ? { _id: { $ne: exceptId } } : {}),
+      },
+      { name: 1, variants: 1 },
+    );
+    if (clash) {
+      const used = clash.variants.find((v) => v.sku && skus.includes(v.sku))?.sku;
+      throw AppError.conflict('sku_taken', `SKU ${used} is already used by ${clash.name}.`, {
+        sku: used,
+        productId: clash._id.toHexString(),
+      });
+    }
+  }
+
+  private async assertCategory(categoryId: string | null): Promise<Types.ObjectId | undefined> {
+    if (!categoryId) return undefined;
+    const c = await this.categories.findById(categoryId);
+    if (!c) throw AppError.validation([{ path: 'categoryId', message: 'Unknown category' }]);
+    return c._id;
+  }
+
+  private async uniqueSlug(base: string, exceptId?: Types.ObjectId): Promise<string> {
+    const root = slugify(base);
+    for (let n = 1; n < 1000; n++) {
+      const slug = n === 1 ? root : `${root}-${n}`;
+      const taken = await this.products.exists({
+        slug,
+        ...(exceptId ? { _id: { $ne: exceptId } } : {}),
+      });
+      if (!taken) return slug;
+    }
+    return `${root}-${Date.now().toString(36)}`;
+  }
+
+  private buildVariant(v: VariantInput, existing?: Variant): Variant {
+    return {
+      _id: existing?._id ?? new Types.ObjectId(),
+      title: v.optionValues.length ? v.optionValues.join(' / ') : DEFAULT_TITLE,
+      optionValues: v.optionValues,
+      ...(v.sku?.trim() ? { sku: v.sku.trim() } : {}),
+      ...(v.barcode?.trim() ? { barcode: v.barcode.trim() } : {}),
+      priceMinor: v.priceMinor,
+      ...(v.compareAtPriceMinor != null ? { compareAtPriceMinor: v.compareAtPriceMinor } : {}),
+      ...(v.costMinor != null ? { costMinor: v.costMinor } : {}),
+      trackStock: v.trackStock,
+      // Existing variants keep their stock; stock only changes through InventoryService.
+      stock: existing ? existing.stock : v.trackStock ? (v.stock ?? 0) : 0,
+      ...(v.weightGrams != null ? { weightGrams: v.weightGrams } : {}),
+    };
+  }
+
+  private search(name: string, tags: string[], variants: Variant[]): string {
+    return searchText(
+      name,
+      tags,
+      variants.map((v) => v.sku ?? ''),
+      variants.map((v) => v.barcode ?? ''),
+    );
+  }
+
+  async create(input: ProductInput): Promise<ProductDoc> {
+    this.validateShape(input);
+    const orgId = this.orgId();
+    if (input.status !== 'archived')
+      await this.entitlements.assertWithinLimit(
+        orgId,
+        'products',
+        await this.products.count({ status: { $ne: 'archived' } }),
+      );
+    const variants = input.variants.map((v) => this.buildVariant(v));
+    await this.assertSkusFree(variants.flatMap((v) => (v.sku ? [v.sku] : [])));
+    const categoryId = await this.assertCategory(input.categoryId);
+    const org = await this.orgs.get(orgId);
+    const product = await this.tx.run(async () => {
+      const created = await this.products.create({
+        name: input.name,
+        slug: await this.uniqueSlug(input.name),
+        description: input.description,
+        ...(categoryId ? { categoryId } : {}),
+        tags: input.tags,
+        status: input.status,
+        currency: org.currency,
+        images: input.images.map((i) => ({
+          url: i.url,
+          ...(i.fileId ? { fileId: new Types.ObjectId(i.fileId) } : {}),
+          ...(i.alt ? { alt: i.alt } : {}),
+        })),
+        options: input.options,
+        variants,
+        searchText: this.search(input.name, input.tags, variants),
+        soldCount: 0,
+        createdBy: new Types.ObjectId(RequestContext.actor().id),
+      });
+      await this.inventory.recordInitial(created._id, created.variants);
+      return created;
+    });
+    await this.audit.record({
+      action: 'catalog.product.created',
+      orgId,
+      target: { type: 'product', id: product._id.toHexString(), label: product.name },
+    });
+    return product;
+  }
+
+  async update(id: string, input: Partial<ProductInput>): Promise<ProductDoc> {
+    const before = await this.get(id);
+    const options = input.options ?? before.options;
+    const set: Record<string, unknown> = {};
+    let newVariants: Variant[] = [];
+    if (input.variants || input.options) {
+      const variantInputs: VariantInput[] =
+        input.variants ??
+        before.variants.map((v) => ({
+          id: v._id.toHexString(),
+          optionValues: v.optionValues,
+          sku: v.sku,
+          barcode: v.barcode,
+          priceMinor: v.priceMinor,
+          compareAtPriceMinor: v.compareAtPriceMinor,
+          costMinor: v.costMinor,
+          trackStock: v.trackStock,
+          weightGrams: v.weightGrams,
+        }));
+      this.validateShape({ options, variants: variantInputs });
+      const variants = variantInputs.map((v) => {
+        const existing = v.id
+          ? before.variants.find((b) => b._id.toHexString() === v.id)
+          : undefined;
+        if (v.id && !existing)
+          throw AppError.validation([{ path: 'variants', message: 'Unknown variant id' }]);
+        const built = this.buildVariant(v, existing);
+        // Turning tracking off drops the count; turning it on starts from zero.
+        if (existing && existing.trackStock !== v.trackStock) built.stock = 0;
+        return built;
+      });
+      newVariants = variants.filter((v) => !before.variants.some((b) => b._id.equals(v._id)));
+      await this.assertSkusFree(
+        variants.flatMap((v) => (v.sku ? [v.sku] : [])),
+        before._id,
+      );
+      set.options = options;
+      set.variants = variants;
+    }
+    if (input.categoryId !== undefined) {
+      const categoryId = await this.assertCategory(input.categoryId);
+      set.categoryId = categoryId ?? null;
+    }
+    if (input.name !== undefined && input.name !== before.name) {
+      set.name = input.name;
+      set.slug = await this.uniqueSlug(input.name, before._id);
+    }
+    if (input.description !== undefined) set.description = input.description;
+    if (input.tags !== undefined) set.tags = input.tags;
+    if (input.images !== undefined)
+      set.images = input.images.map((i) => ({
+        url: i.url,
+        ...(i.fileId ? { fileId: new Types.ObjectId(i.fileId) } : {}),
+        ...(i.alt ? { alt: i.alt } : {}),
+      }));
+    if (input.status !== undefined && input.status !== before.status) {
+      if (before.status === 'archived')
+        await this.entitlements.assertWithinLimit(
+          this.orgId(),
+          'products',
+          await this.products.count({ status: { $ne: 'archived' } }),
+        );
+      set.status = input.status;
+    }
+    const finalVariants = (set.variants as Variant[] | undefined) ?? before.variants;
+    set.searchText = this.search(
+      (set.name as string | undefined) ?? before.name,
+      (set.tags as string[] | undefined) ?? before.tags,
+      finalVariants,
+    );
+    const unset: Record<string, ''> = {};
+    if (set.categoryId === null) {
+      delete set.categoryId;
+      unset.categoryId = '';
+    }
+    const after = await this.tx.run(async () => {
+      // Stock of existing variants may have changed since we read it (orders). Write the
+      // variants with the stock values read inside the transaction.
+      if (set.variants) {
+        const fresh = await this.products.findById(before._id, { variants: 1 });
+        for (const v of set.variants as Variant[]) {
+          const live = fresh?.variants.find((f) => f._id.equals(v._id));
+          const old = before.variants.find((b) => b._id.equals(v._id));
+          if (live && old && live.trackStock === v.trackStock) v.stock = live.stock;
+        }
+      }
+      const updated = await this.products.findOneAndUpdate(
+        { _id: before._id },
+        { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
+      );
+      if (newVariants.length) await this.inventory.recordInitial(before._id, newVariants);
+      return updated!;
+    });
+    await this.audit.record({
+      action: 'catalog.product.updated',
+      orgId: this.orgId(),
+      target: { type: 'product', id, label: after.name },
+      metadata: { fields: Object.keys(set).filter((k) => k !== 'searchText') },
+    });
+    return after;
+  }
+
+  /** Products on any order are archived rather than deleted, so order history stays intact. */
+  async remove(id: string): Promise<{ deleted: boolean; archived: boolean }> {
+    const p = await this.get(id);
+    const sold = p.soldCount > 0 || (await this.orders.exists({ 'items.productId': p._id }));
+    if (sold) {
+      await this.products.updateOne({ _id: p._id }, { $set: { status: 'archived' } });
+    } else {
+      await this.products.deleteOne({ _id: p._id });
+    }
+    await this.audit.record({
+      action: sold ? 'catalog.product.archived' : 'catalog.product.deleted',
+      orgId: this.orgId(),
+      target: { type: 'product', id, label: p.name },
+    });
+    return { deleted: !sold, archived: sold };
+  }
+
+  // ---------------------------------------------------------------- categories
+
+  async listCategories() {
+    const [cats, counts] = await Promise.all([
+      this.categories.find({}, { sort: { sortOrder: 1, name: 1 } }),
+      this.products.aggregate<{ _id: Types.ObjectId; n: number }>([
+        { $match: { status: { $ne: 'archived' }, categoryId: { $exists: true } } },
+        { $group: { _id: '$categoryId', n: { $sum: 1 } } },
+      ]),
+    ]);
+    const byId = new Map(counts.map((c) => [c._id.toHexString(), c.n]));
+    return cats.map((c) => toCategoryDto(c, byId.get(c._id.toHexString()) ?? 0));
+  }
+
+  async createCategory(input: { name: string; sortOrder?: number }) {
+    try {
+      return await this.categories.create({
+        name: input.name,
+        slug: slugify(input.name),
+        sortOrder: input.sortOrder ?? 0,
+      });
+    } catch (err) {
+      if (isDuplicateKey(err))
+        throw AppError.conflict('category_exists', 'A category with this name already exists.');
+      throw err;
+    }
+  }
+
+  async updateCategory(id: string, input: { name?: string; sortOrder?: number }) {
+    const set: Record<string, unknown> = {};
+    if (input.name !== undefined) {
+      set.name = input.name;
+      set.slug = slugify(input.name);
+    }
+    if (input.sortOrder !== undefined) set.sortOrder = input.sortOrder;
+    try {
+      const c = await this.categories.findOneAndUpdate(
+        { _id: new Types.ObjectId(id) },
+        { $set: set },
+      );
+      if (!c) throw AppError.notFound('category');
+      return c;
+    } catch (err) {
+      if (isDuplicateKey(err))
+        throw AppError.conflict('category_exists', 'A category with this name already exists.');
+      throw err;
+    }
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    if (!Types.ObjectId.isValid(id)) throw AppError.notFound('category');
+    const oid = new Types.ObjectId(id);
+    await this.tx.run(async () => {
+      const deleted = await this.categories.deleteOne({ _id: oid });
+      if (!deleted) throw AppError.notFound('category');
+      await this.products.updateMany({ categoryId: oid }, { $unset: { categoryId: '' } });
+    });
+  }
+}
