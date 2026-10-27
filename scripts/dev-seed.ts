@@ -45,9 +45,7 @@ async function ensureUser(name: string, email: string): Promise<string> {
     .lean<{ _id: Types.ObjectId }>()
     .exec();
   if (!existing) {
-    await app
-      .get(AuthService)
-      .signup({ name, email, password: PASSWORD, locale: 'en' }, client);
+    await app.get(AuthService).signup({ name, email, password: PASSWORD, locale: 'en' }, client);
   }
   await users.updateOne({ email }, { $set: { emailVerifiedAt: new Date() } }).exec();
   const user = await users.findOne({ email }, { _id: 1 }).lean<{ _id: Types.ObjectId }>().exec();
