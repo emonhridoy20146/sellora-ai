@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Check, Circle, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { UsageChart } from '@/components/billing/usage-chart';
+import { commerceKeys, useShopSettings } from '@/components/commerce/hooks';
 import { useOrg } from '@/components/org-context';
 import { StatusBadge } from '@/components/status-badge';
 import { Alert } from '@/components/ui/alert';
@@ -14,8 +15,9 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Stat } from '@/components/ui/stat';
 import { api } from '@/lib/api/client';
+import { ApiError } from '@/lib/api/errors';
 import { useBillingSummary, useMe } from '@/lib/api/queries';
-import type { Member, UsageSummary } from '@/lib/api/types';
+import type { Member, OrdersSummary, UsageSummary } from '@/lib/api/types';
 import { daysUntil, formatDate, formatMoney, formatNumber } from '@/lib/format';
 import { rangeFromDays } from '@/lib/series';
 
@@ -45,6 +47,15 @@ export default function OverviewPage() {
     queryFn: () => api<Member[]>(`/orgs/${org.id}/members`),
     enabled: can('org.members.view'),
   });
+  const orders = useQuery({
+    queryKey: commerceKeys.summary(org.id),
+    queryFn: () => api<OrdersSummary>(`/orgs/${org.id}/orders/summary`),
+    enabled: can('orders.view'),
+  });
+  // Plans without the commerce module answer 402; the overview then leaves orders out.
+  const commerceOff =
+    orders.error instanceof ApiError && orders.error.code === 'module_not_in_plan';
+  const shop = useShopSettings(org.id, can('org.settings.manage') && !commerceOff);
   const user = me.data!.user;
   const b = billing.data;
   const s = b?.subscription;
@@ -63,6 +74,26 @@ export default function OverviewPage() {
       href: '/app/account',
       note: 'Protects your shop if your password leaks',
     },
+    ...(can('catalog.manage') && orders.data
+      ? [
+          {
+            done: orders.data.products.active > 0,
+            label: 'Add your products',
+            href: `${base}/products/new`,
+            note: 'With prices, sizes and stock, so orders count stock for you',
+          },
+        ]
+      : []),
+    ...(can('org.settings.manage') && shop.data
+      ? [
+          {
+            done: shop.data.deliveryZones.length > 0,
+            label: 'Set your delivery charges',
+            href: `${base}/settings/selling`,
+            note: 'For example Inside Dhaka and Outside Dhaka',
+          },
+        ]
+      : []),
     ...(can('org.members.manage')
       ? [
           {
@@ -84,11 +115,17 @@ export default function OverviewPage() {
         ]
       : []),
   ];
-  const upcoming = [
-    'Connect Facebook, Instagram and WhatsApp',
-    'Add your products and stock',
-    'Turn on the AI sales agent',
-  ];
+  const upcoming = ['Connect Facebook, Instagram and WhatsApp', 'Turn on the AI sales agent'];
+  const o = orders.data;
+  const toHandle = o ? o.toHandle.pending + o.toHandle.confirmed + o.toHandle.packed : 0;
+  const ordersLink = (status: string, text: string) => (
+    <Link
+      href={`${base}/orders?status=${status}`}
+      className="hover:text-foreground hover:underline"
+    >
+      {text}
+    </Link>
+  );
 
   return (
     <>
@@ -96,6 +133,86 @@ export default function OverviewPage() {
         title={`${greeting(org.timezone)}, ${user.name.split(' ')[0]}`}
         description={`Here is how ${org.name} is doing.`}
       />
+
+      {can('orders.view') && !commerceOff && (
+        <section aria-labelledby="orders-heading" className="mb-6">
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h2 id="orders-heading" className="text-sm font-medium">
+              Orders
+            </h2>
+            <Link href={`${base}/orders`} className="text-[13px] text-primary hover:underline">
+              All orders
+            </Link>
+          </div>
+          {orders.isError ? (
+            <Alert
+              tone="danger"
+              action={
+                <Button size="sm" variant="outline" onClick={() => void orders.refetch()}>
+                  Try again
+                </Button>
+              }
+            >
+              Could not load your order numbers.
+            </Alert>
+          ) : !o ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }, (_, i) => (
+                <Skeleton key={i} className="h-[104px]" />
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <Stat
+                  label="Orders today"
+                  value={formatNumber(o.today.orders)}
+                  sub={`${formatMoney(o.today.valueMinor, o.currency)} order value`}
+                />
+                <Stat
+                  label="Order value this month"
+                  value={formatMoney(o.month.valueMinor, o.currency)}
+                  sub={`${formatNumber(o.month.orders)} orders, without cancelled or returned`}
+                />
+                <Stat
+                  label="Orders to handle"
+                  value={formatNumber(toHandle)}
+                  sub={
+                    <>
+                      {ordersLink('pending', `${o.toHandle.pending} to confirm`)} ·{' '}
+                      {ordersLink('confirmed', `${o.toHandle.confirmed} to pack`)} ·{' '}
+                      {ordersLink('packed', `${o.toHandle.packed} to ship`)}
+                    </>
+                  }
+                />
+                <Stat
+                  label="Cash to collect"
+                  value={formatMoney(o.shipped.toCollectMinor, o.currency)}
+                  sub={ordersLink(
+                    'shipped',
+                    `on ${formatNumber(o.shipped.orders)} shipped ${o.shipped.orders === 1 ? 'order' : 'orders'}`,
+                  )}
+                />
+              </div>
+              {o.products.lowStock > 0 && can('catalog.view') && (
+                <Alert
+                  tone="warning"
+                  className="mt-3"
+                  action={
+                    <Button asChild size="sm" variant="outline" className="bg-background">
+                      <Link href={`${base}/products?stock=low`}>See products</Link>
+                    </Button>
+                  }
+                >
+                  {o.products.lowStock === 1
+                    ? '1 product is running low on stock.'
+                    : `${formatNumber(o.products.lowStock)} products are running low on stock.`}
+                </Alert>
+              )}
+            </>
+          )}
+        </section>
+      )}
 
       {can('billing.view') && (
         <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

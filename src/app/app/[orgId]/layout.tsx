@@ -46,12 +46,19 @@ function nav(orgId: string, can: (p: string) => boolean): NavSection[] {
   const workspace: NavSection = {
     items: [
       { href: base, label: 'Overview', icon: LayoutDashboard, exact: true },
-      // Built in later milestones; listed so the roadmap is visible, never clickable yet.
+      // Items marked soon are built in later milestones; listed so the roadmap is visible,
+      // never clickable yet.
       { href: `${base}/inbox`, label: 'Inbox', icon: Inbox, soon: true },
       { href: `${base}/ai-agent`, label: 'AI sales agent', icon: Bot, soon: true },
-      { href: `${base}/orders`, label: 'Orders', icon: ShoppingBag, soon: true },
-      { href: `${base}/products`, label: 'Products', icon: Package, soon: true },
-      { href: `${base}/customers`, label: 'Customers', icon: UserRound, soon: true },
+      ...(can('orders.view')
+        ? [{ href: `${base}/orders`, label: 'Orders', icon: ShoppingBag }]
+        : []),
+      ...(can('catalog.view')
+        ? [{ href: `${base}/products`, label: 'Products', icon: Package }]
+        : []),
+      ...(can('customers.view')
+        ? [{ href: `${base}/customers`, label: 'Customers', icon: UserRound }]
+        : []),
       { href: `${base}/couriers`, label: 'Couriers', icon: Truck, soon: true },
       { href: `${base}/store`, label: 'Online store', icon: Store, soon: true },
       { href: `${base}/marketing`, label: 'Marketing', icon: Megaphone, soon: true },

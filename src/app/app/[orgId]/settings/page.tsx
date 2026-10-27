@@ -19,7 +19,6 @@ import {
 } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
-import { PageHeader } from '@/components/ui/page-header';
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import { qk } from '@/lib/api/queries';
@@ -115,10 +114,6 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Settings"
-        description="Your business details. Customers see some of these on receipts and in your store."
-      />
       <form onSubmit={onSubmit} noValidate>
         <fieldset disabled={!editable} className="grid gap-6">
           {!editable && (

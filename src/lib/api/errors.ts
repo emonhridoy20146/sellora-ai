@@ -12,6 +12,8 @@ export class ApiError extends Error {
     message: string,
     readonly errors: FieldError[] = [],
     readonly requestId?: string,
+    /** Every other member of the problem body (limits, ids, amounts). */
+    readonly details: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = 'ApiError';
@@ -35,6 +37,7 @@ export class ApiError extends Error {
           : 'The request could not be completed.',
       errors,
       typeof body.requestId === 'string' ? body.requestId : undefined,
+      body,
     );
   }
 

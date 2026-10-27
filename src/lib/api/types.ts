@@ -611,3 +611,207 @@ export interface TenantBilling {
   };
   ledger: LedgerEntry[];
 }
+
+// ------------------------------------------------------------------ commerce
+
+export type ProductStatus = 'active' | 'draft' | 'archived';
+
+export interface Variant {
+  id: string;
+  title: string;
+  optionValues: string[];
+  sku: string | null;
+  barcode: string | null;
+  priceMinor: number;
+  compareAtPriceMinor: number | null;
+  costMinor: number | null;
+  trackStock: boolean;
+  stock: number;
+  weightGrams: number | null;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  categoryId: string | null;
+  tags: string[];
+  status: ProductStatus;
+  currency: string;
+  images: { url: string; fileId: string | null; alt: string }[];
+  options: { name: string; values: string[] }[];
+  variants: Variant[];
+  priceRange: { minMinor: number; maxMinor: number };
+  stock: { tracked: boolean; total: number; lowVariants: number | null };
+  soldCount: number;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  slug: string;
+  sortOrder: number;
+  productCount?: number;
+}
+
+export type StockReason =
+  | 'initial'
+  | 'adjustment'
+  | 'received'
+  | 'damaged'
+  | 'order'
+  | 'order_cancel'
+  | 'order_edit'
+  | 'return';
+
+export interface StockMovement {
+  id: string;
+  productId: string;
+  variantId: string;
+  delta: number;
+  stockAfter: number;
+  reason: StockReason;
+  reference: { type: string; id: string; label?: string } | null;
+  note: string | null;
+  actor: { type: string; id: string };
+  at: IsoDate;
+}
+
+export interface Address {
+  label?: string;
+  name?: string;
+  phone?: string;
+  line1: string;
+  area?: string;
+  city?: string;
+  district?: string;
+  postcode?: string;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  addresses: Address[];
+  notes: string;
+  tags: string[];
+  source: string;
+  blocked: boolean;
+  stats: {
+    orders: number;
+    delivered: number;
+    cancelled: number;
+    returned: number;
+    spentMinor: number;
+    lastOrderAt: IsoDate | null;
+  };
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export type OrderStatus =
+  'pending' | 'confirmed' | 'packed' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
+export type PaymentMethod =
+  'cod' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'card' | 'cash' | 'other';
+export type OrderPaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded';
+
+export interface OrderItem {
+  productId: string;
+  variantId: string;
+  name: string;
+  variantTitle: string;
+  sku: string | null;
+  imageUrl: string | null;
+  unitPriceMinor: number;
+  unitCostMinor: number | null;
+  quantity: number;
+  totalMinor: number;
+  trackStock: boolean;
+}
+
+export interface Order {
+  id: string;
+  number: string;
+  status: OrderStatus;
+  source: string;
+  customerId: string;
+  customer: { name: string; phone: string | null; email: string | null };
+  shippingAddress: Address;
+  items: OrderItem[];
+  currency: string;
+  subtotalMinor: number;
+  discountMinor: number;
+  deliveryChargeMinor: number;
+  totalMinor: number;
+  dueMinor: number;
+  /** Paid more than the order now costs (items removed after paying). */
+  refundDueMinor: number;
+  deliveryZone: { id: string; name: string } | null;
+  payment: {
+    method: PaymentMethod;
+    status: OrderPaymentStatus;
+    paidMinor: number;
+    reference: string | null;
+  };
+  stockCommitted: boolean;
+  customerNote: string;
+  internalNote: string;
+  cancelReason: string | null;
+  history: {
+    status: OrderStatus;
+    at: IsoDate;
+    actor: { type: string; id: string };
+    note: string | null;
+  }[];
+  allowedTransitions: OrderStatus[];
+  editable: boolean;
+  placedAt: IsoDate;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export type OrderCounts = Record<OrderStatus | 'all', number>;
+
+/** GET /orgs/:orgId/orders/summary. Order value excludes cancelled and returned orders. */
+export interface OrdersSummary {
+  currency: string;
+  timezone: string;
+  today: { orders: number; valueMinor: number };
+  month: { orders: number; valueMinor: number };
+  toHandle: { pending: number; confirmed: number; packed: number };
+  shipped: { orders: number; toCollectMinor: number };
+  products: { active: number; lowStock: number };
+}
+
+export interface DeliveryZone {
+  id: string;
+  name: string;
+  chargeMinor: number;
+}
+
+export interface ShopSettings {
+  deliveryZones: DeliveryZone[];
+  defaultZoneId: string | null;
+  invoiceNote: string;
+  lowStockThreshold: number;
+  autoConfirmManualOrders: boolean;
+}
+
+export interface PrintBundle {
+  business: {
+    name: string;
+    legalName: string | null;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+    website: string | null;
+    timezone: string;
+    locale: Locale;
+  };
+  invoiceNote: string;
+  orders: Order[];
+}

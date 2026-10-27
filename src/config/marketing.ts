@@ -28,8 +28,8 @@ export const FEATURES: MarketingFeature[] = [
   {
     key: 'commerce',
     title: 'Orders, products and stock',
-    body: 'Turn a chat into an order in one tap. Stock updates itself and invoices print for the courier.',
-    status: 'soon',
+    body: 'Enter an order in seconds, track stock for every size and colour, and print invoices and packing slips for the courier. Turning a chat into an order arrives with the inbox.',
+    status: 'live',
   },
   {
     key: 'couriers',
@@ -86,4 +86,4 @@ export const FAQ: { q: string; a: string }[] = [
  * Plan modules a merchant can use today (keys from GET /platform/billing/modules). Others
  * are listed on pricing cards as "coming soon". Add a key when its milestone ships.
  */
-export const LIVE_MODULES: readonly string[] = [];
+export const LIVE_MODULES: readonly string[] = ['commerce'];

@@ -131,6 +131,13 @@ try {
       ['/staff/invitations', 'staff-invitations'],
       ['/staff/roles', 'staff-roles'],
       ['/settings', 'settings'],
+      ['/settings/selling', 'settings-selling'],
+      ['/orders', 'orders'],
+      ['/orders/new', 'orders-new'],
+      ['/products', 'products'],
+      ['/products/new', 'products-new'],
+      ['/products/categories', 'products-categories'],
+      ['/customers', 'customers'],
       ['/activity', 'activity'],
     ])
       await check(page, orgPath + sub, `merchant-${name}`);
@@ -150,6 +157,7 @@ try {
     await dpage.waitForURL(/\/app\/[a-f0-9]{24}/, { timeout: 15_000 });
     await check(dpage, orgPath, 'merchant-overview-dark');
     await check(dpage, `${orgPath}/billing/usage`, 'merchant-usage-dark');
+    await check(dpage, `${orgPath}/orders`, 'merchant-orders-dark');
     await dark.close();
   }
 

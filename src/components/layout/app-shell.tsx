@@ -113,7 +113,7 @@ export function AppShell({
 
   return (
     <div className="flex min-h-dvh">
-      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r bg-sidebar lg:flex">
+      <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r bg-sidebar lg:flex print:hidden">
         <div className="flex h-14 items-center border-b px-4">{brand}</div>
         {switcher && <div className="border-b p-3">{switcher}</div>}
         <div className="flex-1 overflow-y-auto">
@@ -155,7 +155,7 @@ export function AppShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/85 px-4 backdrop-blur sm:px-6">
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b bg-background/85 px-4 backdrop-blur sm:px-6 print:hidden">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -168,11 +168,11 @@ export function AppShell({
           <div className="lg:hidden">{brand}</div>
           <div className="ml-auto flex items-center gap-1">{topRight}</div>
         </header>
-        {banner}
+        <div className="print:hidden">{banner}</div>
         <main
           id="main"
           key={pathname}
-          className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8"
+          className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8 print:max-w-none print:p-0"
         >
           {children}
         </main>

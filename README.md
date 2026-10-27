@@ -32,14 +32,14 @@ super-admin in the panel and stored encrypted by the API.
 
 ## Scripts
 
-| Command                           | What it does                                                                                 |
-| --------------------------------- | -------------------------------------------------------------------------------------------- |
-| `npm run dev`                     | Development server with Turbopack.                                                           |
-| `npm run build` / `npm start`     | Production build (standalone output) and server.                                             |
-| `npm run typecheck`               | `tsc --noEmit` (run `npx next typegen` first on a fresh checkout for route types).           |
-| `npm run lint` / `npm run format` | ESLint (Next.js rules) and Prettier.                                                         |
-| `npm test`                        | Unit tests (Vitest): money and date formatting, credit estimates, chart ticks, form helpers. |
-| `npm run e2e`                     | Browser smoke test against a running app + API (see below).                                  |
+| Command                           | What it does                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------- |
+| `npm run dev`                     | Development server with Turbopack.                                                            |
+| `npm run build` / `npm start`     | Production build (standalone output) and server.                                              |
+| `npm run typecheck`               | `tsc --noEmit` (run `npx next typegen` first on a fresh checkout for route types).            |
+| `npm run lint` / `npm run format` | ESLint (Next.js rules) and Prettier.                                                          |
+| `npm test`                        | Unit tests (Vitest): money and date formatting, credit estimates, chart ticks, order helpers. |
+| `npm run e2e`                     | Browser smoke test against a running app + API (see below).                                   |
 
 ### Browser smoke test
 
@@ -56,6 +56,19 @@ npm run e2e
 
 Demo accounts come from `npm run dev:seed` in sellora-api.
 
+### Commerce browser flow
+
+`scripts/commerce-flow.mjs` walks through a merchant's day as a real browser: set delivery
+zones, add a product with sizes, take a manual order, check stock went down, pack and take
+payment, edit items (including the "refund due" warning), print the invoice and packing
+slip, cancel a pending order, and check the customer page, phone layout and dark mode. It
+creates real data, so run it against a demo business only:
+
+```bash
+SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
+node scripts/commerce-flow.mjs
+```
+
 ## Layout
 
 ```
@@ -70,10 +83,12 @@ src/
     ui/                   design-system primitives (button, dialog, table, …)
     charts/               SVG column chart (tooltips, keyboard, table view)
     billing/ auth/ layout/ marketing/
+    commerce/             product form, item editor, order table, badges, print helpers
   lib/
     api/                  fetch wrapper (CSRF, one refresh on 401), error type, response types
     format.ts             money in minor units, credits, dates (Intl, any currency)
     credit-economics.ts   margin estimates for the AI price editor (mirrors the API's rounding)
+    commerce.ts           order statuses and actions, variant combinations, order totals
   config/
     site.ts               public settings from env
     marketing.ts          feature list with live/coming-soon flags
@@ -97,6 +112,7 @@ src/
 
 ## What is not built yet
 
-Pages for the inbox, AI agent, orders, products, customers, couriers, store builder,
-marketing and analytics appear in the merchant sidebar as disabled "Soon" items. They will be
-added milestone by milestone; see `docs/TRACKER.md` in sellora-api.
+Orders, products and customers are live (M3). Pages for the inbox, AI agent, couriers, store
+builder, marketing and analytics appear in the merchant sidebar as disabled "Soon" items. They
+will be added milestone by milestone; see `docs/TRACKER.md` in sellora-api. Product photos are
+image links until file storage lands; the product form says so.

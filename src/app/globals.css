@@ -143,3 +143,27 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Printing (invoices, packing slips, receipts): always light, one document per page. */
+@media print {
+  :root,
+  .dark {
+    color-scheme: light;
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #ffffff;
+    --card-foreground: #000000;
+    --muted-foreground: #444444;
+    --border: #bbbbbb;
+  }
+  .print-page {
+    break-after: page;
+  }
+  .print-page:last-child {
+    break-after: auto;
+  }
+}
+
+@page {
+  margin: 12mm;
+}
