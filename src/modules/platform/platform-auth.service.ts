@@ -163,13 +163,14 @@ export class PlatformAuthService {
       throw AppError.unauthorized('invalid_mfa_code', 'The code is incorrect.');
     }
     const { codes, hashes } = this.totp.createRecoveryCodes();
+    const enabledAt = new Date();
     await this.users
       .updateOne(
         { _id: user._id },
         {
           $set: {
             'mfa.totpSecretEnc': this.encryption.encrypt(secret, this.aad(claims.sub)),
-            'mfa.totpEnabledAt': new Date(),
+            'mfa.totpEnabledAt': enabledAt,
             'mfa.totpLastStep': result.timeStep,
             'mfa.recoveryCodes': hashes.map((hash) => ({ hash })),
           },
@@ -182,7 +183,11 @@ export class PlatformAuthService {
       actor: { type: 'platform', id: claims.sub, label: user.email },
     });
     const tokens = await this.startSession(user, ['pwd', 'totp'], client);
-    return { tokens, user, recoveryCodes: codes };
+    return {
+      tokens,
+      user: { ...user, mfa: { ...user.mfa, totpEnabledAt: enabledAt } },
+      recoveryCodes: codes,
+    };
   }
 
   async loginWithMfa(

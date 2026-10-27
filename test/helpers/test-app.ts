@@ -232,6 +232,8 @@ export class TestApp {
         code: await this.app.get(TotpService).currentCode(secret),
       })
       .expect(200);
+    if (activated.body.user?.mfaEnabled !== true)
+      throw new Error('activation response must report two-factor as enabled');
     return { token: activated.body.accessToken as string, secret, email, password };
   }
 
