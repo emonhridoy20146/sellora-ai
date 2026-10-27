@@ -71,7 +71,11 @@ export const settingsBody = z
   .object({
     signupEnabled: z.boolean().optional(),
     trial: z
-      .object({ enabled: z.boolean().optional(), days: z.number().int().min(0).max(90).optional() })
+      .object({
+        enabled: z.boolean().optional(),
+        days: z.number().int().min(0).max(90).optional(),
+        planCode: z.string().trim().toLowerCase().min(1).max(40).optional(),
+      })
       .strict()
       .optional(),
     demo: z
@@ -91,6 +95,17 @@ export const settingsBody = z
       .optional(),
     support: z
       .object({ email: emailSchema.optional(), whatsapp: z.string().max(32).optional() })
+      .strict()
+      .optional(),
+    billing: z
+      .object({
+        withdrawalsEnabled: z.boolean().optional(),
+        graceDays: z.number().int().min(0).max(30).optional(),
+        taxRateBps: z.number().int().min(0).max(5_000).optional(),
+        taxLabel: z.string().trim().min(1).max(20).optional(),
+        minTopupMinor: z.number().int().min(1).optional(),
+        maxTopupMinor: z.number().int().min(1).optional(),
+      })
       .strict()
       .optional(),
   })

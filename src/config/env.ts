@@ -86,6 +86,9 @@ export const envSchema = z
     AI_OPENAI_API_KEY: z.string().optional(),
     AI_OPENAI_BASE_URL: z.string().optional(),
 
+    /** Insert the starter plans, AI models and credit price list when missing (never overwrites). */
+    BILLING_SEED_DEFAULTS: bool.default(true),
+
     RATE_LIMIT_GLOBAL_PER_MINUTE: z.coerce.number().int().min(10).default(600),
     RATE_LIMIT_AUTH_PER_15MIN: z.coerce.number().int().min(3).default(20),
     /** Scales every per-IP limit (e.g. behind a carrier-grade NAT, or in tests). */

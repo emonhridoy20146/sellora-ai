@@ -1,3 +1,4 @@
+import type { Type } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { getConnectionToken } from '@nestjs/mongoose';
@@ -7,6 +8,10 @@ import { AppModule } from '../../src/app.module.js';
 import { configureApp } from '../../src/bootstrap/configure-app.js';
 import type { Env } from '../../src/config/env.js';
 import { TotpService } from '../../src/modules/auth/core/totp.service.js';
+import {
+  GATEWAY_FETCH,
+  type GatewayFetch,
+} from '../../src/modules/billing/payments/gateway.types.js';
 import { PlatformAdminsService } from '../../src/modules/platform/platform-admins.service.js';
 import { REDIS } from '../../src/infra/redis/redis.module.js';
 import type { Redis } from 'ioredis';
@@ -39,11 +44,23 @@ export class TestApp {
     readonly env: Env,
   ) {}
 
-  static async create(overrides: Record<string, string> = {}): Promise<TestApp> {
+  static async create(
+    overrides: Record<string, string> = {},
+    opts: {
+      /** Replaces the fetch payment gateways use, so tests can play the gateway's part. */
+      gatewayFetch?: GatewayFetch;
+      /** Extra controllers mounted behind the real global guard (route-level probes). */
+      controllers?: Type[];
+    } = {},
+  ): Promise<TestApp> {
     const env = testEnv(overrides);
-    const moduleRef = await Test.createTestingModule({
+    let builder = Test.createTestingModule({
       imports: [AppModule.forRoot(env)],
-    }).compile();
+      controllers: opts.controllers ?? [],
+    });
+    if (opts.gatewayFetch)
+      builder = builder.overrideProvider(GATEWAY_FETCH).useValue(opts.gatewayFetch);
+    const moduleRef = await builder.compile();
     const app = moduleRef.createNestApplication<NestExpressApplication>({
       bodyParser: false,
       rawBody: true,

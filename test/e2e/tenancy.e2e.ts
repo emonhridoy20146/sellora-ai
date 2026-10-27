@@ -98,11 +98,9 @@ describe('tenant isolation and route security', () => {
     const res = await t.as(bob.token).get(`/v1/orgs/${orgB.id}/audit-events`).expect(200);
     expect(res.body.items.length).toBeGreaterThan(0);
     const orgIds = new Set(
-      await t.db
-        .collection('audit_events')
-        .distinct('orgId', {
-          _id: { $in: res.body.items.map((i: { id: string }) => new Types.ObjectId(i.id)) },
-        }),
+      await t.db.collection('audit_events').distinct('orgId', {
+        _id: { $in: res.body.items.map((i: { id: string }) => new Types.ObjectId(i.id)) },
+      }),
     );
     expect([...orgIds].map(String)).toEqual([orgB.id]);
   });

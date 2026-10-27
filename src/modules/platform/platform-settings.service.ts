@@ -9,10 +9,11 @@ const CACHE_MS = 10_000;
 
 export interface PlatformSettingsDto {
   signupEnabled: boolean;
-  trial: { enabled: boolean; days: number };
+  trial: { enabled: boolean; days: number; planCode: string };
   demo: { defaultHours: number };
   maintenance: { enabled: boolean; message: string };
   support: { email: string; whatsapp: string };
+  billing: PlatformSettings['billing'];
   updatedAt: string | null;
 }
 
@@ -38,13 +39,25 @@ export class PlatformSettingsService {
       .exec();
     const value: PlatformSettingsDto = {
       signupEnabled: doc.signupEnabled,
-      trial: { enabled: doc.trial?.enabled ?? true, days: doc.trial?.days ?? 14 },
+      trial: {
+        enabled: doc.trial?.enabled ?? true,
+        days: doc.trial?.days ?? 14,
+        planCode: doc.trial?.planCode ?? 'all-in-one',
+      },
       demo: { defaultHours: doc.demo?.defaultHours ?? 72 },
       maintenance: {
         enabled: doc.maintenance?.enabled ?? false,
         message: doc.maintenance?.message ?? '',
       },
       support: { email: doc.support?.email ?? '', whatsapp: doc.support?.whatsapp ?? '' },
+      billing: {
+        withdrawalsEnabled: doc.billing?.withdrawalsEnabled ?? false,
+        graceDays: doc.billing?.graceDays ?? 3,
+        taxRateBps: doc.billing?.taxRateBps ?? 0,
+        taxLabel: doc.billing?.taxLabel ?? 'VAT',
+        minTopupMinor: doc.billing?.minTopupMinor ?? 10_000,
+        maxTopupMinor: doc.billing?.maxTopupMinor ?? 50_000_000,
+      },
       updatedAt: (doc as unknown as { updatedAt?: Date }).updatedAt?.toISOString() ?? null,
     };
     this.cache = { at: Date.now(), value };

@@ -13,12 +13,15 @@ import {
   type PlatformRole,
 } from '../../iam/platform-permissions.js';
 import { TenantAccessService } from '../../orgs/tenant-access.service.js';
+import { EntitlementsService } from '../../billing/entitlements.service.js';
+import type { FeatureModule } from '../../billing/feature-modules.js';
 import { COOKIE_NAMES, readCookie } from '../core/cookies.js';
 import { SessionService } from '../core/session.service.js';
 import { TokenService, type AccessClaims, type Realm } from '../core/token.service.js';
 import {
   META_ALLOW_SUSPENDED,
   META_ANY_PERMISSIONS,
+  META_MODULES,
   META_ORG_SCOPED,
   META_PERMISSIONS,
   META_PLATFORM_PERMISSIONS,
@@ -34,8 +37,9 @@ export interface AuthenticatedRequest extends Request {
 
 /**
  * The single global guard. In order it: authenticates (bearer or cookie), enforces CSRF
- * for cookie sessions, resolves tenant membership for @OrgScoped routes, then checks
- * merchant or platform permissions. Keeping this in one place makes the order explicit.
+ * for cookie sessions, resolves tenant membership for @OrgScoped routes, checks merchant
+ * or platform permissions, then plan modules (402 when the plan lacks one). Keeping this
+ * in one place makes the order explicit.
  */
 @Injectable()
 export class AccessGuard implements CanActivate {
@@ -46,6 +50,7 @@ export class AccessGuard implements CanActivate {
     private readonly tokens: TokenService,
     private readonly sessions: SessionService,
     private readonly tenantAccess: TenantAccessService,
+    private readonly entitlements: EntitlementsService,
     private readonly config: AppConfig,
   ) {}
 
@@ -69,6 +74,7 @@ export class AccessGuard implements CanActivate {
     }
     if (this.meta<boolean>(META_ORG_SCOPED, ctx)) await this.resolveTenant(req, ctx);
     this.checkMerchantPermissions(ctx);
+    await this.checkModules(ctx);
     return true;
   }
 
@@ -185,6 +191,14 @@ export class AccessGuard implements CanActivate {
         required: missing.length ? missing : any,
       });
     }
+  }
+
+  private async checkModules(ctx: ExecutionContext): Promise<void> {
+    const modules = this.meta<FeatureModule[]>(META_MODULES, ctx) ?? [];
+    if (modules.length === 0) return;
+    const tenant = RequestContext.tenant();
+    if (!tenant) throw new Error('@RequireModule on a route without @OrgScoped()');
+    await this.entitlements.assertModules(tenant.orgId, modules);
   }
 
   private checkPlatformPermissions(ctx: ExecutionContext): void {

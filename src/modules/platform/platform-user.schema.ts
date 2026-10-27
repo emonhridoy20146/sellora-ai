@@ -45,10 +45,18 @@ platformUserSchema.index({ email: 1 }, { unique: true });
 export interface PlatformSettings {
   _id: string;
   signupEnabled: boolean;
-  trial: { enabled: boolean; days: number };
+  trial: { enabled: boolean; days: number; planCode: string };
   demo: { defaultHours: number };
   maintenance: { enabled: boolean; message: string };
   support: { email: string; whatsapp: string };
+  billing: {
+    withdrawalsEnabled: boolean;
+    graceDays: number;
+    taxRateBps: number;
+    taxLabel: string;
+    minTopupMinor: number;
+    maxTopupMinor: number;
+  };
   updatedBy?: string;
 }
 
@@ -59,6 +67,7 @@ export const platformSettingsSchema = platformSchema<PlatformSettings>(
     trial: {
       enabled: { type: Boolean, default: true },
       days: { type: Number, default: 14, min: 0, max: 90 },
+      planCode: { type: String, default: 'all-in-one' },
     },
     demo: { defaultHours: { type: Number, default: 72, min: 1, max: 24 * 30 } },
     maintenance: {
@@ -68,6 +77,15 @@ export const platformSettingsSchema = platformSchema<PlatformSettings>(
     support: {
       email: { type: String, default: 'support@sellora.ai' },
       whatsapp: { type: String, default: '' },
+    },
+    billing: {
+      // Off until the legal review of refunds/withdrawals under Bangladesh Bank rules is done.
+      withdrawalsEnabled: { type: Boolean, default: false },
+      graceDays: { type: Number, default: 3, min: 0, max: 30 },
+      taxRateBps: { type: Number, default: 0, min: 0, max: 5_000 },
+      taxLabel: { type: String, default: 'VAT' },
+      minTopupMinor: { type: Number, default: 10_000, min: 1 },
+      maxTopupMinor: { type: Number, default: 50_000_000, min: 1 },
     },
     updatedBy: String,
   },

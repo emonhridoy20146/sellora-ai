@@ -7,6 +7,7 @@ import {
 } from '../../common/context/request-context.js';
 import type { Permission } from '../iam/permissions.js';
 import type { PlatformPermission } from '../iam/platform-permissions.js';
+import type { FeatureModule } from '../billing/feature-modules.js';
 
 export const META_PUBLIC = 'auth:public';
 export const META_REALM = 'auth:realm';
@@ -16,6 +17,7 @@ export const META_PERMISSIONS = 'auth:permissions';
 export const META_ANY_PERMISSIONS = 'auth:anyPermissions';
 export const META_PLATFORM_PERMISSIONS = 'auth:platformPermissions';
 export const META_REQUIRE_VERIFIED = 'auth:requireVerifiedEmail';
+export const META_MODULES = 'billing:modules';
 
 /** No authentication required (an access token is still read if present). */
 export const Public = () => SetMetadata(META_PUBLIC, true);
@@ -56,6 +58,12 @@ export const RequirePlatformPermissions = (...permissions: PlatformPermission[])
   SetMetadata(META_PLATFORM_PERMISSIONS, permissions);
 
 export const RequireVerifiedEmail = () => SetMetadata(META_REQUIRE_VERIFIED, true);
+
+/**
+ * The route belongs to a paid feature module. The guard answers 402 `module_not_in_plan`
+ * when the business's plan does not include every listed module.
+ */
+export const RequireModule = (...modules: FeatureModule[]) => SetMetadata(META_MODULES, modules);
 
 export const CurrentActor = createParamDecorator((): Actor => RequestContext.actor());
 

@@ -1,6 +1,7 @@
 import { DynamicModule, Module } from '@nestjs/common';
 import { coreImports } from './app.module.js';
 import type { Env } from './config/env.js';
+import { BillingModule } from './modules/billing/billing.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { MailProcessor } from './workers/mail.processor.js';
@@ -11,7 +12,7 @@ export class WorkerModule {
   static forRoot(env?: Env): DynamicModule {
     return {
       module: WorkerModule,
-      imports: [...coreImports(env), UsersModule, OrgsModule],
+      imports: [...coreImports(env), UsersModule, OrgsModule, BillingModule],
       providers: [MailProcessor, MaintenanceProcessor],
     };
   }
