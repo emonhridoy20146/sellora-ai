@@ -7,6 +7,7 @@ import {
   rawPhoneSchema,
 } from '../../common/validation/schemas.js';
 import {
+  ORDER_SOURCES,
   ORDER_STATUSES,
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
@@ -201,6 +202,9 @@ export const orderListQuery = paginationQuerySchema.extend({
   customerId: objectIdSchema.optional(),
   /** none = not sent to a courier yet; attention = the parcel needs a look. */
   shipment: z.enum([...SHIPMENT_STATUSES, 'none', 'ready', 'attention']).optional(),
+  source: z.enum(ORDER_SOURCES).optional(),
+  /** Orders placed in one online store. */
+  storeId: objectIdSchema.optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
 });

@@ -1,7 +1,9 @@
 /**
  * Fills a development database with a realistic demo so the dashboards have something to
  * show: a fashion shop with staff, a pending invitation, wallet money, AI usage across two
- * weeks, a manual payment waiting for review, and a platform owner.
+ * weeks, a manual payment waiting for review, and a platform owner. A second business,
+ * Nakshi Ghor, gets a ready catalog (with generated pattern pictures standing in for
+ * product photos) so an online store can be built and shopped straight away.
  *
  * Usage: npm run dev:seed
  * Refuses to run when NODE_ENV=production. Safe to re-run: it skips what already exists.
@@ -16,8 +18,13 @@ import { RequestContext } from '../src/common/context/request-context.js';
 import { AuthService } from '../src/modules/auth/auth.service.js';
 import { CreditsService } from '../src/modules/billing/credits.service.js';
 import { WalletService } from '../src/modules/billing/wallet.service.js';
-import { OrgsService } from '../src/modules/orgs/orgs.service.js';
+import { ProductsService } from '../src/modules/commerce/products.service.js';
+import { ShopSettingsService } from '../src/modules/commerce/shop-settings.service.js';
+import { FilesService } from '../src/modules/files/files.service.js';
+import { OrgsService, type CreateOrgInput } from '../src/modules/orgs/orgs.service.js';
 import { PlatformAdminsService } from '../src/modules/platform/platform-admins.service.js';
+import { DEMO_CATEGORIES, DEMO_PRODUCTS } from './lib/demo-catalog.js';
+import { patternPng } from './lib/pattern-png.js';
 
 if (process.env.NODE_ENV === 'production') {
   console.error('dev:seed never runs in production.');
@@ -26,6 +33,8 @@ if (process.env.NODE_ENV === 'production') {
 
 const PASSWORD = process.env.SEED_PASSWORD ?? 'sellora demo password';
 const OWNER = { name: 'Emon Hridoy', email: 'owner@demo.sellora.test' };
+/** Owns the shop with the online store catalog; a separate account keeps one business each. */
+const SHOP_OWNER = { name: 'Sadia Islam', email: 'shop@demo.sellora.test' };
 const STAFF = [
   { name: 'Nusrat Jahan', email: 'manager@demo.sellora.test', role: 'manager' },
   { name: 'Rakib Hasan', email: 'agent@demo.sellora.test', role: 'sales_agent' },
@@ -52,30 +61,98 @@ async function ensureUser(name: string, email: string): Promise<string> {
   return user!._id.toHexString();
 }
 
+async function ensureOrg(ownerId: string, input: CreateOrgInput): Promise<string> {
+  const existing = await db
+    .model('Organization')
+    .findOne({ ownerUserId: new Types.ObjectId(ownerId), name: input.name }, { _id: 1 })
+    .lean<{ _id: Types.ObjectId }>()
+    .exec();
+  if (existing) return existing._id.toHexString();
+  const created = await RequestContext.run(
+    { requestId: 'seed', actor: { type: 'user', id: ownerId } },
+    () => app.get(OrgsService).create(ownerId, input),
+  );
+  return created._id.toHexString();
+}
+
+/** The demo catalog for the online store. Skips categories and products that already exist. */
+async function seedCatalog(orgId: string, ownerId: string): Promise<number> {
+  return RequestContext.withTenant(
+    orgId,
+    async () => {
+      const products = app.get(ProductsService);
+      const files = app.get(FilesService);
+      const categories = new Map<string, string>();
+      const existingCats = await db
+        .model('Category')
+        .find({ orgId: new Types.ObjectId(orgId) }, { _id: 1, name: 1 })
+        .lean<{ _id: Types.ObjectId; name: string }[]>()
+        .exec();
+      for (const c of existingCats) categories.set(c.name, c._id.toHexString());
+      for (const [i, name] of DEMO_CATEGORIES.entries()) {
+        if (categories.has(name)) continue;
+        const created = await products.createCategory({ name, sortOrder: i });
+        categories.set(name, created._id.toHexString());
+      }
+
+      let added = 0;
+      for (const p of DEMO_PRODUCTS) {
+        const exists = await db
+          .model('Product')
+          .exists({ orgId: new Types.ObjectId(orgId), name: p.name })
+          .exec();
+        if (exists) continue;
+        const image = await files.saveBytes({
+          purpose: 'product_image',
+          bytes: patternPng(p.pattern.kind, p.pattern.colors),
+          filename: `${p.name.toLowerCase().replace(/\W+/g, '-')}.png`,
+        });
+        await products.create({
+          name: p.name,
+          description: p.description,
+          categoryId: categories.get(p.category) ?? null,
+          tags: p.tags,
+          status: 'active',
+          images: [{ fileId: image._id.toHexString(), alt: p.name }],
+          options: p.options ?? [],
+          variants: p.variants.map((v) => ({
+            optionValues: v.optionValues ?? [],
+            priceMinor: v.priceMinor,
+            compareAtPriceMinor: v.compareAtPriceMinor ?? null,
+            trackStock: true,
+            stock: v.stock,
+          })),
+        });
+        added += 1;
+      }
+
+      const settings = app.get(ShopSettingsService);
+      if ((await settings.get()).deliveryZones.length === 0) {
+        await settings.update({
+          deliveryZones: [
+            { name: 'Inside Dhaka', chargeMinor: 6_000 },
+            { name: 'Outside Dhaka', chargeMinor: 12_000 },
+          ],
+        });
+      }
+      return added;
+    },
+    { type: 'user', id: ownerId },
+  );
+}
+
 try {
   const ownerId = await ensureUser(OWNER.name, OWNER.email);
-  const orgModel = db.model('Organization');
-  let org = await orgModel
-    .findOne({ ownerUserId: new Types.ObjectId(ownerId) })
-    .lean<{ _id: Types.ObjectId; slug: string }>()
-    .exec();
-  if (!org) {
-    const created = await RequestContext.run(
-      { requestId: 'seed', actor: { type: 'user', id: ownerId } },
-      () =>
-        app.get(OrgsService).create(ownerId, {
-          name: 'Dhaka Fashion House',
-          category: 'fashion',
-          country: 'BD',
-          currency: 'BDT',
-          timezone: 'Asia/Dhaka',
-          locale: 'en',
-          phone: '+8801711000000',
-        }),
-    );
-    org = { _id: created._id, slug: created.slug };
-  }
-  const orgId = org._id.toHexString();
+  const orgId = await ensureOrg(ownerId, {
+    name: 'Dhaka Fashion House',
+    category: 'fashion',
+    country: 'BD',
+    currency: 'BDT',
+    timezone: 'Asia/Dhaka',
+    locale: 'en',
+    phone: '+8801711000000',
+  });
+  const org = { _id: new Types.ObjectId(orgId) };
 
   await RequestContext.withTenant(orgId, async () => {
     const memberships = db.model('Membership');
@@ -173,6 +250,18 @@ try {
       .exec(),
   );
 
+  const shopOwnerId = await ensureUser(SHOP_OWNER.name, SHOP_OWNER.email);
+  const shopId = await ensureOrg(shopOwnerId, {
+    name: 'Nakshi Ghor',
+    category: 'handicrafts',
+    country: 'BD',
+    currency: 'BDT',
+    timezone: 'Asia/Dhaka',
+    locale: 'en',
+    phone: '+8801711000111',
+  });
+  const added = await seedCatalog(shopId, shopOwnerId);
+
   const platformUsers = await db.model('PlatformUser').countDocuments({}).exec();
   let platformNote = 'Platform owner already exists; sign in at /admin/login.';
   if (platformUsers === 0) {
@@ -185,6 +274,8 @@ try {
   console.log(`
 Demo data ready.
   Business:  Dhaka Fashion House (${orgId})
+  Shop:      Nakshi Ghor (${shopId}), owner ${SHOP_OWNER.email}; ${added} demo products added.
+             Build its online store from the dashboard (Online store).
   Owner:     ${OWNER.email}
   Staff:     ${STAFF.map((s) => `${s.email} (${s.role})`).join(', ')}
   Password:  ${PASSWORD}   (all demo users)

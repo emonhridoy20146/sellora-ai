@@ -180,7 +180,11 @@ describe('online stores', () => {
       });
       const { items } = (await O().get(url('/stores')).expect(200)).body as { items: StoreDto[] };
       expect(await check('dhaka-fashion-house', items[0]!.id)).toMatchObject({ available: true });
-      expect(await check('nakshi-ghor')).toMatchObject({ available: true, problem: null });
+      expect(await check('nakshi-ghor')).toMatchObject({
+        available: true,
+        problem: null,
+        host: 'nakshi-ghor.shops.test',
+      });
 
       const taken = await O()
         .post(url('/stores'))
@@ -425,13 +429,13 @@ describe('online stores', () => {
     });
 
     it('lets the business pause and reopen, and the platform suspend and reinstate', async () => {
-      expect(
-        (
-          await O()
-            .post(url(`/stores/${store.id}/pause`))
-            .expect(200)
-        ).body.status,
-      ).toBe('paused');
+      const paused = (
+        await O()
+          .post(url(`/stores/${store.id}/pause`))
+          .expect(200)
+      ).body as StoreDto & { readiness: { ready: boolean } };
+      expect(paused.status).toBe('paused');
+      expect(paused.readiness.ready).toBe(true);
       expect(
         (await shop('get', '/resolve', 'dhaka-fashion-house.shops.test').expect(200)).body.state,
       ).toBe('paused');
@@ -712,6 +716,17 @@ describe('online stores', () => {
           payment: { method: 'cod', status: 'unpaid' },
           stockCommitted: false,
         });
+        // The dashboard can list one store's orders, or orders from any store.
+        const fromStore = await O()
+          .get(url(`/orders?storeId=${storeId}`))
+          .expect(200);
+        expect(fromStore.body.items.map((o: { number: string }) => o.number)).toEqual([number]);
+        expect((await O().get(url('/orders?source=store')).expect(200)).body.items).toHaveLength(1);
+        expect(
+          (await O().get(url('/orders?source=manual')).expect(200)).body.items.some(
+            (o: { number: string }) => o.number === number,
+          ),
+        ).toBe(false);
         // Pending store orders do not take stock until the business confirms them.
         expect(
           (

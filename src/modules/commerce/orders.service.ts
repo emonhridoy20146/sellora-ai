@@ -288,6 +288,8 @@ export class OrdersService {
     paymentStatus?: OrderPaymentStatus;
     customerId?: string;
     shipment?: ShipmentFilter;
+    source?: OrderSource;
+    storeId?: string;
     from?: Date;
     to?: Date;
     limit: number;
@@ -295,6 +297,8 @@ export class OrdersService {
   }) {
     const filter: Record<string, unknown> = {};
     if (query.status) filter.status = query.status;
+    if (query.source) filter.source = query.source;
+    if (query.storeId) filter.storeId = new Types.ObjectId(query.storeId);
     if (query.shipment === 'none' || query.shipment === 'ready')
       filter['shipment.status'] = { $nin: SHIPMENT_STATUSES_BOOKED };
     if (query.shipment === 'ready')

@@ -6,7 +6,8 @@ people who run Sellora (the super-admin panel).
 
 ```
  Browser ──► sellora-web (Next.js) ──/v1/* proxy──► sellora-api (NestJS, HTTP)
-                                                        │
+ Shopper ──► sellora-storefront (Next.js, one app  ──/v1/storefront/*──►│
+             for <handle>.<store domain>)              (X-Storefront-Key)│
  Payment gateways ──callbacks / webhooks──────────────► │
  Meta (Messenger, Instagram, WhatsApp) ──webhooks─────► │ ◄──Graph API (worker sends replies)
                                                         ├── MongoDB (replica set): all data, JSON only
@@ -18,13 +19,26 @@ people who run Sellora (the super-admin panel).
                                                         │                       outgoing messages and
                                                         │                       customers' photos)
                                                         ├── File storage: local disk or S3-compatible
-                                                        │   (product photos public, chat photos private)
+                                                        │   (product and store pictures public,
+                                                        │    chat photos private)
                                                         └── Telegram: platform stats (planned, not built)
 ```
 
 Repositories are separate (no monorepo): `sellora-api` (this), `sellora-web` (marketing site,
-merchant dashboard, super-admin panel) and later `sellora-storefront` (customer-facing stores
-and landing pages). See [ADR 0003](adr/0003-separate-repositories.md).
+merchant dashboard, super-admin panel) and `sellora-storefront` (shoppers' online stores; landing
+pages later). See [ADR 0003](adr/0003-separate-repositories.md).
+
+## Online stores
+
+Every store is served by the one storefront app, which finds the store from the Host header
+and renders it on the server with data from `/v1/storefront/*`. Those routes have no user: a
+guard checks the storefront key (constant time), the store is resolved from the host (and a
+signed preview token, if any), and the request then runs in that store's business scope with a
+`visitor` actor, so the same tenant guard applies. Whether shoppers see products depends on the
+store's status, the business's status and the plan's `storefront` module. Checkout creates a
+normal pending order with source `store` through the order service, behind an idempotency key,
+a honeypot and per-address and per-phone rate limits. The super-admin approves stores before
+they open. See [ADR 0014](adr/0014-online-stores.md).
 
 ## Request lifecycle
 

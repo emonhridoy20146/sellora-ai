@@ -27,7 +27,7 @@ cp .env.example .env
 npm run keys:generate                   # prints JWT keys and encryption keys to paste into .env
 npm run dev                             # API on :4000, reloads on change
 npm run dev:worker                      # renewals, credit grants, mail (separate process)
-npm run dev:seed                        # optional: demo business, staff, usage, a platform owner
+npm run dev:seed                        # optional: two demo businesses, staff, usage, a platform owner
 ```
 
 `npm run dev:seed` prints the demo logins. For a real installation, create the first
@@ -68,7 +68,8 @@ Secrets never go in code or in git:
   (`/__photo/<name>.jpg`, and WhatsApp media ids starting `wa-media-`).
 - Customers' photos from Messenger, Instagram and WhatsApp are copied into file storage as
   private files (ADR 0012). `CHAT_MEDIA_MAX_MB` (default 16) is the largest one kept; they
-  count against the plan's storage. On S3, make only `o/*/products/*` publicly readable:
+  count against the plan's storage. On S3, make only `o/*/products/*` and `o/*/store/*`
+  (online store logos and pictures) publicly readable:
   `o/*/chat/*` must stay private (the API serves those to signed-in staff). Photos shown to the
   AI are resized on the server with `sharp` (a prebuilt native module for Linux, macOS and
   Windows; nothing to install separately).
@@ -81,6 +82,14 @@ Secrets never go in code or in git:
   locally without courier accounts, run `node scripts/courier-stand-in.mjs` and point the
   `COURIER_*` URLs at it (the script's header lists them and the demo credentials). It is not a
   courier: nothing is picked up, and statuses move only when you tell it to.
+- Online stores (ADR 0014): every store lives at `<handle>.<STOREFRONT_BASE_DOMAIN>` and is
+  served by the separate `sellora-storefront` app, which calls `/v1/storefront/*` with
+  `STOREFRONT_API_KEY` (the same random value, 32+ characters, set in both apps; it also signs
+  preview links and order receipts). In production point a wildcard DNS record and certificate
+  for `*.<domain>` at the storefront and set `STOREFRONT_URL_SCHEME=https`. Without the key,
+  stores can still be built and approved, but previews answer 503 and no store opens to
+  shoppers. The super-admin reviews stores in Admin › Online stores; Admin › Settings can let
+  stores open without review when the automatic check finds nothing.
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -88,19 +97,20 @@ Secrets never go in code or in git:
 
 ## Scripts
 
-| Command                                                       | What it does                                                                                                             |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `npm run dev` / `npm run dev:worker`                          | API / worker with reload (reads `.env`).                                                                                 |
-| `npm run build` then `npm start` / `npm run start:worker`     | Production build (SWC) and processes.                                                                                    |
-| `npm run typecheck` · `npm run lint` · `npm run format:check` | Static checks.                                                                                                           |
-| `npm test`                                                    | Unit and end-to-end tests (see below).                                                                                   |
-| `npm run db:indexes`                                          | Builds every MongoDB index (run on deploy; `MONGODB_AUTO_INDEX=false` in production).                                    |
-| `npm run keys:generate`                                       | New JWT key pair and encryption keys.                                                                                    |
-| `npm run platform:bootstrap`                                  | First platform owner (only when there are no platform accounts).                                                         |
-| `npm run openapi:export`                                      | Writes the OpenAPI document.                                                                                             |
-| `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI; cannot see photos, says how many it got). |
-| `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).                                             |
-| `node scripts/courier-stand-in.mjs`                           | Stand-in for the Steadfast, Pathao and RedX APIs for local demos without courier accounts (not a courier).               |
+| Command                                                       | What it does                                                                                                                                                            |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev` / `npm run dev:worker`                          | API / worker with reload (reads `.env`).                                                                                                                                |
+| `npm run build` then `npm start` / `npm run start:worker`     | Production build (SWC) and processes.                                                                                                                                   |
+| `npm run typecheck` · `npm run lint` · `npm run format:check` | Static checks.                                                                                                                                                          |
+| `npm test`                                                    | Unit and end-to-end tests (see below).                                                                                                                                  |
+| `npm run db:indexes`                                          | Builds every MongoDB index (run on deploy; `MONGODB_AUTO_INDEX=false` in production).                                                                                   |
+| `npm run keys:generate`                                       | New JWT key pair and encryption keys.                                                                                                                                   |
+| `npm run platform:bootstrap`                                  | First platform owner (only when there are no platform accounts).                                                                                                        |
+| `npm run openapi:export`                                      | Writes the OpenAPI document.                                                                                                                                            |
+| `npm run dev:seed`                                            | Demo data: two businesses (one with a 12-product catalog for an online store; its pictures are generated patterns), staff, wallet money, AI usage and a platform owner. |
+| `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI; cannot see photos, says how many it got).                                                |
+| `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).                                                                                            |
+| `node scripts/courier-stand-in.mjs`                           | Stand-in for the Steadfast, Pathao and RedX APIs for local demos without courier accounts (not a courier).                                                              |
 
 ## Tests
 

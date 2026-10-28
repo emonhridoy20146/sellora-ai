@@ -259,17 +259,21 @@ export class StoresService {
   async checkHandle(raw: string, exceptId?: string) {
     const handle = normalizeHandle(raw);
     const problem = handleProblem(handle);
-    if (problem) return { handle, available: false, problem, message: HANDLE_MESSAGES[problem] };
+    // The address the store would have, so the form can show it as the person types.
+    const host = this.links.host(handle);
+    if (problem)
+      return { handle, host, available: false, problem, message: HANDLE_MESSAGES[problem] };
     const except =
       exceptId && Types.ObjectId.isValid(exceptId) ? new Types.ObjectId(exceptId) : undefined;
     if (await this.handleTaken(handle, except))
       return {
         handle,
+        host,
         available: false,
         problem: 'taken',
         message: 'Another store uses this address',
       };
-    return { handle, available: true, problem: null, message: null };
+    return { handle, host, available: true, problem: null, message: null };
   }
 
   private async assertHandleUsable(handle: string, exceptId?: Types.ObjectId): Promise<void> {

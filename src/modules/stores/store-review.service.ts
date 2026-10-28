@@ -57,7 +57,13 @@ export class StoreReviewService {
 
   private orgSummary(org: OrganizationDoc | undefined) {
     return org
-      ? { id: org._id.toHexString(), name: org.name, status: org.status, category: org.category }
+      ? {
+          id: org._id.toHexString(),
+          name: org.name,
+          status: org.status,
+          category: org.category,
+          currency: org.currency,
+        }
       : null;
   }
 

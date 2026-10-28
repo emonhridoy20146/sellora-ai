@@ -109,21 +109,24 @@ export class StoresController {
   @HttpCode(200)
   @RequirePermissions('stores.publish')
   async withdraw(@ZodParam('storeId', dto.storeIdParam) id: string) {
-    return this.stores.toDto(await this.stores.withdraw(id));
+    const store = await this.stores.withdraw(id);
+    return this.stores.toDto(store, await this.stores.readiness(store));
   }
 
   @Post(':storeId/pause')
   @HttpCode(200)
   @RequirePermissions('stores.publish')
   async pause(@ZodParam('storeId', dto.storeIdParam) id: string) {
-    return this.stores.toDto(await this.stores.pause(id));
+    const store = await this.stores.pause(id);
+    return this.stores.toDto(store, await this.stores.readiness(store));
   }
 
   @Post(':storeId/resume')
   @HttpCode(200)
   @RequirePermissions('stores.publish')
   async resume(@ZodParam('storeId', dto.storeIdParam) id: string) {
-    return this.stores.toDto(await this.stores.resume(id));
+    const store = await this.stores.resume(id);
+    return this.stores.toDto(store, await this.stores.readiness(store));
   }
 
   @Delete(':storeId')
