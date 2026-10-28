@@ -6,6 +6,7 @@ import {
   paginationQuerySchema,
   rawPhoneSchema,
 } from '../../common/validation/schemas.js';
+import { MEMORY_LIMITS } from './schemas.js';
 
 const origin = z
   .string()
@@ -110,6 +111,16 @@ export const contactPatchBody = z
     name: nameSchema.optional(),
     phone: rawPhoneSchema.nullable().optional(),
     email: emailSchema.nullable().optional(),
+    /** Replaces what the AI remembered (staff remove wrong or private facts). */
+    memory: z
+      .object({
+        facts: z
+          .array(z.string().trim().min(1).max(MEMORY_LIMITS.fact))
+          .max(MEMORY_LIMITS.facts),
+        address: z.string().trim().max(MEMORY_LIMITS.address).nullable(),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 

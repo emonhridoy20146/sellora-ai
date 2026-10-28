@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BillingModule } from '../billing/billing.module.js';
-import { FilesModule } from '../files/files.module.js';
+import { FilesCoreModule } from '../files/files.module.js';
 import { OrgsModule } from '../orgs/orgs.module.js';
 import {
   CatalogController,
@@ -31,12 +31,29 @@ import {
 } from './schemas.js';
 import { ShopSettingsService } from './shop-settings.service.js';
 
-/** Products, stock, customers, manual orders and printing (the `commerce` feature module). */
+const services = [
+  CategoryRepository,
+  ProductRepository,
+  StockMovementRepository,
+  CustomerRepository,
+  OrderRepository,
+  ShopSettingsRepository,
+  ShopSettingsService,
+  InventoryService,
+  ProductsService,
+  CustomersService,
+  OrdersService,
+];
+
+/**
+ * Products, stock, customers and orders without HTTP routes. The AI agent (API and
+ * worker) uses it; the feature module below adds the routes.
+ */
 @Module({
   imports: [
     OrgsModule,
     BillingModule,
-    FilesModule,
+    FilesCoreModule,
     MongooseModule.forFeature([
       { name: 'Category', schema: categorySchema },
       { name: 'Product', schema: productSchema },
@@ -46,20 +63,7 @@ import { ShopSettingsService } from './shop-settings.service.js';
       { name: 'ShopSettings', schema: shopSettingsSchema },
     ]),
   ],
-  controllers: [CatalogController, CustomersController, OrdersController, ShopSettingsController],
-  providers: [
-    CategoryRepository,
-    ProductRepository,
-    StockMovementRepository,
-    CustomerRepository,
-    OrderRepository,
-    ShopSettingsRepository,
-    ShopSettingsService,
-    InventoryService,
-    ProductsService,
-    CustomersService,
-    OrdersService,
-  ],
+  providers: services,
   exports: [
     ProductsService,
     CustomersService,
@@ -67,5 +71,13 @@ import { ShopSettingsService } from './shop-settings.service.js';
     InventoryService,
     ShopSettingsService,
   ],
+})
+export class CommerceCoreModule {}
+
+/** Products, stock, customers, manual orders and printing (the `commerce` feature module). */
+@Module({
+  imports: [CommerceCoreModule, OrgsModule],
+  controllers: [CatalogController, CustomersController, OrdersController, ShopSettingsController],
+  exports: [CommerceCoreModule],
 })
 export class CommerceModule {}

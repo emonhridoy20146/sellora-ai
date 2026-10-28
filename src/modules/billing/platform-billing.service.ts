@@ -29,6 +29,7 @@ interface ProfitRow {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheWriteInputTokens: number;
 }
 
 function withMargin<T extends { collectedMinor: number; costMinor: number }>(row: T) {
@@ -52,7 +53,12 @@ export function toPlatformUsageDto(u: AiUsageDoc) {
     status: u.status,
     provider: u.provider ?? null,
     model: u.model ?? null,
-    tokens: { input: u.inputTokens, cachedInput: u.cachedInputTokens, output: u.outputTokens },
+    tokens: {
+      input: u.inputTokens,
+      cachedInput: u.cachedInputTokens,
+      cacheWrite: u.cacheWriteInputTokens ?? 0,
+      output: u.outputTokens,
+    },
     credits: u.credits,
     currency: u.currency,
     billedMinor: u.billedMinor,
@@ -260,6 +266,7 @@ export class PlatformBillingService {
           inputTokens: { $sum: '$inputTokens' },
           outputTokens: { $sum: '$outputTokens' },
           cachedInputTokens: { $sum: '$cachedInputTokens' },
+          cacheWriteInputTokens: { $sum: { $ifNull: ['$cacheWriteInputTokens', 0] } },
         },
       },
       { $sort: { '_id.key': 1 } },

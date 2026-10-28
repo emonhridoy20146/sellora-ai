@@ -25,6 +25,14 @@ import type { Message, MessageAttachment, MessageType, SenderType } from './sche
 /** Emitted after a customer message is stored. The AI agent listens for it. */
 export const INBOX_MESSAGE_RECEIVED = 'inbox.message.received';
 
+/** Emitted when a person turns the AI back on in a conversation. */
+export const INBOX_AI_RESUMED = 'inbox.ai.resumed';
+
+export interface InboxAiResumedEvent {
+  orgId: string;
+  conversationId: string;
+}
+
 export interface InboxMessageReceivedEvent {
   orgId: string;
   channelId: string;

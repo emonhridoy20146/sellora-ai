@@ -55,6 +55,8 @@ export interface CreateOrderInput {
   customerSource?: CustomerSource;
   /** Place the order even though the customer is blocked. */
   allowBlockedCustomer?: boolean;
+  /** The inbox conversation the order was taken in. */
+  conversationId?: string;
 }
 
 /** Allowed moves between statuses. Cancelling and returning are terminal. */
@@ -116,6 +118,7 @@ export function toOrderDto(o: OrderDoc) {
       reference: o.payment.reference ?? null,
     },
     stockCommitted: o.stockCommitted,
+    conversationId: o.conversationId?.toHexString() ?? null,
     customerNote: o.customerNote,
     internalNote: o.internalNote,
     cancelReason: o.cancelReason ?? null,
@@ -346,6 +349,19 @@ export class OrdersService {
     const o = await this.orders.findById(id);
     if (!o) throw AppError.notFound('order');
     return o;
+  }
+
+  /** A customer's latest orders (the AI agent tells customers about their own orders). */
+  async recentForCustomer(customerId: Types.ObjectId, limit: number): Promise<OrderDoc[]> {
+    return this.orders.find({ customerId }, { sort: { placedAt: -1 }, limit });
+  }
+
+  /** Orders taken in an inbox conversation since `since`, newest first. */
+  async recentForConversation(conversationId: Types.ObjectId, since: Date): Promise<OrderDoc[]> {
+    return this.orders.find(
+      { conversationId, placedAt: { $gte: since } },
+      { sort: { placedAt: -1 }, limit: 10 },
+    );
   }
 
   /** Several orders for printing, in the order asked for. */
@@ -604,6 +620,7 @@ export class OrdersService {
         internalNote: input.internalNote ?? '',
         history: [{ status, at: now, actor }],
         ...(actor.type === 'user' ? { createdBy: new Types.ObjectId(actor.id) } : {}),
+        ...(input.conversationId ? { conversationId: new Types.ObjectId(input.conversationId) } : {}),
         placedAt: now,
       });
       if (status === 'confirmed') {

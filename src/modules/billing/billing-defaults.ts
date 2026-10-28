@@ -163,6 +163,7 @@ export const DEFAULT_AI_MODELS: AiModel[] = [
     inputUsdMicrosPerMTok: 100_000,
     outputUsdMicrosPerMTok: 500_000,
     cachedInputUsdMicrosPerMTok: 100_000,
+    cacheWriteUsdMicrosPerMTok: 125_000,
     longContext: {
       thresholdTokens: 100_000,
       inputUsdMicrosPerMTok: 500_000,
@@ -180,6 +181,7 @@ export const DEFAULT_AI_MODELS: AiModel[] = [
     inputUsdMicrosPerMTok: 2_000_000,
     outputUsdMicrosPerMTok: 10_000_000,
     cachedInputUsdMicrosPerMTok: 200_000,
+    cacheWriteUsdMicrosPerMTok: 2_500_000,
     contextWindow: 1_000_000,
     enabled: true,
     isDefaultForTier: true,
@@ -192,6 +194,7 @@ export const DEFAULT_AI_MODELS: AiModel[] = [
     inputUsdMicrosPerMTok: 4_000_000,
     outputUsdMicrosPerMTok: 20_000_000,
     cachedInputUsdMicrosPerMTok: 200_000,
+    cacheWriteUsdMicrosPerMTok: 5_000_000,
     contextWindow: 1_000_000,
     enabled: true,
     isDefaultForTier: true,

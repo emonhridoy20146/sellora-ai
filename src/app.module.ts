@@ -14,6 +14,7 @@ import { StorageModule } from './infra/storage/storage.module.js';
 import { MetricsController } from './infra/metrics/metrics.js';
 import { QueueModule } from './infra/queue/queue.module.js';
 import { RedisModule } from './infra/redis/redis.module.js';
+import { AiModule } from './modules/ai/ai.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { AuthCoreModule } from './modules/auth/core/auth-core.module.js';
@@ -99,6 +100,7 @@ export class AppModule {
         FilesModule,
         CommerceModule,
         InboxModule,
+        AiModule,
       ],
       controllers: [MetricsController],
       providers: [

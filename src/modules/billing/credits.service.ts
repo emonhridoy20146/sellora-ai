@@ -14,6 +14,7 @@ import { DEFAULT_AI_MODELS, DEFAULT_CREDIT_RATE } from './billing-defaults.js';
 import {
   creditsFor,
   maxChargeFor,
+  promptTokens,
   providerCostUsdMicros,
   usdMicrosToMinor,
   type TokenUsage,
@@ -69,7 +70,15 @@ export function toMerchantUsageDto(u: AiUsageDoc) {
     feature: u.feature,
     tier: u.tier,
     status: u.status,
-    tokens: { input: u.inputTokens + u.cachedInputTokens, output: u.outputTokens },
+    tokens: {
+      input: promptTokens({
+        inputTokens: u.inputTokens,
+        cachedInputTokens: u.cachedInputTokens,
+        cacheWriteInputTokens: u.cacheWriteInputTokens ?? 0,
+        outputTokens: 0,
+      }),
+      output: u.outputTokens,
+    },
     credits: u.credits,
     chargedMinor: u.billedMinor - u.shortfallMinor,
     reference: u.reference ?? null,
@@ -114,6 +123,8 @@ export function toAiModelDto(m: AiModelDoc) {
     inputUsdPerMTok: m.inputUsdMicrosPerMTok / 1_000_000,
     outputUsdPerMTok: m.outputUsdMicrosPerMTok / 1_000_000,
     cachedInputUsdPerMTok: m.cachedInputUsdMicrosPerMTok / 1_000_000,
+    cacheWriteUsdPerMTok:
+      m.cacheWriteUsdMicrosPerMTok === undefined ? null : m.cacheWriteUsdMicrosPerMTok / 1_000_000,
     longContext: m.longContext
       ? {
           thresholdTokens: m.longContext.thresholdTokens,
@@ -402,6 +413,7 @@ export class CreditsService {
         inputTokens: input.inputTokens,
         outputTokens: input.outputTokens,
         cachedInputTokens: input.cachedInputTokens ?? 0,
+        cacheWriteInputTokens: input.cacheWriteInputTokens ?? 0,
       };
       const charge = creditsFor(rate, usage.tier, tokens);
       const model = await this.modelByName(input.provider, input.model);
@@ -441,6 +453,7 @@ export class CreditsService {
             inputTokens: tokens.inputTokens,
             outputTokens: tokens.outputTokens,
             cachedInputTokens: tokens.cachedInputTokens ?? 0,
+            cacheWriteInputTokens: tokens.cacheWriteInputTokens ?? 0,
             credits: charge.credits,
             billedMinor: charge.billedMinor,
             shortfallMinor: charge.billedMinor - chargeMinor,

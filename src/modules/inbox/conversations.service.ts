@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Types, type QueryFilter } from 'mongoose';
 import { RequestContext } from '../../common/context/request-context.js';
 import { AppError } from '../../common/errors/app-error.js';
@@ -17,7 +18,11 @@ import {
   type ConversationDoc,
   type ConversationDto,
 } from './inbox.mappers.js';
-import { MessagingService } from './messaging.service.js';
+import {
+  INBOX_AI_RESUMED,
+  MessagingService,
+  type InboxAiResumedEvent,
+} from './messaging.service.js';
 import { ContactRepository, ConversationRepository, MessageRepository } from './repositories.js';
 import type { Conversation, ConversationAi } from './schemas.js';
 
@@ -58,6 +63,7 @@ export class ConversationsService {
     private readonly users: UsersService,
     private readonly entitlements: EntitlementsService,
     private readonly members: MembersService,
+    private readonly events: EventEmitter2,
   ) {}
 
   private can(permission: string): boolean {
@@ -270,7 +276,13 @@ export class ConversationsService {
       contact,
       mode === 'paused' ? `${name} paused the AI.` : `${name} turned the AI back on.`,
     );
-    return this.messaging.publishConversation(updated, { contact });
+    const dto = await this.messaging.publishConversation(updated, { contact });
+    if (mode === 'auto')
+      this.events.emit(INBOX_AI_RESUMED, {
+        orgId: RequestContext.tenant()!.orgId,
+        conversationId: updated._id.toHexString(),
+      } satisfies InboxAiResumedEvent);
+    return dto;
   }
 
   async assign(id: string, assigneeId: string | null): Promise<ConversationDto> {
@@ -331,7 +343,12 @@ export class ConversationsService {
   /** Staff edit a contact's name, phone or email. */
   async updateContact(
     conversationId: string,
-    patch: { name?: string; phone?: string | null; email?: string | null },
+    patch: {
+      name?: string;
+      phone?: string | null;
+      email?: string | null;
+      memory?: { facts: string[]; address: string | null };
+    },
   ): Promise<ConversationDto> {
     const conv = await this.messaging.ensureUnlocked(await this.visible(conversationId));
     const set: Record<string, unknown> = {};
@@ -349,6 +366,13 @@ export class ConversationsService {
           throw AppError.validation([{ path: 'phone', message: 'Enter a valid phone number' }]);
         set.phone = phone;
       } else unset.phone = 1;
+    }
+    if (patch.memory) {
+      set.memory = {
+        facts: [...new Set(patch.memory.facts)],
+        ...(patch.memory.address ? { address: patch.memory.address } : {}),
+        updatedAt: new Date(),
+      };
     }
     const contact = await this.contacts.findOneAndUpdate(
       { _id: conv.contactId },

@@ -30,6 +30,9 @@ function modelInput(body: Partial<z.infer<typeof dto.aiModelBody>>): Partial<AiM
     out.outputUsdMicrosPerMTok = toMicros(body.outputUsdPerMTok);
   if (body.cachedInputUsdPerMTok !== undefined)
     out.cachedInputUsdMicrosPerMTok = toMicros(body.cachedInputUsdPerMTok);
+  if (body.cacheWriteUsdPerMTok !== undefined)
+    out.cacheWriteUsdMicrosPerMTok =
+      body.cacheWriteUsdPerMTok === null ? undefined : toMicros(body.cacheWriteUsdPerMTok);
   if (body.longContext !== undefined) {
     out.longContext = body.longContext
       ? {

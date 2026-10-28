@@ -336,6 +336,8 @@ export interface Order {
     note?: string;
   }[];
   createdBy?: Types.ObjectId;
+  /** The inbox conversation the order was taken in. */
+  conversationId?: Types.ObjectId;
   placedAt: Date;
 }
 
@@ -405,6 +407,7 @@ export const orderSchema = tenantSchema<Order>({
     default: [],
   },
   createdBy: Schema.Types.ObjectId,
+  conversationId: Schema.Types.ObjectId,
   placedAt: { type: Date, required: true },
 });
 orderSchema.index({ orgId: 1, number: 1 }, { unique: true });
@@ -413,6 +416,10 @@ orderSchema.index({ orgId: 1, status: 1, placedAt: -1 });
 orderSchema.index({ orgId: 1, customerId: 1, placedAt: -1 });
 orderSchema.index({ orgId: 1, 'customer.phone': 1 });
 orderSchema.index({ orgId: 1, 'items.productId': 1 });
+orderSchema.index(
+  { orgId: 1, conversationId: 1, placedAt: -1 },
+  { partialFilterExpression: { conversationId: { $type: 'objectId' } } },
+);
 
 // ---------------------------------------------------------------- shop settings
 

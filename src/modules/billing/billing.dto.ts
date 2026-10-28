@@ -154,6 +154,8 @@ export const aiModelBody = z
     inputUsdPerMTok: usdPerMTok,
     outputUsdPerMTok: usdPerMTok,
     cachedInputUsdPerMTok: usdPerMTok.default(0),
+    /** null: 1.25 × the input price. */
+    cacheWriteUsdPerMTok: usdPerMTok.nullable().optional(),
     longContext: z
       .object({
         thresholdTokens: z.number().int().min(1),

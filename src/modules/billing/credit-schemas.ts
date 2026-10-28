@@ -69,6 +69,8 @@ export interface AiModel {
   inputUsdMicrosPerMTok: number;
   outputUsdMicrosPerMTok: number;
   cachedInputUsdMicrosPerMTok: number;
+  /** Price of writing prompt tokens to the provider's cache; when unset, 1.25 × the input price. */
+  cacheWriteUsdMicrosPerMTok?: number;
   /** Higher prices some models charge once a prompt passes a size threshold. */
   longContext?: {
     thresholdTokens: number;
@@ -89,6 +91,7 @@ export const aiModelSchema = platformSchema<AiModel>(
     inputUsdMicrosPerMTok: { type: Number, required: true, min: 0 },
     outputUsdMicrosPerMTok: { type: Number, required: true, min: 0 },
     cachedInputUsdMicrosPerMTok: { type: Number, default: 0, min: 0 },
+    cacheWriteUsdMicrosPerMTok: { type: Number, min: 0 },
     longContext: {
       type: new Schema(
         {
@@ -124,6 +127,7 @@ export interface AiUsage {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheWriteInputTokens: number;
   credits: number;
   billedMinor: number;
   costUsdMicros: number;
@@ -148,6 +152,7 @@ export const aiUsageSchema = tenantSchema<AiUsage>(
     inputTokens: { type: Number, default: 0 },
     outputTokens: { type: Number, default: 0 },
     cachedInputTokens: { type: Number, default: 0 },
+    cacheWriteInputTokens: { type: Number, default: 0 },
     credits: { type: Number, default: 0 },
     billedMinor: { type: Number, default: 0 },
     costUsdMicros: { type: Number, default: 0 },

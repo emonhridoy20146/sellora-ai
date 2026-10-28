@@ -84,6 +84,39 @@ describe('AI credit maths', () => {
     ).toBe(1);
   });
 
+  it('prices cache writes at the catalogue price, or 1.25 × input when none is set', () => {
+    const sonnet = model('claude-sonnet-5-5');
+    // explicit: $2.50 per MTok
+    expect(
+      providerCostUsdMicros(sonnet, {
+        inputTokens: 0,
+        cacheWriteInputTokens: 1_000_000,
+        outputTokens: 0,
+      }),
+    ).toBe(2_500_000);
+    const { cacheWriteUsdMicrosPerMTok: _, ...noWritePrice } = sonnet;
+    expect(
+      providerCostUsdMicros(noWritePrice, {
+        inputTokens: 0,
+        cacheWriteInputTokens: 1_000_000,
+        outputTokens: 0,
+      }),
+    ).toBe(2_500_000);
+    // merchants pay cache writes like any other prompt token
+    expect(
+      creditsFor(rate, 'standard', { inputTokens: 200, cacheWriteInputTokens: 800, outputTokens: 0 }),
+    ).toEqual(creditsFor(rate, 'standard', { inputTokens: 1_000, outputTokens: 0 }));
+  });
+
+  it('counts cache reads and writes towards the long-context threshold', () => {
+    const haiku = model('claude-haiku-5-5');
+    const usage = { inputTokens: 1, cachedInputTokens: 60_000, cacheWriteInputTokens: 40_000, outputTokens: 0 };
+    // 100,001 prompt tokens: long-context prices; writes at 1.25 × the long input price
+    expect(providerCostUsdMicros(haiku, usage)).toBe(
+      Math.ceil((1 * 500_000 + 60_000 * 100_000 + 40_000 * 625_000) / 1_000_000),
+    );
+  });
+
   it('switches to long-context prices above the threshold', () => {
     const haiku = model('claude-haiku-5-5');
     const below = providerCostUsdMicros(haiku, { inputTokens: 100_000, outputTokens: 1_000 });

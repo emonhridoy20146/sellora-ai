@@ -6,6 +6,8 @@ export interface TokenUsage {
   outputTokens: number;
   /** Prompt tokens served from the provider's cache (billed by the provider at a discount). */
   cachedInputTokens?: number;
+  /** Prompt tokens written to the provider's cache (billed by the provider at a premium). */
+  cacheWriteInputTokens?: number;
 }
 
 export interface CreditCharge {
@@ -26,15 +28,24 @@ function ceilDiv(a: bigint, b: bigint): bigint {
   return (a + b - 1n) / b;
 }
 
+/** Every prompt token of a call: plain, read from the cache and written to it. */
+export function promptTokens(usage: TokenUsage): number {
+  return (
+    Math.max(0, usage.inputTokens) +
+    Math.max(0, usage.cachedInputTokens ?? 0) +
+    Math.max(0, usage.cacheWriteInputTokens ?? 0)
+  );
+}
+
 /**
  * Credits for one AI call. Every prompt token (cached or not) is charged at the tier's
- * input rate, so merchants see one simple price; provider caching only lowers our cost.
+ * input rate, so merchants see one simple price; provider caching only changes our cost.
  * Rounded up to the next hundredth of a credit, with the per-request minimum applied.
  */
 export function creditsFor(rate: CreditRate, tier: ModelTier, usage: TokenUsage): CreditCharge {
   const tierRate = rate.tiers.find((t) => t.tier === tier);
   if (!tierRate) throw new Error(`Credit rate v${rate.version} has no "${tier}" tier`);
-  const input = BigInt(Math.max(0, usage.inputTokens) + Math.max(0, usage.cachedInputTokens ?? 0));
+  const input = BigInt(promptTokens(usage));
   const output = BigInt(Math.max(0, usage.outputTokens));
   // tokens × (centi-credits per 1K) / 1000 = centi-credits
   const raw =
@@ -51,16 +62,23 @@ export function creditsFor(rate: CreditRate, tier: ModelTier, usage: TokenUsage)
   };
 }
 
+/** Providers charge a quarter more than the input price to write the cache, unless the catalogue says otherwise. */
+const CACHE_WRITE_PREMIUM = 1.25;
+
 /** What we pay the provider, in micro-USD (1 USD = 1,000,000). */
 export function providerCostUsdMicros(model: AiModel, usage: TokenUsage): number {
-  const prompt = usage.inputTokens + (usage.cachedInputTokens ?? 0);
-  const long = model.longContext && prompt > model.longContext.thresholdTokens;
+  const long = model.longContext && promptTokens(usage) > model.longContext.thresholdTokens;
   const inPrice = long ? model.longContext!.inputUsdMicrosPerMTok : model.inputUsdMicrosPerMTok;
   const outPrice = long ? model.longContext!.outputUsdMicrosPerMTok : model.outputUsdMicrosPerMTok;
+  const writePrice =
+    !long && model.cacheWriteUsdMicrosPerMTok !== undefined
+      ? model.cacheWriteUsdMicrosPerMTok
+      : Math.ceil(inPrice * CACHE_WRITE_PREMIUM);
   const total =
     BigInt(Math.max(0, usage.inputTokens)) * BigInt(inPrice) +
     BigInt(Math.max(0, usage.outputTokens)) * BigInt(outPrice) +
-    BigInt(Math.max(0, usage.cachedInputTokens ?? 0)) * BigInt(model.cachedInputUsdMicrosPerMTok);
+    BigInt(Math.max(0, usage.cachedInputTokens ?? 0)) * BigInt(model.cachedInputUsdMicrosPerMTok) +
+    BigInt(Math.max(0, usage.cacheWriteInputTokens ?? 0)) * BigInt(writePrice);
   // price is per million tokens; round up so cost is never understated
   return Number(ceilDiv(total, 1_000_000n));
 }

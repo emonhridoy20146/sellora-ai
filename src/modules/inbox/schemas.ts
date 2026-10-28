@@ -98,7 +98,19 @@ export interface Contact {
   /** The commerce customer this person is, once known. */
   customerId?: Types.ObjectId;
   lastSeenAt?: Date;
+  /** What the AI agent remembered about this person. Staff can see and edit it. */
+  memory?: ContactMemory;
 }
+
+export interface ContactMemory {
+  /** Short lasting facts: "wears size M", "prefers bKash". */
+  facts: string[];
+  /** Delivery address the customer gave in the chat. */
+  address?: string;
+  updatedAt?: Date;
+}
+
+export const MEMORY_LIMITS = { facts: 20, fact: 200, address: 300 } as const;
 
 export const contactSchema = tenantSchema<Contact>({
   channelId: { type: Schema.Types.ObjectId, required: true },
@@ -109,6 +121,10 @@ export const contactSchema = tenantSchema<Contact>({
   avatarUrl: String,
   customerId: Schema.Types.ObjectId,
   lastSeenAt: Date,
+  memory: new Schema<ContactMemory>(
+    { facts: { type: [String], default: [] }, address: String, updatedAt: Date },
+    { _id: false, strict: 'throw' },
+  ),
 });
 contactSchema.index({ orgId: 1, channelId: 1, externalId: 1 }, { unique: true });
 contactSchema.index({ orgId: 1, customerId: 1 });

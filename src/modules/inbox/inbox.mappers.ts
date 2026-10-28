@@ -15,6 +15,7 @@ export function toContactDto(c: ContactDoc) {
     avatarUrl: c.avatarUrl ?? null,
     customerId: c.customerId?.toHexString() ?? null,
     lastSeenAt: c.lastSeenAt?.toISOString() ?? null,
+    memory: { facts: c.memory?.facts ?? [], address: c.memory?.address ?? null },
     createdAt: c.createdAt.toISOString(),
   };
 }

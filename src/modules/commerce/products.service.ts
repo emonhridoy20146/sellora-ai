@@ -204,6 +204,46 @@ export class ProductsService {
     return p;
   }
 
+  /**
+   * Active products matching any of `terms`, best match first (most terms matched, then
+   * best sellers). Used by the AI agent, where customers describe products loosely.
+   */
+  async searchActive(terms: string[], limit: number): Promise<ProductDoc[]> {
+    const words = [
+      ...new Set(
+        terms
+          .flatMap((t) => t.normalize('NFKC').toLowerCase().split(/[\s,.;:/|()]+/))
+          .filter((w) => w.length >= 2),
+      ),
+    ].slice(0, 8);
+    if (!words.length) return [];
+    const docs = await this.products.find(
+      {
+        status: 'active',
+        $or: words.map((w) => ({ searchText: { $regex: escapeRegex(w) } })),
+      },
+      { sort: { soldCount: -1, updatedAt: -1 }, limit: 100 },
+    );
+    const score = (p: ProductDoc) => words.filter((w) => p.searchText.includes(w)).length;
+    return docs
+      .map((p, i) => ({ p, s: score(p), i }))
+      .sort((a, b) => b.s - a.s || a.i - b.i)
+      .slice(0, limit)
+      .map((x) => x.p);
+  }
+
+  /** Best-selling active products and how many are active, for the AI agent's catalog. */
+  async topActive(limit: number): Promise<{ products: ProductDoc[]; totalActive: number }> {
+    const [products, totalActive] = await Promise.all([
+      this.products.find(
+        { status: 'active' },
+        { sort: { soldCount: -1, updatedAt: -1 }, limit },
+      ),
+      this.products.count({ status: 'active' }),
+    ]);
+    return { products, totalActive };
+  }
+
   /** Several products by id, for order building (missing ids are left out). */
   async getMany(ids: string[]): Promise<ProductDoc[]> {
     const valid = [...new Set(ids)].filter((i) => Types.ObjectId.isValid(i));

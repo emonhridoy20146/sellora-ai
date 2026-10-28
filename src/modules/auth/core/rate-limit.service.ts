@@ -40,6 +40,7 @@ export class RateLimitService {
       'global:ip': { points: config.get('RATE_LIMIT_GLOBAL_PER_MINUTE'), durationSec: 60 },
       'webchat:visitor': { points: 30, durationSec: 60 },
       'webchat:ip': { points: 120, durationSec: 60 },
+      'ai:preview': { points: 20, durationSec: 60 },
     };
     const multiplier = config.get('RATE_LIMIT_IP_MULTIPLIER');
     for (const [name, spec] of Object.entries(this.specs)) {

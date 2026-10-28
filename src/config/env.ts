@@ -87,6 +87,8 @@ export const envSchema = z
     WEBCHAT_TOKEN_SECRET: z.string().min(32).optional(),
 
     AI_ANTHROPIC_API_KEY: z.string().optional(),
+    /** Only for a gateway or proxy in front of the Anthropic API. Empty: the public API. */
+    AI_ANTHROPIC_BASE_URL: z.union([z.url(), z.literal('')]).optional(),
     AI_OPENAI_API_KEY: z.string().optional(),
     AI_OPENAI_BASE_URL: z.string().optional(),
 
