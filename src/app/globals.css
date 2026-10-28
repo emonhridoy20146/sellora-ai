@@ -1,0 +1,200 @@
+@import 'tailwindcss';
+
+/*
+ * Every store is drawn with the same components; its look comes from tokens. The layout
+ * sets the store's colours as CSS variables and its choices as data attributes on <body>
+ * (data-theme, data-font, data-radius, data-header, data-card); the rules below turn them
+ * into these tokens.
+ */
+@theme inline {
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-tint: var(--tint);
+  --radius-store: var(--radius);
+  --radius-store-lg: var(--radius-lg);
+  --font-body: var(--font-body-stack);
+  --font-display: var(--font-heading-stack);
+}
+
+:root {
+  --primary: #1f2937;
+  --on-primary: #ffffff;
+  --accent: #e8590c;
+  --on-accent: #ffffff;
+  --page: #ffffff;
+  --surface: #ffffff;
+  --ink: #1c1917;
+  --muted: #5f5b57;
+  --line: #e7e5e4;
+  --tint: color-mix(in oklab, var(--primary) 8%, var(--surface));
+  --radius: 6px;
+  --radius-lg: 10px;
+  --font-body-stack: var(--font-inter), var(--font-bn-sans), system-ui, sans-serif;
+  --font-heading-stack: var(--font-body-stack);
+}
+
+/* ---------------------------------------------------------------- choices */
+
+[data-radius='none'] {
+  --radius: 0px;
+  --radius-lg: 0px;
+}
+[data-radius='small'] {
+  --radius: 6px;
+  --radius-lg: 10px;
+}
+[data-radius='large'] {
+  --radius: 14px;
+  --radius-lg: 24px;
+}
+
+[data-font='serif'] {
+  --font-heading-stack: var(--font-playfair), var(--font-bn-serif), Georgia, serif;
+}
+[data-font='rounded'] {
+  --font-body-stack: var(--font-nunito), var(--font-bn-hind), system-ui, sans-serif;
+  --font-heading-stack: var(--font-body-stack);
+}
+
+/* ---------------------------------------------------------------- themes */
+
+[data-theme='bazaar'] {
+  --page: #f5f5f4;
+}
+
+[data-theme='nakshi'] {
+  --page: #fbf7f0;
+  --surface: #fffdf8;
+  --line: #e9dfcd;
+  --muted: #6b5e4f;
+}
+/* A stitched border, after nakshi kantha embroidery. */
+[data-theme='nakshi'] .theme-rule {
+  height: 6px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--accent) 0 10px,
+    transparent 10px 16px,
+    var(--primary) 16px 22px,
+    transparent 22px 28px
+  );
+  opacity: 0.8;
+}
+
+[data-theme='volt'] {
+  --page: #f3f4f6;
+  --line: #d9dde3;
+}
+[data-theme='volt'] .site-header {
+  --header-bg: #0b0d12;
+  --header-ink: #f9fafb;
+  --header-muted: #aeb4be;
+}
+[data-theme='volt'] .theme-rule {
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+}
+
+[data-theme='glow'] {
+  --page: color-mix(in oklab, var(--primary) 5%, #fffafa);
+  --line: color-mix(in oklab, var(--primary) 14%, #ffffff);
+}
+
+[data-theme='fresh'] {
+  --page: color-mix(in oklab, var(--primary) 4%, #fbfdf9);
+  --line: color-mix(in oklab, var(--primary) 12%, #ffffff);
+}
+
+[data-theme='nest'] {
+  --page: #faf8f4;
+  --surface: #fffefb;
+  --line: #e7e1d7;
+}
+
+/* ---------------------------------------------------------------- header styles */
+
+.site-header {
+  --header-bg: var(--surface);
+  --header-ink: var(--ink);
+  --header-muted: var(--muted);
+  background: var(--header-bg);
+  color: var(--header-ink);
+}
+[data-header='bold'] .site-header {
+  --header-bg: var(--primary);
+  --header-ink: var(--on-primary);
+  --header-muted: color-mix(in oklab, var(--on-primary) 75%, transparent);
+}
+
+/* ---------------------------------------------------------------- product cards */
+
+.product-card {
+  border-radius: var(--radius-lg);
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+[data-card='bordered'] .product-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+[data-card='soft'] .product-card {
+  background: var(--surface);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.04),
+    0 6px 20px -8px color-mix(in oklab, var(--primary) 30%, transparent);
+}
+[data-card='plain'] .product-card .card-body {
+  padding-inline: 0;
+}
+@media (hover: hover) {
+  [data-card='bordered'] .product-card:hover,
+  [data-card='soft'] .product-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px -12px rgb(0 0 0 / 0.25);
+  }
+}
+
+/* ---------------------------------------------------------------- base */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  /* Mixed here, not on :root, so it uses the store's own primary set on <body>. */
+  --tint: color-mix(in oklab, var(--primary) 8%, var(--surface));
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font-body-stack);
+}
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-heading-stack);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.hero-plain {
+  background:
+    radial-gradient(
+      120% 90% at 100% 0%,
+      color-mix(in oklab, var(--accent) 18%, transparent),
+      transparent 60%
+    ),
+    var(--tint);
+}
+
+.prose-store p + p {
+  margin-top: 0.9em;
+}
