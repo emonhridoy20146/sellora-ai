@@ -787,6 +787,23 @@ describe('inbox: channels, conversations, web chat and live updates', () => {
       expect((await next).conversationId).toBe(conv.id);
     });
 
+    it('everyone on the inbox hears when a channel is switched off or on', async () => {
+      const { s: ownerSocket } = await staffSocket(owner);
+      // The agent sees only assigned conversations, but replies on the same channels.
+      const { s: agentSocket } = await staffSocket(agent);
+      for (const status of ['disabled', 'active'] as const) {
+        const heard = [ownerSocket, agentSocket].map((s) =>
+          waitFor<{ id: string; status: string }>(s, 'channel.updated'),
+        );
+        await O()
+          .patch(url(`/channels/${channel.id}`))
+          .send({ status })
+          .expect(200);
+        for (const event of await Promise.all(heard))
+          expect(event).toEqual({ id: channel.id, status });
+      }
+    });
+
     it('a visitor socket needs a valid visitor token', async () => {
       const s = socket('webchat', { auth: { token: 'forged' } });
       await expect(connected(s)).rejects.toThrow('visitor_token_invalid');

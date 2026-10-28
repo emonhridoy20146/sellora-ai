@@ -2,11 +2,14 @@ import { Injectable } from '@nestjs/common';
 import type { Types } from 'mongoose';
 import { RealtimePublisher } from '../../infra/realtime/realtime.publisher.js';
 import type { ConversationDto, MessageDto, VisitorMessageDto } from './inbox.mappers.js';
+import type { ChannelStatus } from './schemas.js';
 
 /** Socket rooms. Staff with inbox.view join `all`; staff who only see their own threads join `user`. */
 export const rooms = {
   all: (orgId: string) => `org:${orgId}:all`,
   user: (orgId: string, userId: string) => `org:${orgId}:user:${userId}`,
+  /** Every staff socket of a business, whatever part of the inbox it may see. */
+  staff: (orgId: string) => `org:${orgId}:staff`,
   visitor: (channelId: string, visitorId: string) => `wv:${channelId}:${visitorId}`,
 };
 
@@ -51,6 +54,19 @@ export class InboxRealtime {
       rooms: this.staffRooms(orgId, [assigneeId]),
       event: 'message.updated',
       data: message,
+    });
+  }
+
+  /**
+   * A channel was switched on or off, removed, or Meta stopped accepting it. Carries no
+   * settings: apps reload the channel list, which checks the viewer's permissions.
+   */
+  channelUpdated(orgId: string, channel: { id: string; status: ChannelStatus | 'removed' }) {
+    return this.publisher.publish({
+      ns: 'agents',
+      rooms: [rooms.staff(orgId)],
+      event: 'channel.updated',
+      data: channel,
     });
   }
 

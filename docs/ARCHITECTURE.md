@@ -8,11 +8,14 @@ people who run Sellora (the super-admin panel).
  Browser ──► sellora-web (Next.js) ──/v1/* proxy──► sellora-api (NestJS, HTTP)
                                                         │
  Payment gateways ──callbacks / webhooks──────────────► │
+ Meta (Messenger, Instagram, WhatsApp) ──webhooks─────► │ ◄──Graph API (worker sends replies)
                                                         ├── MongoDB (replica set): all data, JSON only
                                                         ├── Redis: rate limits, locks, caches
                                                         ├── BullMQ queues ──► sellora-api worker
                                                         │                      (mail, renewals, credit
-                                                        │                       grants, reservations)
+                                                        │                       grants, reservations,
+                                                        │                       AI replies, Meta webhooks
+                                                        │                       and outgoing messages)
                                                         ├── Object storage, S3-compatible (planned, not built)
                                                         └── Telegram: platform stats (planned, not built)
 ```
@@ -104,6 +107,14 @@ ending expired demo access. Jobs are idempotent, so retries are safe.
 The `ai` queue runs the AI sales agent's replies (ADR 0010): the API schedules a job when a
 customer writes, and the worker answers after the business's reply delay, one reply at a time
 per conversation, reserving and settling AI credits for every model turn.
+
+Messenger, Instagram and WhatsApp use two more queues (ADR 0011). `webhooks`: the API checks a
+webhook's signature, enqueues the body and answers Meta at once; the worker stores the events
+one at a time so a customer's messages keep their order. `outbox`: every reply on a Meta
+channel, from staff or the AI, is stored as `pending` first and sent by the worker through the
+Graph API, split to the channel's length limit, in order within a conversation, with retries
+for rate limits and outages. A revoked token marks the channel "needs reconnecting", and open
+inboxes hear it live (`channel.updated`).
 
 ## Configuration and secrets
 

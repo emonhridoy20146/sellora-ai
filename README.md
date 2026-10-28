@@ -54,6 +54,17 @@ Secrets never go in code or in git:
   Without it the agent hands every chat to people and the settings page says the AI service
   is unavailable. To demo locally without a key, run `node scripts/claude-stand-in.mjs` and
   set `AI_ANTHROPIC_BASE_URL=http://127.0.0.1:4010` with any key; its replies are scripted.
+- Messenger, Instagram and WhatsApp use one Meta app for the platform: `META_APP_ID`,
+  `META_APP_SECRET` and `META_WEBHOOK_VERIFY_TOKEN` (set all three or none), plus optional
+  `META_LOGIN_CONFIG_ID` (Facebook Login for Business) and `META_WHATSAPP_CONFIG_ID` (WhatsApp
+  Embedded Signup). In the Meta app dashboard, point the webhook at
+  `<API_PUBLIC_URL>/v1/webhooks/meta` with the same verify token, and add
+  `<WEB_APP_URL>/app/connect/meta` as a valid OAuth redirect URI. Page and WhatsApp tokens are
+  stored encrypted. Without these settings the channels page says Meta channels are off.
+  To try the flows locally without a Meta app, run
+  `META_APP_SECRET=<same secret> node scripts/graph-stand-in.mjs` and set
+  `META_GRAPH_BASE_URL=http://127.0.0.1:4020` for the API and the worker. It is not Meta: it
+  knows two demo pages and one WhatsApp number and accepts any login code.
 
 ## Scripts
 
@@ -68,6 +79,7 @@ Secrets never go in code or in git:
 | `npm run platform:bootstrap`                                  | First platform owner (only when there are no platform accounts).                      |
 | `npm run openapi:export`                                      | Writes the OpenAPI document.                                                          |
 | `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI).       |
+| `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).          |
 
 ## Tests
 
@@ -81,7 +93,9 @@ over HTTP. Highlights: a suite that calls every business-scoped route with anoth
 id and expects 404; wallet concurrency (20 parallel debits never overspend); payment callbacks
 including forged and mismatched ones; and checks that merchant responses never contain
 provider cost or model fields. Payment gateways are faked in tests
-(`test/helpers/fake-gateways.ts`); see the tracker for what that does and does not prove.
+(`test/helpers/fake-gateways.ts`), and so is Meta's Graph API (`test/helpers/fake-meta.ts`,
+which checks the bearer token and `appsecret_proof` like Meta does); see the tracker for what
+that does and does not prove.
 
 The S3 storage driver has its own suite (`test/e2e/files-s3.e2e.ts`) that runs against a real
 MinIO server. It runs when `MINIO_BINARY` points at a `minio` server binary and is skipped
@@ -115,9 +129,12 @@ src/
                              live updates (Socket.IO gateways)
     ai/                      AI sales agent: provider interface (Claude), settings, prompt,
                              tools, metered tool loop, reply queue and handover (ADR 0010)
+    meta/                    Messenger, Instagram, WhatsApp: Graph API client, webhook
+                             parsing, inbound events, outbox sender, connect flows (ADR 0011)
 test/
   e2e/                       HTTP tests per area, including tenancy.e2e.ts
-  helpers/                   test app, fake gateways, fake Anthropic API, route inventory
+  helpers/                   test app, fake gateways, fake Anthropic API, fake Graph API,
+                             route inventory
 scripts/                     keys, bootstrap, indexes, dev seed
 ```
 

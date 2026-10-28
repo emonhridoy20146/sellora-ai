@@ -1,9 +1,10 @@
 import { getQueueToken } from '@nestjs/bullmq';
 import { Worker, type Job, type Queue } from 'bullmq';
 import { Types } from 'mongoose';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QUEUES } from '../../src/infra/queue/queue.constants.js';
 import { AiRepliesService } from '../../src/modules/ai/agent/ai-replies.service.js';
+import { InboxRealtime } from '../../src/modules/inbox/inbox-realtime.service.js';
 import type { OutboxJob } from '../../src/modules/inbox/outbox.js';
 import { MetaInbound, type InboundOutcome } from '../../src/modules/meta/meta-inbound.service.js';
 import { MetaSender, type SendOutcome } from '../../src/modules/meta/meta-sender.service.js';
@@ -856,8 +857,11 @@ describe('Messenger, Instagram and WhatsApp', () => {
         error_subcode: 460,
         message: 'The session has been invalidated because the user changed their password',
       });
+      const announced = vi.spyOn(t.app.get(InboxRealtime), 'channelUpdated');
       await reply(conv.id, 'Hello again').expect(201);
       const [outcome] = await drainOutbox({ finalAttempt: false });
+      // Open inboxes hear it at once and stop offering replies.
+      expect(announced).toHaveBeenCalledWith(orgId, { id: channel.messenger.id, status: 'error' });
       expect(outcome).toMatchObject({
         status: 'failed',
         reason: expect.stringContaining('Reconnect'),
@@ -891,6 +895,11 @@ describe('Messenger, Instagram and WhatsApp', () => {
           .expect(200)
       ).body as ChannelDto;
       expect(fixed).toMatchObject({ status: 'active', statusReason: null });
+      expect(announced).toHaveBeenLastCalledWith(orgId, {
+        id: channel.messenger.id,
+        status: 'active',
+      });
+      announced.mockRestore();
       await reply(conv.id, 'Sorry for the wait').expect(201);
       expect(await drainOutbox()).toEqual([expect.objectContaining({ status: 'sent' })]);
     });

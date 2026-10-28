@@ -63,8 +63,9 @@ and provider details must not be hard-coded in features.
 
 **Consequences.**
 
-- Replies go out on website chat now. Messenger, Instagram and WhatsApp conversations are
-  skipped (`channel_send_unavailable`) until those connections are built (M4c).
+- Replies go out on every channel. On Messenger, Instagram and WhatsApp they go through the
+  outbox (ADR 0011), and the agent skips a turn once Meta's 24-hour reply window has closed
+  (`outside_reply_window`) or the channel needs reconnecting (`channel_needs_reconnect`).
 - Tests drive the real SDK through an injected `fetch` that plays the Messages API
   (`test/helpers/fake-anthropic.ts`). They prove our side of the contract, not the model's
   answers. For browser checks without a key, `scripts/claude-stand-in.mjs` answers in the

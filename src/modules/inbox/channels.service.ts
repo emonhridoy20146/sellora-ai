@@ -11,6 +11,7 @@ import { CROSS_TENANT } from '../../infra/database/tenant-guard.plugin.js';
 import type { WithId } from '../../infra/database/schema-helpers.js';
 import { AuditService } from '../audit/audit.service.js';
 import { EntitlementsService } from '../billing/entitlements.service.js';
+import { InboxRealtime } from './inbox-realtime.service.js';
 import { ChannelRepository } from './repositories.js';
 import type { Channel, ChannelStatus, ChannelType } from './schemas.js';
 
@@ -102,6 +103,7 @@ export class ChannelsService {
     private readonly audit: AuditService,
     private readonly encryption: EncryptionService,
     private readonly events: EventEmitter2,
+    private readonly realtime: InboxRealtime,
   ) {}
 
   private orgId(): string {
@@ -196,6 +198,8 @@ export class ChannelsService {
       target: { type: 'channel', id, label: updated.name },
       metadata: { fields: Object.keys(set) },
     });
+    if (updated.status !== channel.status)
+      await this.realtime.channelUpdated(this.orgId(), { id, status: updated.status });
     return updated;
   }
 
@@ -210,6 +214,7 @@ export class ChannelsService {
     });
     const event: InboxChannelRemovedEvent = { orgId: this.orgId(), channel };
     this.events.emit(INBOX_CHANNEL_REMOVED, event);
+    await this.realtime.channelUpdated(this.orgId(), { id, status: 'removed' });
   }
 
   // ------------------------------------------------------------------ Meta accounts
@@ -253,6 +258,11 @@ export class ChannelsService {
         target: { type: 'channel', id: updated._id.toHexString(), label: updated.name },
         metadata: { type: input.type },
       });
+      if (fixes)
+        await this.realtime.channelUpdated(this.orgId(), {
+          id: updated._id.toHexString(),
+          status: updated.status,
+        });
       return { channel: updated, created: false };
     }
 
@@ -301,13 +311,18 @@ export class ChannelsService {
       { _id: channelId, status: 'active' },
       { $set: { status: 'error', statusReason: reason } },
     );
-    if (updated)
+    if (updated) {
       await this.audit.record({
         action: 'inbox.channel.needs_reconnect',
         orgId: this.orgId(),
         target: { type: 'channel', id: channelId.toHexString(), label: updated.name },
         metadata: { reason },
       });
+      await this.realtime.channelUpdated(this.orgId(), {
+        id: channelId.toHexString(),
+        status: 'error',
+      });
+    }
     return updated;
   }
 

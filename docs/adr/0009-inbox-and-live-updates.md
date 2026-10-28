@@ -49,5 +49,5 @@ tokens instead of cookies avoid third-party cookie blocking in iframes.
 **Consequences.** Behind a load balancer with several API instances, Socket.IO's HTTP
 long-polling needs sticky sessions (or clients use the WebSocket transport only). Pub/sub
 messages published while an API instance is restarting are lost for its sockets; clients
-refetch on reconnect. Sending on Messenger, Instagram and WhatsApp answers 409
-`channel_send_unavailable` until those channels are built.
+refetch on reconnect. Messenger, Instagram and WhatsApp joined the same pipeline in M4c
+(ADR 0011).

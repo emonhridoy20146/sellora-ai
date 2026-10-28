@@ -140,11 +140,12 @@ export class AgentsGateway implements OnGatewayInit, OnModuleDestroy {
     if (!result.ok) return result;
     for (const room of socket.rooms) if (room !== socket.id) await socket.leave(room);
     const scope = result.scope!;
-    await socket.join(
+    await socket.join([
       scope === 'all'
         ? rooms.all(orgId.toLowerCase())
         : rooms.user(orgId.toLowerCase(), data.user.id),
-    );
+      rooms.staff(orgId.toLowerCase()),
+    ]);
     data.org = { orgId: orgId.toLowerCase(), scope };
     return result;
   }
