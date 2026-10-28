@@ -16,6 +16,7 @@ import {
 import { PlatformAdminsService } from '../../src/modules/platform/platform-admins.service.js';
 import { AI_FETCH } from '../../src/modules/ai/provider/ai-provider.js';
 import { META_FETCH } from '../../src/modules/meta/meta-graph.js';
+import { COURIER_FETCH } from '../../src/modules/couriers/courier.types.js';
 import { REDIS } from '../../src/infra/redis/redis.module.js';
 import type { Redis } from 'ioredis';
 import { testEnv } from './env.js';
@@ -58,6 +59,8 @@ export class TestApp {
       aiFetch?: typeof fetch;
       /** Replaces the fetch the Graph API client uses, so tests can play Meta's part. */
       metaFetch?: typeof fetch;
+      /** Replaces the fetch courier adapters use, so tests can play the couriers' part. */
+      courierFetch?: typeof fetch;
     } = {},
   ): Promise<TestApp> {
     const env = testEnv(overrides);
@@ -69,6 +72,8 @@ export class TestApp {
       builder = builder.overrideProvider(GATEWAY_FETCH).useValue(opts.gatewayFetch);
     if (opts.aiFetch) builder = builder.overrideProvider(AI_FETCH).useValue(opts.aiFetch);
     if (opts.metaFetch) builder = builder.overrideProvider(META_FETCH).useValue(opts.metaFetch);
+    if (opts.courierFetch)
+      builder = builder.overrideProvider(COURIER_FETCH).useValue(opts.courierFetch);
     const moduleRef = await builder.compile();
     const app = moduleRef.createNestApplication<NestExpressApplication>({
       bodyParser: false,

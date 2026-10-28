@@ -147,6 +147,18 @@ export class CustomersService {
     return this.customers.findOne({ phone });
   }
 
+  /** Customers by E.164 phone numbers (for risk badges on order lists). */
+  async findByPhones(phones: string[]): Promise<CustomerDoc[]> {
+    if (!phones.length) return [];
+    return this.customers.find({ phone: { $in: phones } });
+  }
+
+  /** E.164 form of a number typed with or without the country code, in the business's country. */
+  async normalizeOne(raw: string): Promise<string | null> {
+    const { country } = await this.orgs.get(this.orgId());
+    return normalizePhone(raw, country);
+  }
+
   private phoneTaken(existing: CustomerDoc | null) {
     return AppError.conflict('customer_phone_taken', 'A customer with this phone number exists.', {
       customerId: existing?._id.toHexString() ?? null,

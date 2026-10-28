@@ -4,6 +4,10 @@ const bool = z
   .enum(['true', 'false', '1', '0', 'yes', 'no'])
   .transform((v) => v === 'true' || v === '1' || v === 'yes');
 
+/** A URL with a default; an empty value (as in a copied .env.example) means the default. */
+const urlWithDefault = (fallback: string) =>
+  z.preprocess((v) => (v === '' ? undefined : v), z.url().default(fallback));
+
 const csv = z.string().transform((v) =>
   v
     .split(',')
@@ -110,6 +114,39 @@ export const envSchema = z
       .default('v23.0'),
     /** Only for a stand-in or proxy in front of the Graph API. Empty: graph.facebook.com. */
     META_GRAPH_BASE_URL: z.union([z.url(), z.literal('')]).optional(),
+
+    /**
+     * Courier APIs. The defaults are the couriers' published production and sandbox
+     * addresses; change them only when a courier moves its API or for a local stand-in.
+     */
+    COURIER_STEADFAST_BASE_URL: urlWithDefault('https://portal.packzy.com/api/v1'),
+    COURIER_PATHAO_BASE_URL: urlWithDefault('https://api-hermes.pathao.com'),
+    COURIER_PATHAO_SANDBOX_URL: urlWithDefault('https://courier-api-sandbox.pathao.com'),
+    COURIER_REDX_BASE_URL: urlWithDefault('https://openapi.redx.com.bd/v1.0.0-beta'),
+    COURIER_REDX_SANDBOX_URL: urlWithDefault('https://sandbox.redx.com.bd/v1.0.0-beta'),
+    /**
+     * Public tracking pages shown to staff and customers. {tracking}, {consignment} and
+     * {phone} are filled in; an empty value hides the link for that courier.
+     */
+    COURIER_STEADFAST_TRACKING_URL: z.string().default('https://steadfast.com.bd/t/{tracking}'),
+    COURIER_PATHAO_TRACKING_URL: z
+      .string()
+      .default('https://merchant.pathao.com/tracking?consignment_id={consignment}&phone={phone}'),
+    COURIER_REDX_TRACKING_URL: z
+      .string()
+      .default('https://redx.com.bd/track-parcel/?trackingId={tracking}'),
+    /** How long to wait for a courier's API before giving up on a request. */
+    COURIER_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(20_000),
+
+    /**
+     * Keys the phone-number hashes of the shared delivery network (fraud check). Without it
+     * the network stays off even when the super-admin switches it on. Changing it starts the
+     * network from zero, as old hashes no longer match.
+     */
+    FRAUD_NETWORK_SECRET: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().min(32).optional(),
+    ),
 
     /** Insert the starter plans, AI models and credit price list when missing (never overwrites). */
     BILLING_SEED_DEFAULTS: bool.default(true),

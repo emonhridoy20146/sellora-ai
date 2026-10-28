@@ -72,6 +72,19 @@ Secrets never go in code or in git:
   `o/*/chat/*` must stay private (the API serves those to signed-in staff). Photos shown to the
   AI are resized on the server with `sharp` (a prebuilt native module for Linux, macOS and
   Windows; nothing to install separately).
+- Couriers (ADR 0013): each business enters its own Steadfast, Pathao or RedX merchant
+  credentials in Settings › Couriers; they are checked with the courier, stored encrypted, and
+  never returned. The platform only configures addresses: `COURIER_*_BASE_URL` and the sandbox
+  URLs default to the couriers' published APIs, `COURIER_*_TRACKING_URL` to their public
+  tracking pages. Each courier account shows its own webhook address and secret to paste into
+  the courier's panel; without a webhook, parcels are still checked every hour. To try it
+  locally without courier accounts, run `node scripts/courier-stand-in.mjs` and point the
+  `COURIER_*` URLs at it (the script's header lists them and the demo credentials). It is not a
+  courier: nothing is picked up, and statuses move only when you tell it to.
+- Fraud check: a business's own delivery history needs no settings. The shared delivery
+  network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
+  `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
+  switch in Admin › Settings (off by default) and each business's opt-in.
 
 ## Scripts
 
@@ -87,6 +100,7 @@ Secrets never go in code or in git:
 | `npm run openapi:export`                                      | Writes the OpenAPI document.                                                                                             |
 | `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI; cannot see photos, says how many it got). |
 | `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).                                             |
+| `node scripts/courier-stand-in.mjs`                           | Stand-in for the Steadfast, Pathao and RedX APIs for local demos without courier accounts (not a courier).               |
 
 ## Tests
 
@@ -100,9 +114,11 @@ over HTTP. Highlights: a suite that calls every business-scoped route with anoth
 id and expects 404; wallet concurrency (20 parallel debits never overspend); payment callbacks
 including forged and mismatched ones; and checks that merchant responses never contain
 provider cost or model fields. Payment gateways are faked in tests
-(`test/helpers/fake-gateways.ts`), and so is Meta's Graph API (`test/helpers/fake-meta.ts`,
-which checks the bearer token and `appsecret_proof` like Meta does); see the tracker for what
-that does and does not prove.
+(`test/helpers/fake-gateways.ts`), and so are Meta's Graph API (`test/helpers/fake-meta.ts`,
+which checks the bearer token and `appsecret_proof` like Meta does) and the courier APIs
+(`test/helpers/fake-couriers.ts`, which can lose a booking reply after creating the parcel);
+see the tracker for what that does and does not prove. Courier status checks are also tested
+with a real BullMQ worker, so queue behaviour (deduplication, delayed jobs) is not faked.
 
 The S3 storage driver has its own suite (`test/e2e/files-s3.e2e.ts`) that runs against a real
 MinIO server. It runs when `MINIO_BINARY` points at a `minio` server binary and is skipped

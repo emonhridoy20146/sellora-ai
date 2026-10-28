@@ -108,6 +108,7 @@ export const settingsBody = z
       })
       .strict()
       .optional(),
+    fraudNetwork: z.object({ enabled: z.boolean().optional() }).strict().optional(),
   })
   .strict();
 

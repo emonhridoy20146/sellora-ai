@@ -124,12 +124,28 @@ Meta's hosts only, checks its real type and size against the plan's storage, and
 ready or failed with a reason. The AI reply job waits up to 20 s for a pending photo, then
 shows the newest saved photos to models that can see images.
 
+The `couriers` queue books parcels and follows them (ADR 0013). A single booking calls the
+courier straight away; bulk bookings run as `send` jobs, one per parcel, and every booking is
+written down as `queued` before the courier is called, so a crash or a lost reply never
+creates a second parcel. `check` jobs ask the courier's API where a parcel is. Courier webhooks
+only queue a check (their content is never trusted for a status); checks for one parcel are
+deduplicated with BullMQ's `deduplication` (`keepLastIfActive`), so a webhook that arrives
+while a check runs is followed by one more check, never dropped. A job scheduler queues checks
+every 5 minutes for parcels whose `nextCheckAt` is due (hourly while moving). When a courier
+confirms a parcel delivered or returned, the worker emits `parcel.outcome`; the fraud module
+records it for the shared delivery network only when the platform and the business have both
+switched sharing on.
+
 ## Configuration and secrets
 
 `config/env.ts` validates every variable at start-up. Secrets (JWT keys, data-encryption keys,
-SMTP, storage, AI keys) only come from the environment; gateway credentials from the encrypted
-database records the admin panel writes. Nothing tenant- or provider-specific is hard-coded in
-feature code: plans, modules, limits, credit prices, model ids and model prices are data.
+SMTP, storage, AI keys, `FRAUD_NETWORK_SECRET`) only come from the environment; gateway
+credentials from the encrypted database records the admin panel writes. Each business's courier
+credentials and Meta tokens are stored encrypted on its own records, with associated data that
+ties each ciphertext to its record (the courier account id; the channel type and account id),
+so a ciphertext copied elsewhere does not decrypt. Nothing tenant- or provider-specific is
+hard-coded in feature code: plans, modules, limits, credit prices, model ids and model prices
+are data.
 
 ## Super-admin realm
 

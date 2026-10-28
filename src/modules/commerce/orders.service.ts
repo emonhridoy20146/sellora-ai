@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Types } from 'mongoose';
 import { RequestContext } from '../../common/context/request-context.js';
 import { AppError, type FieldError } from '../../common/errors/app-error.js';
@@ -12,21 +13,68 @@ import { OrgsService } from '../orgs/orgs.service.js';
 import { CustomersService } from './customers.service.js';
 import { InventoryService, type StockLine } from './inventory.service.js';
 import { OrderRepository, ProductRepository } from './repositories.js';
-import type {
-  Address,
-  CustomerSource,
-  Order,
-  OrderItem,
-  OrderPaymentStatus,
-  OrderSource,
-  OrderStatus,
-  PaymentMethod,
-  ShopSettings,
+import {
+  SHIPMENT_IN_PROGRESS,
+  SHIPMENT_STATUSES,
+  type Address,
+  type CustomerSource,
+  type Order,
+  type OrderItem,
+  type OrderPaymentStatus,
+  type OrderShipment,
+  type OrderSource,
+  type OrderStatus,
+  type PaymentMethod,
+  type ShipmentStatus,
+  type ShopSettings,
 } from './schemas.js';
 import { ShopSettingsService } from './shop-settings.service.js';
 import { escapeRegex } from './text.js';
 
 export type OrderDoc = WithId<Order>;
+
+/** Emitted after an order moves to another status. */
+export const ORDER_STATUS_CHANGED = 'order.status_changed';
+
+export interface OrderStatusChangedEvent {
+  orgId: string;
+  orderId: string;
+  from: OrderStatus;
+  to: OrderStatus;
+}
+
+/** Order list filter on the courier parcel: none booked yet, needs a look, or a status. */
+/** none: never sent (or the booking failed); ready: confirmed or packed and not sent yet. */
+export type ShipmentFilter = ShipmentStatus | 'none' | 'ready' | 'attention';
+
+/** Orders a courier can be booked for. */
+export const BOOKABLE_ORDER_STATUSES: readonly OrderStatus[] = ['confirmed', 'packed'];
+
+/** GET /orders/shipments/summary: orders by courier status, for the couriers page. */
+export interface ShipmentSummary {
+  currency: string;
+  /** Confirmed or packed and not sent to a courier yet. */
+  ready: number;
+  attention: number;
+  byStatus: Record<ShipmentStatus, number>;
+  /** Cash the couriers are still to collect: parcels booked or on the way, unpaid part. */
+  withCouriers: { orders: number; toCollectMinor: number };
+}
+
+/** True while a parcel is booked or being booked, so the order must not change under it. */
+export function shipmentInProgress(o: Pick<Order, 'shipment'>): boolean {
+  return Boolean(o.shipment && SHIPMENT_IN_PROGRESS.includes(o.shipment.status));
+}
+
+function parcelBooked(o: Pick<Order, 'shipment'>, action: string) {
+  const s = o.shipment!;
+  const ref = s.consignmentId ? ` (consignment ${s.consignmentId})` : '';
+  return AppError.conflict(
+    'parcel_booked',
+    `This order is booked with ${s.accountName}${ref}. ${action}`,
+    { parcelId: s.parcelId.toHexString(), shipmentStatus: s.status },
+  );
+}
 
 export interface OrderItemInput {
   productId: string;
@@ -69,6 +117,20 @@ export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   cancelled: [],
   returned: [],
 };
+
+/** Parcel statuses that count as "sent to a courier" (the rest can be booked again). */
+const SHIPMENT_STATUSES_BOOKED: readonly ShipmentStatus[] = [
+  'queued',
+  'sending',
+  'booked',
+  'picked_up',
+  'in_transit',
+  'on_hold',
+  'delivered',
+  'partly_delivered',
+  'returning',
+  'returned',
+];
 
 /** Statuses in which the items, discount and delivery charge can still change. */
 const EDITABLE: readonly OrderStatus[] = ['pending', 'confirmed', 'packed'];
@@ -119,6 +181,18 @@ export function toOrderDto(o: OrderDoc) {
     },
     stockCommitted: o.stockCommitted,
     conversationId: o.conversationId?.toHexString() ?? null,
+    shipment: o.shipment
+      ? {
+          parcelId: o.shipment.parcelId.toHexString(),
+          provider: o.shipment.provider,
+          accountName: o.shipment.accountName,
+          consignmentId: o.shipment.consignmentId ?? null,
+          trackingCode: o.shipment.trackingCode ?? null,
+          status: o.shipment.status,
+          attention: o.shipment.attention ?? null,
+          updatedAt: o.shipment.updatedAt.toISOString(),
+        }
+      : null,
     customerNote: o.customerNote,
     internalNote: o.internalNote,
     cancelReason: o.cancelReason ?? null,
@@ -128,8 +202,12 @@ export function toOrderDto(o: OrderDoc) {
       actor: h.actor,
       note: h.note ?? null,
     })),
-    allowedTransitions: ORDER_TRANSITIONS[o.status],
-    editable: EDITABLE.includes(o.status),
+    // While a courier booking is open the order cannot be cancelled or edited (the parcel
+    // would go out with the old items or address); the API refuses with parcel_booked.
+    allowedTransitions: shipmentInProgress(o)
+      ? ORDER_TRANSITIONS[o.status].filter((s) => s !== 'cancelled')
+      : ORDER_TRANSITIONS[o.status],
+    editable: EDITABLE.includes(o.status) && !shipmentInProgress(o),
     placedAt: o.placedAt.toISOString(),
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.updatedAt.toISOString(),
@@ -187,6 +265,7 @@ export class OrdersService {
     private readonly counters: CounterService,
     private readonly tx: TransactionService,
     private readonly audit: AuditService,
+    private readonly events: EventEmitter2,
   ) {}
 
   private orgId(): string {
@@ -205,6 +284,7 @@ export class OrdersService {
     status?: OrderStatus;
     paymentStatus?: OrderPaymentStatus;
     customerId?: string;
+    shipment?: ShipmentFilter;
     from?: Date;
     to?: Date;
     limit: number;
@@ -212,6 +292,15 @@ export class OrdersService {
   }) {
     const filter: Record<string, unknown> = {};
     if (query.status) filter.status = query.status;
+    if (query.shipment === 'none' || query.shipment === 'ready')
+      filter['shipment.status'] = { $nin: SHIPMENT_STATUSES_BOOKED };
+    if (query.shipment === 'ready')
+      filter.status = query.status
+        ? { $in: BOOKABLE_ORDER_STATUSES.filter((s) => s === query.status) }
+        : { $in: BOOKABLE_ORDER_STATUSES };
+    else if (query.shipment === 'attention') filter['shipment.attention'] = { $type: 'string' };
+    else if (query.shipment && query.shipment !== 'none')
+      filter['shipment.status'] = query.shipment;
     if (query.paymentStatus) filter['payment.status'] = query.paymentStatus;
     if (query.customerId) filter.customerId = new Types.ObjectId(query.customerId);
     if (query.from || query.to)
@@ -342,6 +431,72 @@ export class OrdersService {
         toCollectMinor: open?.shipped[0]?.dueMinor ?? 0,
       },
       products: { active: activeProducts, lowStock: lowStockProducts },
+    };
+  }
+
+  async shipmentSummary(): Promise<ShipmentSummary> {
+    const org = await this.orgs.get(this.orgId());
+    const unbooked = { 'shipment.status': { $nin: SHIPMENT_STATUSES_BOOKED } };
+    const onTheWay: ShipmentStatus[] = [
+      'queued',
+      'sending',
+      'booked',
+      'picked_up',
+      'in_transit',
+      'on_hold',
+    ];
+    const [row] = await this.orders.aggregate<{
+      byStatus: { _id: ShipmentStatus; n: number }[];
+      attention: { n: number }[];
+      ready: { n: number }[];
+      withCouriers: { orders: number; toCollectMinor: number }[];
+    }>([
+      {
+        $facet: {
+          byStatus: [
+            { $match: { 'shipment.status': { $exists: true } } },
+            { $group: { _id: '$shipment.status', n: { $sum: 1 } } },
+          ],
+          attention: [{ $match: { 'shipment.attention': { $type: 'string' } } }, { $count: 'n' }],
+          ready: [
+            { $match: { status: { $in: BOOKABLE_ORDER_STATUSES }, ...unbooked } },
+            { $count: 'n' },
+          ],
+          withCouriers: [
+            {
+              $match: {
+                'shipment.status': { $in: onTheWay },
+                status: { $nin: ['cancelled', 'returned', 'delivered'] },
+                currency: org.currency,
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                orders: { $sum: 1 },
+                toCollectMinor: {
+                  $sum: { $max: [0, { $subtract: ['$totalMinor', '$payment.paidMinor'] }] },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ]);
+    const byStatus = Object.fromEntries(SHIPMENT_STATUSES.map((s) => [s, 0])) as Record<
+      ShipmentStatus,
+      number
+    >;
+    for (const r of row?.byStatus ?? []) byStatus[r._id] = r.n;
+    return {
+      currency: org.currency,
+      ready: row?.ready[0]?.n ?? 0,
+      attention: row?.attention[0]?.n ?? 0,
+      byStatus,
+      withCouriers: {
+        orders: row?.withCouriers[0]?.orders ?? 0,
+        toCollectMinor: row?.withCouriers[0]?.toCollectMinor ?? 0,
+      },
     };
   }
 
@@ -663,11 +818,20 @@ export class OrdersService {
           { from, to, allowed: ORDER_TRANSITIONS[from] },
         );
     };
+    const assertNoParcel = (o: OrderDoc) => {
+      if (to === 'cancelled' && shipmentInProgress(o))
+        throw parcelBooked(
+          o,
+          'Cancel the parcel with the courier first, then mark it cancelled here.',
+        );
+    };
     assertAllowed(before.status);
+    assertNoParcel(before);
 
     const after = await this.tx.run(async () => {
       const order = (await this.orders.findById(before._id))!;
       assertAllowed(order.status);
+      assertNoParcel(order);
       const set: Record<string, unknown> = { status: to };
       if (HOLDS_STOCK.includes(to) && !order.stockCommitted) {
         set.items = await this.commitStock(order);
@@ -713,7 +877,32 @@ export class OrdersService {
         ...(to === 'returned' ? { restocked: opts.restock !== false } : {}),
       },
     });
+    this.events.emit(ORDER_STATUS_CHANGED, {
+      orgId: this.orgId(),
+      orderId: id,
+      from: before.status,
+      to,
+    } satisfies OrderStatusChangedEvent);
     return after;
+  }
+
+  /**
+   * Records the order's current parcel (the couriers module calls this whenever the parcel
+   * changes). `expectParcelId` guards against an older parcel overwriting a newer one.
+   */
+  async setShipment(
+    orderId: Types.ObjectId,
+    shipment: OrderShipment,
+    expectParcelId?: Types.ObjectId,
+  ): Promise<boolean> {
+    const filter: Record<string, unknown> = { _id: orderId };
+    if (expectParcelId)
+      filter.$or = [{ shipment: { $exists: false } }, { 'shipment.parcelId': expectParcelId }];
+    const { attention, ...rest } = shipment;
+    const res = await this.orders.updateOne(filter, {
+      $set: { shipment: { ...rest, ...(attention ? { attention } : {}) } },
+    });
+    return res.matched === 1;
   }
 
   /**
@@ -732,12 +921,18 @@ export class OrdersService {
     const before = await this.get(id);
     if (!EDITABLE.includes(before.status))
       throw AppError.conflict('order_not_editable', `A ${before.status} order cannot be edited.`);
+    const parcelGuard = (o: OrderDoc) => {
+      if (shipmentInProgress(o))
+        throw parcelBooked(o, 'The courier would collect the old amount: cancel the parcel first.');
+    };
+    parcelGuard(before);
     const settings = await this.shopSettings.get();
 
     const after = await this.tx.run(async () => {
       const order = (await this.orders.findById(before._id))!;
       if (!EDITABLE.includes(order.status))
         throw AppError.conflict('order_not_editable', `A ${order.status} order cannot be edited.`);
+      parcelGuard(order);
       const items = await this.priceItems(input.items, order.currency, order.items);
 
       let zone = order.deliveryZone;
@@ -822,6 +1017,11 @@ export class OrdersService {
         throw AppError.conflict(
           'order_not_editable',
           'The delivery address cannot change after the order has shipped.',
+        );
+      if (shipmentInProgress(before))
+        throw parcelBooked(
+          before,
+          'Change the address with the courier, or cancel the parcel and book again.',
         );
       set.shippingAddress = await this.customers.normalizeAddress(
         input.shippingAddress,

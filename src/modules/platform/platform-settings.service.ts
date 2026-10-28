@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
+import { AppConfig } from '../../config/app-config.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { PlatformSettings } from './platform-user.schema.js';
 
@@ -14,6 +15,8 @@ export interface PlatformSettingsDto {
   maintenance: { enabled: boolean; message: string };
   support: { email: string; whatsapp: string };
   billing: PlatformSettings['billing'];
+  /** `configured`: the server has FRAUD_NETWORK_SECRET; without it the switch has no effect. */
+  fraudNetwork: PlatformSettings['fraudNetwork'] & { configured: boolean };
   updatedAt: string | null;
 }
 
@@ -25,6 +28,7 @@ export class PlatformSettingsService {
   constructor(
     @InjectModel('PlatformSettings') private readonly model: Model<PlatformSettings>,
     private readonly audit: AuditService,
+    private readonly config: AppConfig,
   ) {}
 
   async get(): Promise<PlatformSettingsDto> {
@@ -58,6 +62,10 @@ export class PlatformSettingsService {
         minTopupMinor: doc.billing?.minTopupMinor ?? 10_000,
         maxTopupMinor: doc.billing?.maxTopupMinor ?? 50_000_000,
       },
+      fraudNetwork: {
+        enabled: doc.fraudNetwork?.enabled ?? false,
+        configured: Boolean(this.config.get('FRAUD_NETWORK_SECRET')),
+      },
       updatedAt: (doc as unknown as { updatedAt?: Date }).updatedAt?.toISOString() ?? null,
     };
     this.cache = { at: Date.now(), value };
@@ -67,7 +75,7 @@ export class PlatformSettingsService {
   async update(
     patch: {
       [K in keyof Omit<PlatformSettingsDto, 'updatedAt'>]?: PlatformSettingsDto[K] extends object
-        ? Partial<PlatformSettingsDto[K]>
+        ? Partial<Omit<PlatformSettingsDto[K], 'configured'>>
         : PlatformSettingsDto[K];
     },
     actorId: string,

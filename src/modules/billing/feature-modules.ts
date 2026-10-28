@@ -15,7 +15,7 @@ export const FEATURE_MODULES = {
     name: 'Orders and products',
     description: 'Products, stock, manual orders, customers, printing',
   },
-  couriers: { name: 'Courier booking', description: 'Steadfast, Pathao and more, with tracking' },
+  couriers: { name: 'Courier booking', description: 'Steadfast, Pathao and RedX, with tracking' },
   fraud: {
     name: 'Fraud check',
     description: 'Courier success-rate and risk scoring before shipping',

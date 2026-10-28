@@ -20,6 +20,8 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { AuthCoreModule } from './modules/auth/core/auth-core.module.js';
 import { BillingModule } from './modules/billing/billing.module.js';
 import { CommerceModule } from './modules/commerce/commerce.module.js';
+import { CouriersModule } from './modules/couriers/couriers.module.js';
+import { FraudModule } from './modules/fraud/fraud.module.js';
 import { FilesModule } from './modules/files/files.module.js';
 import { InboxModule } from './modules/inbox/inbox.module.js';
 import { MetaModule } from './modules/meta/meta.module.js';
@@ -103,6 +105,8 @@ export class AppModule {
         InboxModule,
         AiModule,
         MetaModule,
+        CouriersModule,
+        FraudModule,
       ],
       controllers: [MetricsController],
       providers: [

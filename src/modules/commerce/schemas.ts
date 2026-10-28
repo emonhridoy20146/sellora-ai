@@ -288,6 +288,47 @@ export type OrderPaymentStatus = (typeof PAYMENT_STATUSES)[number];
 export const ORDER_SOURCES = ['manual', 'inbox', 'store', 'landing_page', 'api'] as const;
 export type OrderSource = (typeof ORDER_SOURCES)[number];
 
+/**
+ * Where an order's parcel is, in words that do not depend on the courier. The couriers
+ * module translates each courier's own statuses into these.
+ */
+export const SHIPMENT_STATUSES = [
+  /** Waiting to be sent to the courier (bulk booking). */
+  'queued',
+  /** Being sent, or sent without an answer from the courier (a lost reply). */
+  'sending',
+  /** The courier accepted the booking; waiting for pickup. */
+  'booked',
+  'picked_up',
+  'in_transit',
+  'on_hold',
+  'delivered',
+  'partly_delivered',
+  /** On its way back to the business. */
+  'returning',
+  'returned',
+  'cancelled',
+  /** The courier refused the booking. */
+  'failed',
+] as const;
+export type ShipmentStatus = (typeof SHIPMENT_STATUSES)[number];
+
+/** Parcels that tie up the order: it cannot be cancelled or edited until they are settled. */
+export const SHIPMENT_IN_PROGRESS: readonly ShipmentStatus[] = ['queued', 'sending', 'booked'];
+
+/** The order's current parcel, copied from the parcel so order lists need no join. */
+export interface OrderShipment {
+  parcelId: Types.ObjectId;
+  provider: string;
+  accountName: string;
+  consignmentId?: string;
+  trackingCode?: string;
+  status: ShipmentStatus;
+  /** Something staff should look at (a return to confirm, a booking to check). */
+  attention?: string;
+  updatedAt: Date;
+}
+
 export interface OrderItem {
   productId: Types.ObjectId;
   variantId: Types.ObjectId;
@@ -338,6 +379,8 @@ export interface Order {
   createdBy?: Types.ObjectId;
   /** The inbox conversation the order was taken in. */
   conversationId?: Types.ObjectId;
+  /** The latest parcel booked with a courier for this order. */
+  shipment?: OrderShipment;
   placedAt: Date;
 }
 
@@ -408,6 +451,19 @@ export const orderSchema = tenantSchema<Order>({
   },
   createdBy: Schema.Types.ObjectId,
   conversationId: Schema.Types.ObjectId,
+  shipment: new Schema(
+    {
+      parcelId: { type: Schema.Types.ObjectId, required: true },
+      provider: { type: String, required: true },
+      accountName: { type: String, required: true },
+      consignmentId: String,
+      trackingCode: String,
+      status: { type: String, enum: SHIPMENT_STATUSES, required: true },
+      attention: String,
+      updatedAt: { type: Date, required: true },
+    },
+    { _id: false, strict: 'throw' },
+  ),
   placedAt: { type: Date, required: true },
 });
 orderSchema.index({ orgId: 1, number: 1 }, { unique: true });
@@ -416,6 +472,10 @@ orderSchema.index({ orgId: 1, status: 1, placedAt: -1 });
 orderSchema.index({ orgId: 1, customerId: 1, placedAt: -1 });
 orderSchema.index({ orgId: 1, 'customer.phone': 1 });
 orderSchema.index({ orgId: 1, 'items.productId': 1 });
+orderSchema.index(
+  { orgId: 1, 'shipment.status': 1, placedAt: -1 },
+  { partialFilterExpression: { shipment: { $type: 'object' } } },
+);
 orderSchema.index(
   { orgId: 1, conversationId: 1, placedAt: -1 },
   { partialFilterExpression: { conversationId: { $type: 'objectId' } } },

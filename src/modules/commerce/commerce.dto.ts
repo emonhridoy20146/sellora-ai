@@ -6,7 +6,13 @@ import {
   paginationQuerySchema,
   rawPhoneSchema,
 } from '../../common/validation/schemas.js';
-import { ORDER_STATUSES, PAYMENT_METHODS, PAYMENT_STATUSES, PRODUCT_STATUSES } from './schemas.js';
+import {
+  ORDER_STATUSES,
+  PAYMENT_METHODS,
+  PAYMENT_STATUSES,
+  PRODUCT_STATUSES,
+  SHIPMENT_STATUSES,
+} from './schemas.js';
 
 const text = (max: number) => z.string().trim().max(max);
 const label = (max: number) => z.string().trim().min(1).max(max);
@@ -193,6 +199,8 @@ export const orderListQuery = paginationQuerySchema.extend({
   status: z.enum(ORDER_STATUSES).optional(),
   paymentStatus: z.enum(PAYMENT_STATUSES).optional(),
   customerId: objectIdSchema.optional(),
+  /** none = not sent to a courier yet; attention = the parcel needs a look. */
+  shipment: z.enum([...SHIPMENT_STATUSES, 'none', 'ready', 'attention']).optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
 });

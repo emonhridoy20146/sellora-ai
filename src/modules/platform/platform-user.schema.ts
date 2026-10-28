@@ -57,6 +57,8 @@ export interface PlatformSettings {
     minTopupMinor: number;
     maxTopupMinor: number;
   };
+  /** The shared delivery-outcome network behind the fraud check. */
+  fraudNetwork: { enabled: boolean };
   updatedBy?: string;
 }
 
@@ -86,6 +88,10 @@ export const platformSettingsSchema = platformSchema<PlatformSettings>(
       taxLabel: { type: String, default: 'VAT' },
       minTopupMinor: { type: Number, default: 10_000, min: 1 },
       maxTopupMinor: { type: Number, default: 50_000_000, min: 1 },
+    },
+    fraudNetwork: {
+      // Off until the legal review of sharing customers' delivery outcomes between businesses.
+      enabled: { type: Boolean, default: false },
     },
     updatedBy: String,
   },

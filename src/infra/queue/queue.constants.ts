@@ -10,6 +10,8 @@ export const QUEUES = {
   outbox: 'outbox',
   /** Customers' photos to copy from Meta into the business's storage. */
   media: 'media',
+  /** Courier bookings (bulk) and parcel status checks. */
+  couriers: 'couriers',
   maintenance: 'maintenance',
 } as const;
 
