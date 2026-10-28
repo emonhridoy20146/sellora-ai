@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_LINES, MAX_QUANTITY, addLine, parseCart, setLineQuantity } from './cart-lines';
 import { contrast, readableOn } from './color';
+import { mainAddressRedirect } from './main-address';
 import { currencyExponent, formatMoney } from './money';
 import { asciiDigits, isBdMobile } from './phone';
 import { clientIp, sameOrigin } from './request';
@@ -107,5 +108,38 @@ describe('requests', () => {
     expect(sameOrigin('https://nakshi.sellora.shop', 'nakshi.sellora.shop')).toBe(true);
     expect(sameOrigin('https://evil.example', 'nakshi.sellora.shop')).toBe(false);
     expect(sameOrigin('null', 'nakshi.sellora.shop')).toBe(false);
+  });
+});
+
+describe('main address', () => {
+  const main = 'https://www.nakshi.com';
+  it('stays on the main address', () => {
+    expect(mainAddressRedirect(main, 'www.nakshi.com', '/products/a')).toBeNull();
+    expect(mainAddressRedirect(main, 'WWW.Nakshi.com', '/')).toBeNull();
+    expect(
+      mainAddressRedirect(
+        'http://nakshi.sellora.localhost:3100',
+        'nakshi.sellora.localhost:3100',
+        '/',
+      ),
+    ).toBeNull();
+  });
+  it('sends other addresses to the same page on the main one', () => {
+    expect(mainAddressRedirect(main, 'nakshi.sellora.shop', '/products/a?x=1')).toBe(
+      'https://www.nakshi.com/products/a?x=1',
+    );
+    expect(
+      mainAddressRedirect('http://www.nakshi.test:3100', 'nakshi.sellora.localhost:3100', '/cart'),
+    ).toBe('http://www.nakshi.test:3100/cart');
+  });
+  it('never leaves the main address', () => {
+    for (const path of ['//evil.test/x', 'https://evil.test/', '/\\evil.test', null, ''])
+      expect(new URL(mainAddressRedirect(main, 'nakshi.sellora.shop', path)!).host).toBe(
+        'www.nakshi.com',
+      );
+  });
+  it('does nothing without a host or with a broken URL', () => {
+    expect(mainAddressRedirect(main, null, '/')).toBeNull();
+    expect(mainAddressRedirect('not a url', 'a.test', '/')).toBeNull();
   });
 });

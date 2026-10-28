@@ -2,14 +2,15 @@
 
 The online stores of Sellora AI. One Next.js app serves every business's shop: the `Host`
 header says which store a request is for (`<handle>.<STOREFRONT_BASE_DOMAIN>`, set in
-sellora-api). Shoppers browse, add to a cart and order with cash on delivery; the order lands
+sellora-api, or a business's own domain once it is connected). Shoppers browse, add to a cart and order with cash on delivery; the order lands
 in the business's Orders in the dashboard like any other.
 
 Next.js 16 (App Router), React 19, TypeScript (strict), Tailwind CSS 4. No database: every
 page renders on the server from [sellora-api](../sellora-api)'s storefront routes.
 
 Stores are created, designed and sent for review in sellora-web (Online store), and approved by
-the super-admin there. See `docs/adr/0014-online-stores.md` in sellora-api for the design.
+the super-admin there. See `docs/adr/0014-online-stores.md` (stores) and
+`docs/adr/0015-store-custom-domains.md` (custom domains) in sellora-api for the design.
 
 ## Run it locally
 
@@ -33,19 +34,55 @@ flow below creates one). In production, point a wildcard DNS record (`*.shops.ex
 at the server, give Caddy a wildcard certificate, and set the API's `STOREFRONT_URL_SCHEME`
 to `https`.
 
+Custom domains reach the same app. Give the server a name for businesses to point their CNAME
+at (the API's `STOREFRONT_DOMAIN_TARGET`, e.g. `stores-edge.example.com`, an A record to this
+server) and list its public addresses in `STOREFRONT_DOMAIN_IPS` for bare domains. Caddy then
+gets each domain's certificate on the first visit, after asking the API whether the name is
+an active store address:
+
+```caddyfile
+{
+	on_demand_tls {
+		ask http://127.0.0.1:4000/v1/public/store-domains/check
+	}
+}
+
+*.shops.example.com {
+	tls {
+		dns <your DNS provider's plugin> …
+	}
+	reverse_proxy 127.0.0.1:3100
+}
+
+# Any other name: a business's own domain, only once the API says it is active.
+https:// {
+	tls {
+		on_demand
+	}
+	reverse_proxy 127.0.0.1:3100
+}
+```
+
+This configuration has not been run against a real Caddy and Let's Encrypt yet (see "Not
+built yet"). To try custom domains locally, run the DNS stand-in from sellora-api
+(`node scripts/dns-stand-in.mjs`) and start the API with `DNS_SERVERS=127.0.0.1:5300
+STOREFRONT_DOMAIN_TARGET=edge.sellora.test STOREFRONT_DOMAIN_IPS=127.0.0.1`. Custom domains
+then use this app's port too (`http://www.nakshi-shop.test:3100`); point the made-up name at
+127.0.0.1 in `/etc/hosts` or with Chromium's `--host-resolver-rules`.
+
 ## Scripts
 
-| Command                           | What it does                                                                                                        |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`                     | Development server on port 3100.                                                                                    |
-| `npm run build` / `npm start`     | Production build (standalone output) and server on port 3100.                                                       |
-| `npm run typecheck`               | `tsc --noEmit`.                                                                                                     |
-| `npm run lint` / `npm run format` | ESLint (Next.js rules) and Prettier.                                                                                |
-| `npm test`                        | Unit tests (Vitest): cart lines and limits, money in any currency, phone numbers, colours, proxy and origin checks. |
+| Command                           | What it does                                                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                     | Development server on port 3100.                                                                                                            |
+| `npm run build` / `npm start`     | Production build (standalone output) and server on port 3100.                                                                               |
+| `npm run typecheck`               | `tsc --noEmit`.                                                                                                                             |
+| `npm run lint` / `npm run format` | ESLint (Next.js rules) and Prettier.                                                                                                        |
+| `npm test`                        | Unit tests (Vitest): cart lines and limits, money in any currency, phone numbers, colours, proxy and origin checks, main-address redirects. |
 
 The whole store life cycle (create, design, review, preview, approval, shopping, checkout,
 tracking, pause, Bangla) is checked in a real browser by `scripts/stores-flow.mjs` in
-sellora-web.
+sellora-web, and connecting a custom domain by `scripts/domains-flow.mjs` there.
 
 ## Pages
 
@@ -76,6 +113,13 @@ suspended store shows "not available", and an address with no store shows a page
   same engine as manual orders, and returns the receipt token. Each checkout carries an
   `Idempotency-Key`, so a double click or a retried request makes one order. A hidden field
   catches simple bots. Orders are never placed from a preview.
+- **One main address.** A store can be reached at its Sellora address and at up to three
+  connected domains, but an open store lives at one of them: the business picks it, and the
+  API's store `url` is it. The root layout sends a shopper on any other address to the same
+  page there with a permanent (308) redirect. A layout cannot see the path, so `src/proxy.ts`
+  copies it into an `x-sl-path` request header (replacing whatever the browser sent), and
+  `lib/main-address.ts` builds the target from the store's own origin, so the redirect can
+  never leave the store. Previews, holding pages and the `/api` routes are not redirected.
 - **Previews.** The dashboard's "Preview" opens `…/__preview?token=…`. The token goes into an
   httpOnly cookie for that store's address only, for an hour; the API checks it on every
   request.
@@ -91,6 +135,7 @@ suspended store shows "not available", and an address with no store shows a page
 
 ```
 src/
+  proxy.ts                gives the layout the page's path (for main-address redirects)
   app/
     page.tsx              home page (sections)
     products/ cart/ checkout/ order/ track/ pages/[key]/
@@ -105,14 +150,15 @@ src/
     api.ts                server-side API calls with the storefront key
     forward.ts            browser → API forwarding for the /api routes
     request.ts            shopper address behind proxies, same-origin check
+    main-address.ts       where to send shoppers on another address of the store
     cart.ts, cart-lines.ts  the cart in localStorage (30 lines, 50 of each)
     money.ts phone.ts color.ts i18n.ts theme-style.ts types.ts
 ```
 
 ## Not built yet
 
-- Custom domains for stores (the merchant's own domain). Stores only live on subdomains.
 - Online payments at checkout: cash on delivery only.
 - Visit and conversion numbers.
-- Tested only on development addresses (`*.sellora.localhost`), not yet on a real domain with
-  wildcard DNS and TLS.
+- Tested only on development addresses (`*.sellora.localhost` and made-up custom domains
+  answered by a DNS stand-in), not yet on a real domain with wildcard DNS, Caddy and
+  certificates.

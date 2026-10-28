@@ -11,8 +11,11 @@ import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
 import { HoldingPage, NoShopPage } from '@/components/holding-page';
 import { ShopProvider } from '@/components/shop-context';
+import { headers } from 'next/headers';
+import { permanentRedirect } from 'next/navigation';
 import { getStore } from '@/lib/api';
 import { dictionary } from '@/lib/i18n';
+import { PATH_HEADER, mainAddressRedirect } from '@/lib/main-address';
 import { themeAttributes } from '@/lib/theme-style';
 import { isOpen } from '@/lib/types';
 import './globals.css';
@@ -93,6 +96,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </body>
       </html>
     );
+
+  // An open store lives at one address; the others (its Sellora subdomain, a second domain)
+  // send shoppers there, so search engines and shared links agree. Previews stay put.
+  if (store.state === 'open') {
+    const h = await headers();
+    const to = mainAddressRedirect(store.url, h.get('host'), h.get(PATH_HEADER));
+    if (to) permanentRedirect(to);
+  }
 
   const t = dictionary(store.language);
   const { attrs, style } = themeAttributes(store.themeKey, store.theme);
