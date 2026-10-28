@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { commerceKeys } from '@/components/commerce/hooks';
 import { OrdersTable } from '@/components/commerce/orders-table';
+import { RiskCard } from '@/components/couriers/risk-card';
 import { PageError } from '@/components/commerce/page-error';
 import { useOrg } from '@/components/org-context';
 import { Alert } from '@/components/ui/alert';
@@ -269,30 +270,33 @@ export default function CustomerPage() {
             </Card>
           )}
         </div>
-        <Card>
-          <CardHeader>
-            <CardTitle>Addresses</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {c.addresses.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No saved address. One is added with the first order.
-              </p>
-            ) : (
-              <ul className="grid gap-3 text-sm">
-                {c.addresses.map((a, i) => (
-                  <li key={i} className="rounded-md border p-3">
-                    {a.name && <p className="font-medium">{a.name}</p>}
-                    {addressLines(a).map((l) => (
-                      <p key={l}>{l}</p>
-                    ))}
-                    {a.phone && <p className="text-muted-foreground">{a.phone}</p>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+        <div className="grid gap-6">
+          <RiskCard key={c.updatedAt} phone={c.phone} />
+          <Card>
+            <CardHeader>
+              <CardTitle>Addresses</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {c.addresses.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No saved address. One is added with the first order.
+                </p>
+              ) : (
+                <ul className="grid gap-3 text-sm">
+                  {c.addresses.map((a, i) => (
+                    <li key={i} className="rounded-md border p-3">
+                      {a.name && <p className="font-medium">{a.name}</p>}
+                      {addressLines(a).map((l) => (
+                        <p key={l}>{l}</p>
+                      ))}
+                      {a.phone && <p className="text-muted-foreground">{a.phone}</p>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <ConfirmDialog

@@ -121,6 +121,8 @@ src/
     commerce/             product form, item editor, order table, badges, print helpers
     inbox/                conversation list, thread, customer panel, live updates (Socket.IO),
                           the website chat widget
+    couriers/             courier account dialog, booking and bulk booking, the order's
+                          courier card (timeline, lost replies), risk badges and card
   lib/
     api/                  fetch wrapper (CSRF, one refresh on 401), error type, response types
     format.ts             money in minor units, credits, dates (Intl, any currency)
@@ -129,6 +131,7 @@ src/
     upload.ts             photo shrinking and direct-to-storage uploads
     plans.ts              which plan limits apply to which modules
     inbox.ts              inbox views, live list placement, dot command, embed code
+    couriers.ts           courier statuses and filters, weights in kg, risk labels
   config/
     site.ts               public settings from env
     marketing.ts          feature list with live/coming-soon flags
@@ -176,6 +179,35 @@ SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
 META_APP_SECRET=stand-in-app-secret-0123456789 node scripts/photos-flow.mjs
 ```
 
+### Couriers browser flow
+
+`scripts/couriers-flow.mjs` connects Steadfast (after a wrong secret is refused), Pathao and
+RedX in Settings › Couriers, then books orders and follows them: a Steadfast parcel moved to
+delivered by courier webhooks (the order follows), a courier refusal with its reason,
+a Pathao booking with city, zone and area that comes back (staff are asked to mark it
+returned), a lost RedX reply linked by hand, bulk sending from the order list, the Couriers
+page, delivery risk on orders and customers, the phone and dark layouts, and the super-admin
+switch for the shared delivery network with a business opting in and out. Screenshots go to
+`smoke-output/couriers/`. It runs against `sellora-api/scripts/courier-stand-in.mjs`, **not
+the couriers**: it proves Sellora's side, not Steadfast's, Pathao's or RedX's. Earlier runs'
+orders stay in the demo business; the script adds stock when the demo product runs low.
+
+```bash
+# in sellora-api
+node scripts/courier-stand-in.mjs &
+export COURIER_STEADFAST_BASE_URL=http://127.0.0.1:4030/steadfast/api/v1 \
+  COURIER_PATHAO_BASE_URL=http://127.0.0.1:4030/pathao \
+  COURIER_PATHAO_SANDBOX_URL=http://127.0.0.1:4030/pathao \
+  COURIER_REDX_BASE_URL=http://127.0.0.1:4030/redx/v1.0.0-beta \
+  COURIER_REDX_SANDBOX_URL=http://127.0.0.1:4030/redx/v1.0.0-beta \
+  FRAUD_NETWORK_SECRET=$(openssl rand -hex 32)
+npm run dev & npm run dev:worker &
+# in sellora-web (the SMOKE_ADMIN_* values are optional: they add the super-admin step)
+SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
+SMOKE_ADMIN_EMAIL=… SMOKE_ADMIN_PASSWORD=… SMOKE_ADMIN_TOTP_SECRET=… \
+node scripts/couriers-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -208,9 +240,11 @@ website chat, Messenger, Instagram and WhatsApp, and the AI sales agent answers 
 (M4). Two things are still unproven with the real services: Messenger, Instagram and WhatsApp
 have only run against a stand-in for Meta's API, and the AI agent only against a stand-in for
 Claude. So the public site keeps labelling the inbox and the AI "coming soon" until both have
-run for real. Couriers, store builder, marketing and analytics appear in the merchant sidebar
-as disabled "Soon" items. They will be added milestone by milestone; see `docs/TRACKER.md` in
-sellora-api.
+run for real. Courier booking, tracking and the fraud check work (M5), but only against a
+stand-in for the couriers' APIs, so the public site also keeps couriers "coming soon" until a
+parcel has been booked with each real courier. Store builder, marketing and analytics appear in
+the merchant sidebar as disabled "Soon" items. They will be added milestone by milestone; see
+`docs/TRACKER.md` in sellora-api.
 
 Photo uploads (`lib/upload.ts`) shrink photos to 1600 px in the browser, ask the API for an
 upload link, send the bytes straight to storage with progress, then ask the API to check the

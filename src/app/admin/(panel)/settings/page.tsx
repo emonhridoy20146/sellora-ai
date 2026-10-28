@@ -153,6 +153,7 @@ function SettingsForm({
             minTopupMinor: minMinor,
             maxTopupMinor: maxMinor,
           },
+          fraudNetwork: { enabled: s.fraudNetwork.enabled },
         },
       }),
     onSuccess: async (next) => {
@@ -335,6 +336,36 @@ function SettingsForm({
               below the smallest.
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Delivery network</CardTitle>
+          <CardDescription>
+            Lets businesses see how a phone number did at other shops on Sellora before they send a
+            parcel.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <Toggle
+            id="st-fraud-net"
+            label="Shared delivery record"
+            hint="Each business still chooses to take part. Only a keyed hash of the phone number and the courier's delivered or returned result is shared; rows expire after two years."
+            checked={s.fraudNetwork.enabled}
+            onChange={(v) => set('fraudNetwork', { enabled: v })}
+            disabled={ro}
+          />
+          {!s.fraudNetwork.configured && (
+            <Alert tone="danger">
+              FRAUD_NETWORK_SECRET is not set on the server, so the network stays off even when this
+              is on.
+            </Alert>
+          )}
+          <Alert tone="warning">
+            Have the privacy policy and terms reviewed for sharing between businesses before you
+            switch this on.
+          </Alert>
         </CardContent>
       </Card>
 

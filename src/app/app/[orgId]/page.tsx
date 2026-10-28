@@ -5,6 +5,7 @@ import { ArrowRight, Check, Circle, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { UsageChart } from '@/components/billing/usage-chart';
 import { commerceKeys, useShopSettings } from '@/components/commerce/hooks';
+import { useCourierChoices } from '@/components/couriers/data';
 import { useChannels } from '@/components/inbox/data';
 import { useOrg } from '@/components/org-context';
 import { StatusBadge } from '@/components/status-badge';
@@ -60,6 +61,11 @@ export default function OverviewPage() {
   const inboxInPlan = modules === null || modules.includes('inbox');
   const channels = useChannels(org.id, can('org.integrations.manage') && inboxInPlan);
   const aiInPlan = modules === null || modules.includes('ai_agent');
+  const couriersInPlan = modules === null || modules.includes('couriers');
+  const couriers = useCourierChoices(
+    org.id,
+    can('org.integrations.manage') && couriersInPlan && !commerceOff,
+  );
   const agent = useQuery({
     queryKey: ['org', org.id, 'ai-agent'],
     queryFn: () => api<AiAgentView>(`/orgs/${org.id}/ai-agent`),
@@ -110,6 +116,16 @@ export default function OverviewPage() {
             label: 'Connect where customers message you',
             href: `${base}/settings/channels`,
             note: 'Website chat, Facebook page, Instagram or WhatsApp',
+          },
+        ]
+      : []),
+    ...(couriers.data
+      ? [
+          {
+            done: couriers.data.length > 0,
+            label: 'Connect a courier',
+            href: `${base}/settings/couriers`,
+            note: 'Steadfast, Pathao or RedX: book and track parcels from your orders',
           },
         ]
       : []),

@@ -16,6 +16,8 @@ import {
   type DraftLine,
 } from '@/components/commerce/items-editor';
 import { MoneyInput } from '@/components/commerce/money-input';
+import { CourierCard } from '@/components/couriers/courier-card';
+import { RiskCard } from '@/components/couriers/risk-card';
 import { PageError } from '@/components/commerce/page-error';
 import { ProductPicker } from '@/components/commerce/product-picker';
 import { ProductThumb } from '@/components/commerce/product-thumb';
@@ -41,6 +43,7 @@ import {
   orderTotals,
   paymentMethodLabel,
 } from '@/lib/commerce';
+import { SHIPMENT_IN_PROGRESS } from '@/lib/couriers';
 import { formatDateTime, formatMoney, minorToInput, parseMoney } from '@/lib/format';
 
 function Money({ minor, currency }: { minor: number; currency: string }) {
@@ -453,6 +456,11 @@ function DetailsDialog({
                 phone: errors['shippingAddress.phone'],
               }}
             />
+          ) : order.shipment && SHIPMENT_IN_PROGRESS.includes(order.shipment.status) ? (
+            <Alert tone="info">
+              The parcel is booked with {order.shipment.accountName}. To change the address, cancel
+              it at the courier and mark it cancelled here first.
+            </Alert>
           ) : (
             <Alert tone="info">The address cannot change after the parcel has shipped.</Alert>
           )}
@@ -620,6 +628,8 @@ export default function OrderPage() {
           </Card>
         </div>
         <div className="grid gap-6">
+          <CourierCard order={o} />
+          {o.status !== 'cancelled' && <RiskCard phone={o.customer.phone} />}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
               <CardTitle>Payment</CardTitle>

@@ -477,6 +477,11 @@ export interface PlatformSettings {
     minTopupMinor: number;
     maxTopupMinor: number;
   };
+  /**
+   * Businesses that opt in share courier-confirmed outcomes (hashed numbers) with each other.
+   * `configured` is read-only: the server has the secret the hashes need.
+   */
+  fraudNetwork: { enabled: boolean; configured: boolean };
   updatedAt?: IsoDate;
 }
 
@@ -776,6 +781,8 @@ export interface Order {
   editable: boolean;
   /** The inbox conversation the order was placed in (by the AI sales agent or staff). */
   conversationId: string | null;
+  /** The latest courier booking, kept in step with the parcel (null before any booking). */
+  shipment: OrderShipment | null;
   placedAt: IsoDate;
   createdAt: IsoDate;
   updatedAt: IsoDate;
@@ -821,6 +828,227 @@ export interface PrintBundle {
   };
   invoiceNote: string;
   orders: Order[];
+}
+
+// ------------------------------------------------------------------ couriers
+
+export type ShipmentStatus =
+  | 'queued'
+  | 'sending'
+  | 'booked'
+  | 'picked_up'
+  | 'in_transit'
+  | 'on_hold'
+  | 'delivered'
+  | 'partly_delivered'
+  | 'returning'
+  | 'returned'
+  | 'cancelled'
+  | 'failed';
+
+export interface OrderShipment {
+  parcelId: string;
+  provider: CourierKey;
+  accountName: string;
+  consignmentId: string | null;
+  trackingCode: string | null;
+  status: ShipmentStatus;
+  /** Something staff should look at (a lost reply, a return, an unknown courier status). */
+  attention: string | null;
+  updatedAt: IsoDate;
+}
+
+/**
+ * Order list filter: never sent, ready to send (confirmed or packed and not sent), needs a
+ * look, or one shipment status.
+ */
+export type ShipmentFilter = 'none' | 'ready' | 'attention' | ShipmentStatus;
+
+/** GET /parcels/summary. */
+export interface ShipmentSummary {
+  currency: string;
+  ready: number;
+  attention: number;
+  byStatus: Record<ShipmentStatus, number>;
+  /** Parcels booked or on the way, and the unpaid part the couriers are to collect. */
+  withCouriers: { orders: number; toCollectMinor: number };
+}
+
+export type CourierKey = 'steadfast' | 'pathao' | 'redx';
+
+/** GET /couriers/providers: what each courier asks for. */
+export interface CourierDescriptor {
+  key: CourierKey;
+  name: string;
+  credentialFields: { key: string; label: string; secret: boolean; help?: string }[];
+  deliveryTypes: { value: string; label: string }[];
+  sandbox: boolean;
+  pickupStore: 'required' | 'optional' | 'none';
+  location: 'none' | 'city_zone_area' | 'area';
+  locationRequired: boolean;
+  weightGrams: { min: number; max: number };
+  webhookAuth: 'bearer' | 'secret_header' | 'url';
+  webhookHelp: string;
+}
+
+/** A connected courier account, as admins see it (webhook secret included). */
+export interface CourierAccount {
+  id: string;
+  provider: CourierKey;
+  providerName: string;
+  name: string;
+  isDefault: boolean;
+  enabled: boolean;
+  status: 'active' | 'error';
+  statusReason: string | null;
+  sandbox: boolean;
+  /** Enough of the key or login to tell accounts apart, such as "API key …4f2a". */
+  credentialsHint: string;
+  /** storeName is the courier's own name for the chosen pickup store. */
+  settings: { deliveryType: string | null; storeId: string | null; storeName: string | null };
+  defaultWeightGrams: number;
+  lastCheck: { at: IsoDate; ok: boolean; summary: string } | null;
+  webhook: {
+    url: string;
+    secret: string | null;
+    auth: CourierDescriptor['webhookAuth'];
+    help: string;
+    lastReceivedAt: IsoDate | null;
+  };
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+/** GET /couriers/choices: accounts staff can book with (nothing secret). */
+export interface CourierChoice {
+  id: string;
+  provider: CourierKey;
+  providerName: string;
+  name: string;
+  isDefault: boolean;
+  enabled: boolean;
+  status: 'active' | 'error';
+  /** Switched on and has the pickup store the courier needs. */
+  ready: boolean;
+  location: CourierDescriptor['location'];
+  locationRequired: boolean;
+  weightGrams: { min: number; max: number };
+  defaultWeightGrams: number;
+}
+
+export interface CourierStore {
+  id: string;
+  name: string;
+  address?: string;
+}
+
+export interface CourierCheck {
+  ok: boolean;
+  summary: string;
+  stores: CourierStore[];
+}
+
+export interface CourierAccountResult {
+  account: CourierAccount;
+  check: CourierCheck | null;
+}
+
+export interface CourierLocation {
+  id: number;
+  name: string;
+  hint?: string;
+}
+
+export interface ParcelLocation {
+  cityId?: number;
+  cityName?: string;
+  zoneId?: number;
+  zoneName?: string;
+  areaId?: number;
+  areaName?: string;
+}
+
+export type ParcelEventSource = 'booking' | 'poll' | 'webhook' | 'staff' | 'system';
+
+export interface Parcel {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  accountId: string;
+  provider: CourierKey;
+  providerName: string;
+  accountName: string;
+  /** The reference sent to the courier: the order number, with -2, -3 on later attempts. */
+  invoice: string;
+  attempt: number;
+  status: ShipmentStatus;
+  /** The order's live booking (false once failed or cancelled). */
+  current: boolean;
+  providerStatus: string | null;
+  consignmentId: string | null;
+  trackingCode: string | null;
+  trackingUrl: string | null;
+  recipient: { name: string; phone: string; altPhone?: string; address: string };
+  codMinor: number;
+  valueMinor: number;
+  weightGrams: number;
+  quantity: number;
+  description: string;
+  note: string | null;
+  location: ParcelLocation | null;
+  deliveryFeeMinor: number | null;
+  error: string | null;
+  attention: string | null;
+  events: {
+    at: IsoDate;
+    status: ShipmentStatus;
+    providerStatus: string | null;
+    source: ParcelEventSource;
+    note: string | null;
+  }[];
+  bookedAt: IsoDate | null;
+  lastCheckedAt: IsoDate | null;
+  nextCheckAt: IsoDate | null;
+  actions: { refresh: boolean; cancel: boolean; link: boolean; dismiss: boolean };
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export interface BulkBookResult {
+  accountId: string;
+  queued: { orderId: string; number: string; parcelId: string }[];
+  skipped: { orderId: string; number: string | null; reason: string }[];
+}
+
+// --------------------------------------------------------------- fraud check
+
+export type RiskLevel = 'new' | 'low' | 'medium' | 'high';
+/** unavailable: the platform has not switched the network on; not_sharing: this business is out. */
+export type FraudNetworkStatus = 'unavailable' | 'not_sharing' | 'on';
+
+export interface FraudCheck {
+  phone: string;
+  localPhone: string;
+  level: RiskLevel;
+  /** Delivered share of parcels that reached an end, 0-100. */
+  successRate: number | null;
+  outcomes: number;
+  reasons: string[];
+  customer: { id: string; name: string; blocked: boolean } | null;
+  own: { orders: number; delivered: number; returned: number; cancelled: number };
+  network: { businesses: number; delivered: number; returned: number } | null;
+  networkStatus: FraudNetworkStatus;
+}
+
+export interface FraudBatch {
+  networkStatus: FraudNetworkStatus;
+  items: { phone: string; level: RiskLevel; successRate: number | null; outcomes: number }[];
+}
+
+export interface FraudSettings {
+  shareOutcomes: boolean;
+  sharedSince: IsoDate | null;
+  networkAvailable: boolean;
 }
 
 // ------------------------------------------------------------------- inbox

@@ -133,6 +133,7 @@ try {
       ['/settings', 'settings'],
       ['/settings/selling', 'settings-selling'],
       ['/settings/channels', 'settings-channels'],
+      ['/settings/couriers', 'settings-couriers'],
       ['/inbox', 'inbox'],
       ['/ai-agent', 'ai-agent'],
       ['/orders', 'orders'],
@@ -141,6 +142,7 @@ try {
       ['/products/new', 'products-new'],
       ['/products/categories', 'products-categories'],
       ['/customers', 'customers'],
+      ['/couriers', 'couriers'],
       ['/activity', 'activity'],
     ])
       await check(page, orgPath + sub, `merchant-${name}`);

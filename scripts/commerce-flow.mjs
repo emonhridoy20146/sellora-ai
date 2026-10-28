@@ -285,7 +285,8 @@ try {
     await page.fill('#c-search', phone);
     await page.getByRole('link', { name: 'Flow Customer' }).first().click();
     await page.waitForURL(/\/customers\/[a-f0-9]{24}$/);
-    await page.getByText('1 cancelled').waitFor();
+    // Exact: the delivery risk card's reasons also mention cancelled orders.
+    await page.getByText('1 cancelled', { exact: true }).waitFor();
     await shot(page, '14-customer');
   });
 

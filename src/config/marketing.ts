@@ -34,7 +34,7 @@ export const FEATURES: MarketingFeature[] = [
   {
     key: 'couriers',
     title: 'Courier booking and fraud check',
-    body: "Book Steadfast, Pathao and more, and see a customer's delivery success rate before you ship.",
+    body: "Book Steadfast, Pathao and RedX from your orders, follow every parcel, and see a customer's delivery success rate before you ship.",
     status: 'soon',
   },
   {

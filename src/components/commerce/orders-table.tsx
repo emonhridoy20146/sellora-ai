@@ -1,18 +1,33 @@
 'use client';
 
 import Link from 'next/link';
+import { RiskBadge, ShipmentBadge } from '@/components/couriers/badges';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
-import type { Order } from '@/lib/api/types';
+import type { FraudBatch, Order } from '@/lib/api/types';
 import { formatDateTime, formatMoney } from '@/lib/format';
 import { OrderStatusBadge, PaymentBadge } from './badges';
 
-/** Orders as a table; with `selected`, rows get checkboxes for bulk printing. */
+function PhoneRisk({ risk }: { risk: FraudBatch['items'][number] | undefined }) {
+  if (!risk) return null;
+  return (
+    <span className="mt-0.5 block">
+      <RiskBadge compact level={risk.level} successRate={risk.successRate} />
+    </span>
+  );
+}
+
+/**
+ * Orders as a table; with `selected`, rows get checkboxes for bulk actions. `risk` adds a
+ * delivery-risk badge under each customer's number.
+ */
 export function OrdersTable({
   orgId,
   orders,
   timezone,
   showCustomer = true,
+  showCourier = true,
+  risk,
   selected,
   onSelect,
 }: {
@@ -20,6 +35,8 @@ export function OrdersTable({
   orders: Order[];
   timezone: string;
   showCustomer?: boolean;
+  showCourier?: boolean;
+  risk?: Map<string, FraudBatch['items'][number]>;
   selected?: Set<string>;
   onSelect?: (ids: Set<string>) => void;
 }) {
@@ -57,6 +74,7 @@ export function OrdersTable({
           <TH className="text-right">Total</TH>
           <TH>Payment</TH>
           <TH>Status</TH>
+          {showCourier && <TH>Courier</TH>}
         </TR>
       </THead>
       <TBody>
@@ -86,6 +104,7 @@ export function OrdersTable({
               <TD>
                 <span className="block max-w-48 truncate">{o.customer.name}</span>
                 <span className="text-xs text-muted-foreground">{o.customer.phone}</span>
+                <PhoneRisk risk={o.customer.phone ? risk?.get(o.customer.phone) : undefined} />
               </TD>
             )}
             <TD className="tabular text-right">{o.items.reduce((a, i) => a + i.quantity, 0)}</TD>
@@ -98,6 +117,22 @@ export function OrdersTable({
             <TD>
               <OrderStatusBadge status={o.status} />
             </TD>
+            {showCourier && (
+              <TD>
+                {o.shipment ? (
+                  <>
+                    <ShipmentBadge status={o.shipment.status} attention={o.shipment.attention} />
+                    <span className="block text-xs text-muted-foreground">
+                      {o.shipment.accountName}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground" aria-label="Not sent">
+                    —
+                  </span>
+                )}
+              </TD>
+            )}
           </TR>
         ))}
       </TBody>

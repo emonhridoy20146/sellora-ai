@@ -1,13 +1,16 @@
 'use client';
 
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Plus, Printer, Search, ShoppingBag } from 'lucide-react';
+import { Plus, Printer, Search, ShoppingBag, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { commerceKeys } from '@/components/commerce/hooks';
 import { OrdersTable } from '@/components/commerce/orders-table';
 import { PageError } from '@/components/commerce/page-error';
+import { BulkBookDialog } from '@/components/couriers/bulk-book-dialog';
+import { useFraudBatch } from '@/components/couriers/data';
+import { useRiskVisible } from '@/components/couriers/risk-card';
 import { useOrg } from '@/components/org-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -18,12 +21,16 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDebounced } from '@/hooks/use-debounced';
 import { api } from '@/lib/api/client';
-import type { Order, OrderCounts, OrderStatus, Page } from '@/lib/api/types';
+import type { Order, OrderCounts, OrderStatus, Page, ShipmentFilter } from '@/lib/api/types';
 import { ORDER_STATUS, ORDER_STATUS_ORDER } from '@/lib/commerce';
+import { SHIPMENT_FILTERS, isShipmentFilter } from '@/lib/couriers';
 import { cn } from '@/lib/utils';
 
 export default function OrdersPage() {
-  const { org, can } = useOrg();
+  const { org, can, modules } = useOrg();
+  const couriersInPlan = modules === null || modules.includes('couriers');
+  const riskVisible = useRiskVisible();
+  const canSelect = can('orders.print') || (couriersInPlan && can('orders.manage'));
   const params = useSearchParams();
   const [status, setStatus] = useState<OrderStatus | ''>(() => {
     const v = params.get('status');
@@ -31,25 +38,43 @@ export default function OrdersPage() {
   });
   const [search, setSearch] = useState('');
   const [payment, setPayment] = useState('');
+  const [shipment, setShipment] = useState<ShipmentFilter | ''>(() => {
+    const v = params.get('shipment');
+    return isShipmentFilter(v) ? v : '';
+  });
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // The orders being sent, kept while the dialog shows the result (the selection is cleared).
+  const [bulkIds, setBulkIds] = useState<string[] | null>(null);
   const q = useDebounced(search.trim());
-  const filtered = Boolean(q || status || payment);
+  const filtered = Boolean(q || status || payment || shipment);
 
   const counts = useQuery({
     queryKey: [...commerceKeys.orders(org.id), 'counts'],
     queryFn: () => api<OrderCounts>(`/orgs/${org.id}/orders/counts`),
   });
   const list = useInfiniteQuery({
-    queryKey: [...commerceKeys.orders(org.id), 'list', status, q, payment],
+    queryKey: [...commerceKeys.orders(org.id), 'list', status, q, payment, shipment],
     queryFn: ({ pageParam }) =>
       api<Page<Order>>(`/orgs/${org.id}/orders`, {
-        query: { status, q, paymentStatus: payment, limit: 25, cursor: pageParam },
+        query: { status, q, paymentStatus: payment, shipment, limit: 25, cursor: pageParam },
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     placeholderData: keepPreviousData,
+    // While parcels are on their way to the courier, follow them until they are booked.
+    refetchInterval: (query) =>
+      query.state.data?.pages.some((p) =>
+        p.items.some((o) => o.shipment?.status === 'queued' || o.shipment?.status === 'sending'),
+      )
+        ? 5000
+        : false,
   });
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
+  const risk = useFraudBatch(
+    org.id,
+    items.filter((o) => o.status !== 'cancelled').map((o) => o.customer.phone),
+    riskVisible,
+  );
   const printHref = (doc: 'invoice' | 'slip') =>
     `/app/${org.id}/orders/print?doc=${doc}&ids=${[...selected].join(',')}`;
 
@@ -135,19 +160,50 @@ export default function OrdersPage() {
             <option value="paid">Paid</option>
             <option value="refunded">Refunded</option>
           </NativeSelect>
-          {selected.size > 0 && can('orders.print') && (
-            <div className="flex items-center gap-2">
+          {couriersInPlan && (
+            <>
+              <label htmlFor="o-ship" className="sr-only">
+                Courier status
+              </label>
+              <NativeSelect
+                id="o-ship"
+                className="w-48"
+                value={shipment}
+                onChange={(e) => {
+                  setShipment(e.target.value as ShipmentFilter | '');
+                  setSelected(new Set());
+                }}
+              >
+                {SHIPMENT_FILTERS.map((f) => (
+                  <option key={f.value || 'any'} value={f.value}>
+                    {f.label}
+                  </option>
+                ))}
+              </NativeSelect>
+            </>
+          )}
+          {selected.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted-foreground">{selected.size} selected</span>
-              <Button asChild size="sm" variant="outline">
-                <a href={printHref('invoice')} target="_blank" rel="noopener">
-                  <Printer /> Invoices
-                </a>
-              </Button>
-              <Button asChild size="sm" variant="outline">
-                <a href={printHref('slip')} target="_blank" rel="noopener">
-                  <Printer /> Packing slips
-                </a>
-              </Button>
+              {couriersInPlan && can('orders.manage') && (
+                <Button size="sm" onClick={() => setBulkIds([...selected])}>
+                  <Truck /> Send to courier
+                </Button>
+              )}
+              {can('orders.print') && (
+                <>
+                  <Button asChild size="sm" variant="outline">
+                    <a href={printHref('invoice')} target="_blank" rel="noopener">
+                      <Printer /> Invoices
+                    </a>
+                  </Button>
+                  <Button asChild size="sm" variant="outline">
+                    <a href={printHref('slip')} target="_blank" rel="noopener">
+                      <Printer /> Packing slips
+                    </a>
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -179,7 +235,9 @@ export default function OrdersPage() {
               orgId={org.id}
               orders={items}
               timezone={org.timezone}
-              {...(can('orders.print') ? { selected, onSelect: setSelected } : {})}
+              showCourier={couriersInPlan}
+              risk={risk}
+              {...(canSelect ? { selected, onSelect: setSelected } : {})}
             />
           )}
           <LoadMore
@@ -189,6 +247,12 @@ export default function OrdersPage() {
           />
         </CardContent>
       </Card>
+      <BulkBookDialog
+        orderIds={bulkIds ?? []}
+        open={bulkIds !== null}
+        onOpenChange={(v) => !v && setBulkIds(null)}
+        onQueued={() => setSelected(new Set())}
+      />
     </>
   );
 }
