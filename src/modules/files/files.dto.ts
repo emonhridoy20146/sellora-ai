@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { FILE_PURPOSES } from './schemas.js';
+import { UPLOAD_PURPOSES } from './schemas.js';
 
 export const createUploadBody = z
   .object({
-    purpose: z.enum(FILE_PURPOSES),
+    purpose: z.enum(UPLOAD_PURPOSES),
     filename: z.string().trim().min(1).max(255),
     contentType: z.string().trim().min(3).max(100),
     size: z

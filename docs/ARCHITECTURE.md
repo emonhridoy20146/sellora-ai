@@ -14,9 +14,11 @@ people who run Sellora (the super-admin panel).
                                                         ├── BullMQ queues ──► sellora-api worker
                                                         │                      (mail, renewals, credit
                                                         │                       grants, reservations,
-                                                        │                       AI replies, Meta webhooks
-                                                        │                       and outgoing messages)
-                                                        ├── Object storage, S3-compatible (planned, not built)
+                                                        │                       AI replies, Meta webhooks,
+                                                        │                       outgoing messages and
+                                                        │                       customers' photos)
+                                                        ├── File storage: local disk or S3-compatible
+                                                        │   (product photos public, chat photos private)
                                                         └── Telegram: platform stats (planned, not built)
 ```
 
@@ -115,6 +117,12 @@ channel, from staff or the AI, is stored as `pending` first and sent by the work
 Graph API, split to the channel's length limit, in order within a conversation, with retries
 for rate limits and outages. A revoked token marks the channel "needs reconnecting", and open
 inboxes hear it live (`channel.updated`).
+
+The `media` queue copies customers' photos from Meta into the business's private storage
+(ADR 0012): messages are stored at once with the photo `pending`, the worker downloads it from
+Meta's hosts only, checks its real type and size against the plan's storage, and marks it
+ready or failed with a reason. The AI reply job waits up to 20 s for a pending photo, then
+shows the newest saved photos to models that can see images.
 
 ## Configuration and secrets
 

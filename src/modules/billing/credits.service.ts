@@ -133,6 +133,7 @@ export function toAiModelDto(m: AiModelDoc) {
         }
       : null,
     contextWindow: m.contextWindow,
+    imageInput: m.imageInput === true,
     enabled: m.enabled,
     isDefaultForTier: m.isDefaultForTier,
   };
@@ -191,6 +192,13 @@ export class CreditsService {
         .catch((err: unknown) => {
           if (!isDuplicateKey(err)) throw err;
         });
+      // Catalogues seeded before photo support learn it once; an admin's choice is kept.
+      await this.models
+        .updateOne(
+          { provider: m.provider, model: m.model, imageInput: { $exists: false } },
+          { $set: { imageInput: m.imageInput } },
+        )
+        .exec();
     }
   }
 

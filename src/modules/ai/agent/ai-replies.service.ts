@@ -8,6 +8,7 @@ import { EntitlementsService } from '../../billing/entitlements.service.js';
 import { OrdersService } from '../../commerce/orders.service.js';
 import { ProductsService, type ProductDoc } from '../../commerce/products.service.js';
 import { ShopSettingsService } from '../../commerce/shop-settings.service.js';
+import { FilesService } from '../../files/files.service.js';
 import { ChannelsService, type ChannelDoc } from '../../inbox/channels.service.js';
 import { InboxRealtime } from '../../inbox/inbox-realtime.service.js';
 import type { ContactDoc, ConversationDoc, MessageDoc } from '../../inbox/inbox.mappers.js';
@@ -22,7 +23,7 @@ import type { ChannelType, ConversationAi, MessageType } from '../../inbox/schem
 import { OrgsService } from '../../orgs/orgs.service.js';
 import { AiAgentSettingsService, type AiAgentSettingsDoc } from '../agent-settings.service.js';
 import type { AiAgentSettings } from '../agent-settings.schema.js';
-import { AiProviderError, type AiMessage } from '../provider/ai-provider.js';
+import { AiProviderError, type AiImage, type AiMessage } from '../provider/ai-provider.js';
 import { AiProviders } from '../provider/ai-providers.service.js';
 import {
   buildAgentPrompt,
@@ -32,9 +33,10 @@ import {
 } from './agent-prompt.js';
 import { AgentRunner, type AgentRunResult } from './agent-runner.js';
 import { toAgentHistory } from './agent-history.js';
+import { MAX_AGENT_IMAGES, toVisionImage } from './agent-images.js';
 import { AgentTools, type ToolRunContext } from './agent-tools.js';
 import { handoverNotice, matchKeyword, toChatText } from './chat-text.js';
-import { AiReplyQueue, type AiReplyJob } from './reply-queue.js';
+import { AiReplyQueue, MAX_MEDIA_WAITS, type AiReplyJob } from './reply-queue.js';
 
 /** Emitted when the AI hands a conversation to people. */
 export const AI_HANDOVER = 'ai.handover';
@@ -44,6 +46,8 @@ export const AI_ACTOR: Actor = { type: 'system', id: 'ai-agent' };
 const CATALOG_IN_PROMPT = 30;
 const HISTORY_MESSAGES = 40;
 const TYPING_PULSE_MS = 3_000;
+/** Saved photos larger than this are not shown to the model. */
+const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
 /** Messages the customer sees (notes and system lines stay with the team). */
 const VISIBLE_TYPES: MessageType[] = ['text', 'image', 'file'];
 
@@ -139,6 +143,7 @@ export class AiRepliesService {
     private readonly orgs: OrgsService,
     private readonly entitlements: EntitlementsService,
     private readonly events: EventEmitter2,
+    private readonly files: FilesService,
   ) {}
 
   // ------------------------------------------------------------------ scheduling
@@ -193,15 +198,22 @@ export class AiRepliesService {
       const queued = await this.queue.requeueBusy(job);
       return { status: 'skipped', reason: queued ? 'busy' : 'busy_gave_up' };
     }
+    let outcome: ReplyOutcome;
     try {
-      return await RequestContext.withTenant(
+      outcome = await RequestContext.withTenant(
         job.orgId,
-        () => this.reply(job.conversationId, opts.finalAttempt),
+        () =>
+          this.reply(job.conversationId, opts.finalAttempt, {
+            waitForMedia: (job.mediaWaits ?? 0) < MAX_MEDIA_WAITS,
+          }),
         AI_ACTOR,
       );
     } finally {
       await this.queue.unlock(job.conversationId, token);
     }
+    if (outcome.status === 'skipped' && outcome.reason === 'waiting_for_media')
+      await this.queue.requeueForMedia(job);
+    return outcome;
   }
 
   // ------------------------------------------------------------------ replying
@@ -237,10 +249,17 @@ export class AiRepliesService {
     return { orgId, settings, conversation, contact, channel, history, pending };
   }
 
-  private async reply(conversationId: string, finalAttempt: boolean): Promise<ReplyOutcome> {
+  private async reply(
+    conversationId: string,
+    finalAttempt: boolean,
+    opts: { waitForMedia: boolean },
+  ): Promise<ReplyOutcome> {
     const thread = await this.loadThread(conversationId);
     if (typeof thread === 'string') return { status: 'skipped', reason: thread };
     const { settings, conversation, contact, channel, pending } = thread;
+    // A photo the customer just sent is still being saved: answer once it can be seen.
+    if (opts.waitForMedia && pending.some((m) => m.attachments.some((a) => a.status === 'pending')))
+      return { status: 'skipped', reason: 'waiting_for_media' };
     const customerText = pending.map((m) => m.text).join('\n');
 
     const keyword = matchKeyword(customerText, settings.handoverKeywords);
@@ -272,11 +291,13 @@ export class AiRepliesService {
         contact,
         channelType: channel.type,
       };
+      const seesPhotos = (await this.runner.modelFor(settings.tier)).imageInput === true;
+      const photos = seesPhotos ? await this.photos(thread.history) : new Map<string, AiImage[]>();
       result = await this.runner.run({
         feature: 'ai_agent_reply',
         tier: settings.tier,
-        system: await this.prompt(settings, channel.type, contact),
-        messages: toAgentHistory(thread.history),
+        system: await this.prompt(settings, channel.type, contact, seesPhotos),
+        messages: toAgentHistory(thread.history, photos),
         tools: this.tools.specs(settings),
         toolContext,
         runId,
@@ -525,6 +546,7 @@ export class AiRepliesService {
     >,
     channelType: ChannelType,
     contact: ContactDoc | null,
+    seesPhotos = false,
   ): Promise<string> {
     const orgId = RequestContext.tenant()!.orgId;
     const [org, shop, catalog, customer] = await Promise.all([
@@ -553,7 +575,40 @@ export class AiRepliesService {
       })),
       customer,
       now: new Date(),
+      seesPhotos,
     });
+  }
+
+  /**
+   * The customer's most recent saved photos, prepared for the model, by message id. A photo
+   * that cannot be read is left out (the history still says one was sent).
+   */
+  private async photos(history: MessageDoc[]): Promise<Map<string, AiImage[]>> {
+    const picked: { messageId: string; fileId: Types.ObjectId }[] = [];
+    for (const m of [...history].reverse()) {
+      if (m.direction !== 'in') continue;
+      for (const a of m.attachments)
+        if (a.fileId && (a.status ?? 'ready') === 'ready' && picked.length < MAX_AGENT_IMAGES)
+          picked.push({ messageId: m._id.toHexString(), fileId: a.fileId });
+      if (picked.length >= MAX_AGENT_IMAGES) break;
+    }
+    const out = new Map<string, AiImage[]>();
+    // Oldest first, so each message's photos keep their order.
+    for (const p of picked.reverse()) {
+      try {
+        const file = await this.files.get(p.fileId.toHexString());
+        const bytes = await this.files.readBytes(file, MAX_PHOTO_BYTES);
+        const image = bytes && (await toVisionImage(bytes));
+        if (!image) continue;
+        out.set(p.messageId, [...(out.get(p.messageId) ?? []), image]);
+      } catch (err) {
+        this.logger.warn(
+          { err, fileId: p.fileId.toHexString() },
+          'Could not read a customer photo',
+        );
+      }
+    }
+    return out;
   }
 
   // ------------------------------------------------------------------ test chat

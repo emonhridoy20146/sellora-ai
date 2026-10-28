@@ -12,11 +12,17 @@
  * Test hooks (not part of the Graph API):
  *   GET  /__sent                 messages Sellora sent, oldest first
  *   POST /__fail {"code":613}    the next send answers with that Graph error code
+ *   GET  /__photo/<name>.jpg     a demo product photo, standing in for a Messenger or
+ *                                Instagram CDN link (`expired.jpg` answers 403 like an old link)
+ *
+ * WhatsApp media: GET /<version>/wa-media-<anything> answers like Meta's media endpoint, with
+ * a download link that needs the same token.
  *
  * Never point a production deployment at it.
  */
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { createServer } from 'node:http';
+import sharp from 'sharp';
 
 const PORT = Number(process.env.PORT ?? 4020);
 const SECRET = process.env.META_APP_SECRET;
@@ -48,9 +54,35 @@ const WHATSAPP = {
 };
 const USER_TOKEN = 'stand-in-user-token';
 
+/** Demo photo colours by name; anything else gets a colour from its name. */
+const COLOURS = { 'red-saree': '#b3261e', 'blue-panjabi': '#1f4e8c', 'green-kurti': '#2e7d32' };
+const photos = new Map();
+
+/** A product-like demo photo: a coloured garment shape on a light background. */
+async function demoPhoto(name) {
+  if (photos.has(name)) return photos.get(name);
+  const colour = COLOURS[name] ?? `#${createHash('sha256').update(name).digest('hex').slice(0, 6)}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200">
+    <rect width="100%" height="100%" fill="#f4efe6"/>
+    <path d="M560 180 L700 120 Q800 200 900 120 L1040 180 L1180 420 L1060 480 L1020 400 L1020 1080 L580 1080 L580 400 L540 480 L420 420 Z" fill="${colour}"/>
+    <g fill="#f5d36b" opacity="0.85">${Array.from({ length: 24 }, (_, i) => `<circle cx="${620 + (i % 6) * 72}" cy="${520 + Math.floor(i / 6) * 130}" r="16"/>`).join('')}</g>
+    <text x="800" y="1150" font-family="sans-serif" font-size="40" text-anchor="middle" fill="#555">Stand-in photo: ${name}</text>
+  </svg>`;
+  const bytes = await sharp(Buffer.from(svg)).jpeg({ quality: 85 }).toBuffer();
+  photos.set(name, bytes);
+  return bytes;
+}
+
+function sendPhoto(res, bytes) {
+  res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': String(bytes.length) });
+  res.end(bytes);
+}
+
 const sent = [];
 let failNext = null;
 let seq = 0;
+/** Message ids stay unique across restarts, like Meta's. */
+const boot = Date.now().toString(36);
 
 const known = (token) =>
   token === `${USER_TOKEN}-long` ||
@@ -96,7 +128,7 @@ function route(method, path, query, body, res) {
     seq += 1;
     if (body.messaging_product === 'whatsapp') {
       sent.push({
-        id: `wamid.STANDIN${seq}`,
+        id: `wamid.STANDIN${boot}${seq}`,
         channel: 'whatsapp',
         to: body.to,
         text: body.text?.body ?? '',
@@ -105,20 +137,20 @@ function route(method, path, query, body, res) {
       return answer(res, 200, {
         messaging_product: 'whatsapp',
         contacts: [{ input: body.to, wa_id: body.to }],
-        messages: [{ id: `wamid.STANDIN${seq}` }],
+        messages: [{ id: `wamid.STANDIN${boot}${seq}` }],
       });
     }
     const to = body.recipient?.id;
     if (!to) return graphError(res, 400, 100, 'param recipient must be non-empty');
     sent.push({
-      id: `m_standin_${seq}`,
+      id: `m_standin_${boot}_${seq}`,
       channel: 'page',
       account: parts[0],
       to,
       text: body.message?.text ?? '',
       at: new Date().toISOString(),
     });
-    return answer(res, 200, { recipient_id: to, message_id: `m_standin_${seq}` });
+    return answer(res, 200, { recipient_id: to, message_id: `m_standin_${boot}_${seq}` });
   }
 
   if (method === 'GET' && parts.length === 2 && parts[1] === 'phone_numbers')
@@ -127,6 +159,17 @@ function route(method, path, query, body, res) {
     });
 
   if (method === 'GET' && parts.length === 1) {
+    if (parts[0].startsWith('wa-media-'))
+      return demoPhoto(parts[0].slice('wa-media-'.length)).then((bytes) =>
+        answer(res, 200, {
+          messaging_product: 'whatsapp',
+          id: parts[0],
+          url: `http://127.0.0.1:${PORT}/__wa-media/${parts[0]}`,
+          mime_type: 'image/jpeg',
+          sha256: createHash('sha256').update(bytes).digest('hex'),
+          file_size: bytes.length,
+        }),
+      );
     if (parts[0] === WHATSAPP.phoneNumberId)
       return answer(res, 200, {
         id: WHATSAPP.phoneNumberId,
@@ -151,6 +194,22 @@ createServer(async (req, res) => {
   const method = req.method ?? 'GET';
 
   if (url.pathname === '/__sent') return answer(res, 200, { sent });
+  // Like a CDN link: no token needed. Old links stop working.
+  if (url.pathname.startsWith('/__photo/')) {
+    const name = url.pathname.slice('/__photo/'.length).replace(/\.jpe?g$/, '');
+    if (name === 'expired') return answer(res, 403, { error: 'URL signature expired' });
+    console.log(`photo ${name}`);
+    return sendPhoto(res, await demoPhoto(name));
+  }
+  // Like WhatsApp's media store: the download needs the channel's token.
+  if (url.pathname.startsWith('/__wa-media/')) {
+    const auth = req.headers.authorization ?? '';
+    if (!auth.startsWith('Bearer ') || !known(auth.slice(7)))
+      return answer(res, 401, { error: 'Unauthorized' });
+    const id = url.pathname.slice('/__wa-media/wa-media-'.length);
+    console.log(`whatsapp media ${id}`);
+    return sendPhoto(res, await demoPhoto(id));
+  }
   if (url.pathname === '/__fail' && method === 'POST') {
     failNext = Number((await readBody(req)).code ?? 613);
     return answer(res, 200, { failNext });

@@ -78,6 +78,8 @@ export interface AiModel {
     outputUsdMicrosPerMTok: number;
   };
   contextWindow: number;
+  /** The model can look at photos (customers' product photos in chats). */
+  imageInput: boolean;
   enabled: boolean;
   isDefaultForTier: boolean;
 }
@@ -104,6 +106,7 @@ export const aiModelSchema = platformSchema<AiModel>(
       default: undefined,
     },
     contextWindow: { type: Number, default: 200_000 },
+    imageInput: { type: Boolean, default: false },
     enabled: { type: Boolean, default: true },
     isDefaultForTier: { type: Boolean, default: false },
   },

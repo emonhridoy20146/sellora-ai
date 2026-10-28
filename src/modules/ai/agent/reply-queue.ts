@@ -12,6 +12,8 @@ export interface AiReplyJob {
   messageId: string;
   /** Times this job was put back because another reply was still running. */
   busy?: number;
+  /** Times this job waited for the customer's photos to finish saving. */
+  mediaWaits?: number;
 }
 
 export const AI_REPLY_JOB = 'reply';
@@ -20,6 +22,15 @@ export const AI_REPLY_ATTEMPTS = 3;
 /** How long to wait for a running reply before giving up (40 × 3 s = 2 minutes). */
 const MAX_BUSY_REQUEUES = 40;
 const BUSY_DELAY_MS = 3_000;
+/** How long a reply waits for the customer's photos to be saved (10 × 2 s). */
+export const MAX_MEDIA_WAITS = 10;
+const MEDIA_WAIT_MS = 2_000;
+const JOB_OPTIONS = {
+  attempts: AI_REPLY_ATTEMPTS,
+  backoff: { type: 'exponential', delay: 5_000 },
+  removeOnComplete: { age: 3600, count: 2_000 },
+  removeOnFail: { age: 7 * 24 * 3600 },
+} as const;
 const LOCK_TTL_MS = 3 * 60_000;
 
 const latestKey = (conversationId: string) => `ai:latest:${conversationId}`;
@@ -41,17 +52,24 @@ export class AiReplyQueue {
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
-  async schedule(job: Omit<AiReplyJob, 'busy'>, delayMs: number): Promise<void> {
+  async schedule(job: Omit<AiReplyJob, 'busy' | 'mediaWaits'>, delayMs: number): Promise<void> {
     await this.redis.set(latestKey(job.conversationId), job.messageId, 'EX', 6 * 3600);
     await this.queue.add(AI_REPLY_JOB, job, {
       // BullMQ ids cannot contain ':'; one job per customer message.
       jobId: `reply-${job.messageId}`,
       delay: Math.max(0, delayMs),
-      attempts: AI_REPLY_ATTEMPTS,
-      backoff: { type: 'exponential', delay: 5_000 },
-      removeOnComplete: { age: 3600, count: 2_000 },
-      removeOnFail: { age: 7 * 24 * 3600 },
+      ...JOB_OPTIONS,
     });
+  }
+
+  /** Puts the job back for a moment while the customer's photos are still being saved. */
+  async requeueForMedia(job: AiReplyJob): Promise<void> {
+    const mediaWaits = (job.mediaWaits ?? 0) + 1;
+    await this.queue.add(
+      AI_REPLY_JOB,
+      { ...job, mediaWaits },
+      { jobId: `reply-${job.messageId}-m${mediaWaits}`, delay: MEDIA_WAIT_MS, ...JOB_OPTIONS },
+    );
   }
 
   /** Puts the job back for a few seconds while another reply in the conversation runs. */
@@ -61,14 +79,7 @@ export class AiReplyQueue {
     await this.queue.add(
       AI_REPLY_JOB,
       { ...job, busy },
-      {
-        jobId: `reply-${job.messageId}-b${busy}`,
-        delay: BUSY_DELAY_MS,
-        attempts: AI_REPLY_ATTEMPTS,
-        backoff: { type: 'exponential', delay: 5_000 },
-        removeOnComplete: { age: 3600, count: 2_000 },
-        removeOnFail: { age: 7 * 24 * 3600 },
-      },
+      { jobId: `reply-${job.messageId}-b${busy}`, delay: BUSY_DELAY_MS, ...JOB_OPTIONS },
     );
     return true;
   }

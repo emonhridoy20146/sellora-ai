@@ -215,12 +215,27 @@ export type SenderType = (typeof SENDER_TYPES)[number];
 export const DELIVERY_STATUSES = ['pending', 'sent', 'delivered', 'read', 'failed'] as const;
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
+export const ATTACHMENT_STATUSES = ['pending', 'ready', 'failed'] as const;
+export type AttachmentStatus = (typeof ATTACHMENT_STATUSES)[number];
+
+/**
+ * A photo or file on a message. Customers' photos from Messenger, Instagram and WhatsApp
+ * arrive `pending` with where to fetch them (`source`, never shown to anyone), and are
+ * `ready` once saved to the business's storage (`fileId`), or `failed`. Older attachments
+ * and links have only `url`.
+ */
 export interface MessageAttachment {
   url: string;
   contentType?: string;
   name?: string;
   size?: number;
   fileId?: Types.ObjectId;
+  /** Absent means ready. */
+  status?: AttachmentStatus;
+  /** Where to fetch it: a Meta CDN link, or `wa:<media id>` for WhatsApp. */
+  source?: string;
+  /** Why it could not be saved (for staff, in plain words). */
+  error?: string;
 }
 
 export interface Message {
@@ -255,11 +270,14 @@ export const messageSchema = tenantSchema<Message>({
     type: [
       new Schema(
         {
-          url: { type: String, required: true },
+          url: { type: String, default: '' },
           contentType: String,
           name: String,
           size: Number,
           fileId: Schema.Types.ObjectId,
+          status: { type: String, enum: ATTACHMENT_STATUSES },
+          source: String,
+          error: String,
         },
         { _id: false, strict: 'throw' },
       ),

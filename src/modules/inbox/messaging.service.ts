@@ -557,6 +557,36 @@ export class MessagingService {
     return modified;
   }
 
+  /**
+   * Records the outcome of saving one of a message's attachments and tells live clients.
+   * Only a still-pending attachment changes, so a late retry never undoes a result.
+   */
+  async settleAttachment(
+    messageId: Types.ObjectId,
+    index: number,
+    result:
+      | { status: 'ready'; fileId: Types.ObjectId; contentType: string; size: number }
+      | { status: 'failed'; error: string },
+  ): Promise<MessageDoc | null> {
+    const at = `attachments.${index}`;
+    const message = await this.messages.findOneAndUpdate(
+      { _id: messageId, [`${at}.status`]: 'pending' },
+      result.status === 'ready'
+        ? {
+            $set: {
+              [`${at}.status`]: 'ready',
+              [`${at}.fileId`]: result.fileId,
+              [`${at}.contentType`]: result.contentType,
+              [`${at}.size`]: result.size,
+            },
+            $unset: { [`${at}.source`]: 1 },
+          }
+        : { $set: { [`${at}.status`]: 'failed', [`${at}.error`]: result.error } },
+    );
+    if (message) await this.publishMessage(message);
+    return message;
+  }
+
   private async publishMessage(message: MessageDoc): Promise<void> {
     const conv = await this.conversations.findById(message.conversationId);
     await this.realtime.messageUpdated(this.orgId(), conv?.assigneeId, toMessageDto(message));

@@ -1,3 +1,4 @@
+import { FilesCoreModule } from '../files/files.module.js';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { RealtimeRelay } from '../../infra/realtime/realtime.relay.js';
@@ -52,7 +53,7 @@ export class InboxCoreModule {}
 
 /** The unified inbox: channels, conversations, the website chat and live updates. */
 @Module({
-  imports: [InboxCoreModule, OrgsModule, BillingModule, UsersModule],
+  imports: [InboxCoreModule, OrgsModule, BillingModule, UsersModule, FilesCoreModule],
   controllers: [
     ChannelsController,
     ConversationsController,

@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 export interface GraphRequest {
   method: string;
@@ -26,6 +26,27 @@ export interface FakeWhatsApp {
   verifiedName: string;
 }
 
+/** A file on Meta's side: a CDN photo (Messenger, Instagram) or WhatsApp media. */
+export interface FakeMedia {
+  bytes: Buffer;
+  contentType: string;
+  /** Answer with this status instead (403 = expired link, 500 = outage). */
+  status?: number;
+  /** Answer with a redirect to this URL instead. */
+  redirect?: string;
+}
+
+export interface FakeWhatsAppMedia extends FakeMedia {
+  /** The token that may read it (the phone number's). */
+  token: string;
+  /** Overrides the checksum Meta reports, to simulate a corrupted download. */
+  sha256?: string;
+}
+
+/** Where WhatsApp media downloads live (Meta's lookaside host). */
+export const whatsappMediaUrl = (mediaId: string) =>
+  `https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=${mediaId}&ext=1&hash=AT_test`;
+
 interface Scripted {
   match: RegExp;
   method: string;
@@ -42,9 +63,9 @@ const graphError = (status: number, error: Record<string, unknown>) =>
 
 /**
  * Plays the Graph API for tests: Facebook Login's code exchange, the page list, webhook
- * subscriptions, the Send API, WhatsApp Cloud API sends and profile lookups. Like Meta, it
- * insists on a bearer token with a matching appsecret_proof. It proves our side of the
- * contract; it is not Meta.
+ * subscriptions, the Send API, WhatsApp Cloud API sends, profile lookups, and the files
+ * behind photo messages (CDN links, WhatsApp media). Like Meta, it insists on a bearer token
+ * with a matching appsecret_proof. It proves our side of the contract; it is not Meta.
  */
 export class FakeGraph {
   readonly requests: GraphRequest[] = [];
@@ -56,6 +77,12 @@ export class FakeGraph {
   /** Embedded Signup codes, mapped to the business token they produce. */
   readonly businessCodes = new Map<string, string>();
   readonly profiles = new Map<string, Record<string, string>>();
+  /** Files on Meta's CDN, by full https URL. */
+  readonly cdn = new Map<string, FakeMedia>();
+  /** WhatsApp media, by media id. */
+  readonly waMedia = new Map<string, FakeWhatsAppMedia>();
+  /** Every download from a CDN or media host, with the token it carried. */
+  readonly downloads: { url: string; token: string | null }[] = [];
   private scripted: Scripted[] = [];
   private seq = 0;
   /** Delay before each Send API answer, to hold a message "on its way". */
@@ -65,6 +92,7 @@ export class FakeGraph {
 
   reset(): void {
     this.requests.length = 0;
+    this.downloads.length = 0;
     this.scripted = [];
   }
 
@@ -99,6 +127,8 @@ export class FakeGraph {
     const headers = (init?.headers ?? {}) as Record<string, string>;
     const auth = headers.authorization ?? '';
     const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+    // The Graph API is on the configured base URL (plain http in tests); media is on https hosts.
+    if (url.protocol === 'https:') return this.media(url, token);
     this.requests.push({ method, path, version, query, body, token });
 
     if (path === 'oauth/access_token') return this.oauth(query);
@@ -125,6 +155,24 @@ export class FakeGraph {
     }
     return this.route(method, path, query, body, token);
   }) as typeof fetch;
+
+  private media(url: URL, token: string | null): Response {
+    this.downloads.push({ url: url.toString(), token });
+    let file: FakeMedia | undefined;
+    if (url.hostname === 'lookaside.fbsbx.com') {
+      const wa = this.waMedia.get(url.searchParams.get('mid') ?? '');
+      if (wa && wa.token !== token) return new Response('Unauthorized', { status: 401 });
+      file = wa;
+    } else file = this.cdn.get(url.toString());
+    if (!file) return new Response('Not found', { status: 404 });
+    if (file.redirect)
+      return new Response(null, { status: 302, headers: { location: file.redirect } });
+    if (file.status) return new Response('No', { status: file.status });
+    return new Response(new Uint8Array(file.bytes), {
+      status: 200,
+      headers: { 'content-type': file.contentType, 'content-length': String(file.bytes.length) },
+    });
+  }
 
   private oauth(q: Record<string, string>): Response {
     if (q.grant_type === 'fb_exchange_token') {
@@ -220,6 +268,16 @@ export class FakeGraph {
           verified_name: wa.verifiedName,
         });
       }
+      const media = this.waMedia.get(parts[0]!);
+      if (media && media.token === token)
+        return json({
+          messaging_product: 'whatsapp',
+          id: parts[0],
+          url: whatsappMediaUrl(parts[0]!),
+          mime_type: media.contentType,
+          sha256: media.sha256 ?? createHash('sha256').update(media.bytes).digest('hex'),
+          file_size: media.bytes.length,
+        });
       const profile = this.profiles.get(parts[0]!);
       if (profile) return json({ id: parts[0], ...profile });
       return graphError(400, { code: 100, error_subcode: 33, message: 'Object does not exist' });
@@ -249,6 +307,27 @@ export const webhook = {
             recipient: { id: pageId },
             timestamp: at,
             message: { mid, text },
+          },
+        ],
+      },
+    ],
+  }),
+  messengerPhotos: (pageId: string, psid: string, mid: string, urls: string[], text?: string) => ({
+    object: 'page',
+    entry: [
+      {
+        id: pageId,
+        time: Date.now(),
+        messaging: [
+          {
+            sender: { id: psid },
+            recipient: { id: pageId },
+            timestamp: Date.now(),
+            message: {
+              mid,
+              ...(text ? { text } : {}),
+              attachments: urls.map((url) => ({ type: 'image', payload: { url } })),
+            },
           },
         ],
       },
@@ -324,6 +403,45 @@ export const webhook = {
                   timestamp: String(Math.floor(Date.now() / 1000)),
                   type: 'text',
                   text: { body: text },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  }),
+  whatsappPhoto: (
+    phoneNumberId: string,
+    from: string,
+    id: string,
+    mediaId: string,
+    caption?: string,
+    mimeType = 'image/jpeg',
+  ) => ({
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: 'WABA',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: { display_phone_number: '8801700000000', phone_number_id: phoneNumberId },
+              contacts: [{ profile: { name: 'Karim' }, wa_id: from }],
+              messages: [
+                {
+                  from,
+                  id,
+                  timestamp: String(Math.floor(Date.now() / 1000)),
+                  type: 'image',
+                  image: {
+                    id: mediaId,
+                    mime_type: mimeType,
+                    sha256: 'meta-sends-its-own-hash',
+                    ...(caption ? { caption } : {}),
+                  },
                 },
               ],
             },

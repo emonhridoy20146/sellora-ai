@@ -8,6 +8,8 @@ export const QUEUES = {
   webhooks: 'webhooks',
   /** Messages to customers on Messenger, Instagram and WhatsApp. */
   outbox: 'outbox',
+  /** Customers' photos to copy from Meta into the business's storage. */
+  media: 'media',
   maintenance: 'maintenance',
 } as const;
 

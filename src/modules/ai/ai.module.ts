@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BillingModule } from '../billing/billing.module.js';
 import { CommerceCoreModule } from '../commerce/commerce.module.js';
+import { FilesCoreModule } from '../files/files.module.js';
 import { InboxCoreModule } from '../inbox/inbox.module.js';
 import { OrgsModule } from '../orgs/orgs.module.js';
 import { AiAgentController } from './ai-agent.controller.js';
@@ -27,6 +28,7 @@ import { AnthropicProvider } from './provider/anthropic.provider.js';
     OrgsModule,
     InboxCoreModule,
     CommerceCoreModule,
+    FilesCoreModule,
   ],
   providers: [
     { provide: AI_FETCH, useFactory: (): typeof fetch => globalThis.fetch.bind(globalThis) },

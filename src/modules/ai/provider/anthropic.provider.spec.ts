@@ -50,6 +50,29 @@ describe('Anthropic message mapping', () => {
     ]);
   });
 
+  it('sends a customer’s photos as labelled image blocks before the text', () => {
+    const img = { mediaType: 'image/jpeg' as const, data: 'QUJD', width: 10, height: 10 };
+    expect(
+      toAnthropicMessages([
+        {
+          role: 'user',
+          text: '[The customer sent Photo 1] eta ache?',
+          images: [{ ...img, label: 'Photo 1' }, img],
+        },
+      ]),
+    ).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Photo 1:' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'QUJD' } },
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'QUJD' } },
+          { type: 'text', text: '[The customer sent Photo 1] eta ache?' },
+        ],
+      },
+    ]);
+  });
+
   it('refuses to replay another provider’s turn', () => {
     expect(() =>
       toAnthropicMessages([{ role: 'assistant_raw', provider: 'openai', content: [] }]),

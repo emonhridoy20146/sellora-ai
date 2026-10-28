@@ -1,6 +1,9 @@
-import { Controller, Delete, Get, Headers, HttpCode, Patch, Post } from '@nestjs/common';
+import { Controller, Delete, Get, Headers, HttpCode, Patch, Post, Res } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
+import { pipeline } from 'node:stream/promises';
 import { z } from 'zod';
+import { AppError } from '../../common/errors/app-error.js';
 import { RequestContext } from '../../common/context/request-context.js';
 import { objectIdSchema } from '../../common/validation/schemas.js';
 import { ZodBody, ZodParam, ZodQuery } from '../../common/validation/zod.js';
@@ -12,6 +15,7 @@ import {
   RequirePermissions,
 } from '../auth/decorators.js';
 import { ChannelsService, toChannelDto } from './channels.service.js';
+import { FilesService } from '../files/files.service.js';
 import { ConversationsService } from './conversations.service.js';
 import * as dto from './inbox.dto.js';
 import { WebchatService } from './webchat.service.js';
@@ -67,7 +71,10 @@ export class ChannelsController {
 @RequireAnyPermission('inbox.view', 'inbox.view_assigned')
 @Controller({ path: 'orgs/:orgId/conversations', version: '1' })
 export class ConversationsController {
-  constructor(private readonly conversations: ConversationsService) {}
+  constructor(
+    private readonly conversations: ConversationsService,
+    private readonly files: FilesService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'Conversations, latest activity first' })
@@ -99,6 +106,31 @@ export class ConversationsController {
     @ZodBody(dto.sendMessageBody) body: z.infer<typeof dto.sendMessageBody>,
   ) {
     return this.conversations.send(id, body);
+  }
+
+  @Get(':conversationId/messages/:messageId/attachments/:index')
+  @ApiOperation({
+    summary:
+      'A photo a customer sent, saved by Sellora. Private: only for staff who can see the chat.',
+  })
+  async attachment(
+    @ZodParam('conversationId', objectIdSchema) id: string,
+    @ZodParam('messageId', objectIdSchema) messageId: string,
+    @ZodParam('index', z.coerce.number().int().min(0).max(19)) index: number,
+    @Res() res: Response,
+  ): Promise<void> {
+    const file = await this.conversations.attachment(id, messageId, index);
+    const object = await this.files.open(file);
+    if (!object) throw AppError.notFound('attachment');
+    res.status(200);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Length', String(object.size));
+    // The bytes never change, but they are a customer's: kept by the viewer's browser only.
+    res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Content-Disposition', 'inline');
+    await pipeline(object.body, res);
   }
 
   @Post(':conversationId/messages/:messageId/retry')

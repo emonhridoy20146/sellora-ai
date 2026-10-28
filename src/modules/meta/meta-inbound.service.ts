@@ -5,12 +5,33 @@ import { ChannelsService, type ChannelDoc } from '../inbox/channels.service.js';
 import type { ContactDoc, ConversationDoc } from '../inbox/inbox.mappers.js';
 import { MessagingService } from '../inbox/messaging.service.js';
 import { ContactRepository } from '../inbox/repositories.js';
-import { parseMetaWebhook, type MetaEvent } from './meta-events.js';
+import type { MessageAttachment } from '../inbox/schemas.js';
+import { parseMetaWebhook, type MetaAttachment, type MetaEvent } from './meta-events.js';
 import { MetaGraph } from './meta-graph.js';
+import { MetaMediaQueue, WHATSAPP_MEDIA_PREFIX } from './meta-media.js';
 import { CHANNEL_NAME } from './meta.types.js';
 
 const ACTOR: Actor = { type: 'system', id: 'meta-webhook' };
 const PROFILE_TIMEOUT_MS = 4_000;
+
+/**
+ * Photos are saved to the business's storage after the message is stored (the inbox shows
+ * them as loading meanwhile); other files keep Meta's link.
+ */
+function toAttachment(a: MetaAttachment): MessageAttachment | null {
+  if (a.kind === 'image') {
+    const source = a.mediaId ? `${WHATSAPP_MEDIA_PREFIX}${a.mediaId}` : a.url;
+    if (!source) return null;
+    return {
+      url: '',
+      status: 'pending',
+      source,
+      ...(a.contentType ? { contentType: a.contentType } : {}),
+    };
+  }
+  if (!a.url) return null;
+  return { url: a.url, ...(a.name ? { name: a.name } : {}) };
+}
 
 export type InboundOutcome =
   | 'stored'
@@ -38,6 +59,7 @@ export class MetaInbound {
     private readonly messaging: MessagingService,
     private readonly contacts: ContactRepository,
     private readonly entitlements: EntitlementsService,
+    private readonly media: MetaMediaQueue,
   ) {}
 
   async handleWebhook(body: unknown): Promise<InboundOutcome[]> {
@@ -83,10 +105,17 @@ export class MetaInbound {
         ...(e.profileName ? { name: e.profileName } : {}),
         ...(e.channelType === 'whatsapp' ? { phone: `+${e.senderId}` } : {}),
       },
-      { externalId: e.messageId, type: e.type, text: e.text, attachments: e.attachments },
+      {
+        externalId: e.messageId,
+        type: e.type,
+        text: e.text,
+        attachments: e.attachments.map(toAttachment).filter((a) => a !== null),
+      },
       at,
     );
     if (result.duplicate) return 'duplicate';
+    if (result.message.attachments.some((a) => a.status === 'pending'))
+      await this.media.enqueue(channel.orgId.toHexString(), result.message._id.toHexString());
     if (!result.contact.name && e.channelType !== 'whatsapp')
       await this.fillProfile(channel, result.contact, result.conversation);
     return 'stored';

@@ -166,6 +166,7 @@ export const aiModelBody = z
       .nullable()
       .optional(),
     contextWindow: z.number().int().min(1_000).max(10_000_000).default(200_000),
+    imageInput: z.boolean().default(false),
     enabled: z.boolean().default(true),
     isDefaultForTier: z.boolean().default(false),
   })

@@ -144,10 +144,12 @@ export class MetaSender {
       if (!(err instanceof MetaGraphError)) throw err;
       return this.graphFailed(message, channel, err, opts.finalAttempt, done, parts.length);
     }
-    await this.redis.del(key);
+    // Forget the progress only once the result is saved: if saving fails, the retry finds
+    // every part already sent and records it without messaging the customer again.
     await this.messaging.updateDelivery({ _id: message._id }, 'sent', {
       ...(first ? { externalId: first } : {}),
     });
+    await this.redis.del(key);
     return { status: 'sent', parts: parts.length, externalId: first ?? '' };
   }
 

@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { BillingModule } from '../billing/billing.module.js';
+import { FilesCoreModule } from '../files/files.module.js';
 import { InboxCoreModule } from '../inbox/inbox.module.js';
 import { MetaConnectService } from './meta-connect.service.js';
 import { META_FETCH, MetaGraph } from './meta-graph.js';
 import { MetaInbound } from './meta-inbound.service.js';
+import { MetaMedia, MetaMediaQueue } from './meta-media.js';
 import { MetaSender } from './meta-sender.service.js';
 import { MetaWebhookService } from './meta-webhook.service.js';
 import { MetaChannelListener } from './meta.listener.js';
@@ -14,14 +16,16 @@ import { MetaConnectController, MetaWebhookController } from './meta.controller.
  * outbox worker uses and the webhook handler the webhooks worker uses.
  */
 @Module({
-  imports: [InboxCoreModule, BillingModule],
+  imports: [InboxCoreModule, BillingModule, FilesCoreModule],
   providers: [
     { provide: META_FETCH, useFactory: (): typeof fetch => globalThis.fetch.bind(globalThis) },
     MetaGraph,
     MetaSender,
     MetaInbound,
+    MetaMediaQueue,
+    MetaMedia,
   ],
-  exports: [MetaGraph, MetaSender, MetaInbound],
+  exports: [MetaGraph, MetaSender, MetaInbound, MetaMedia],
 })
 export class MetaCoreModule {}
 

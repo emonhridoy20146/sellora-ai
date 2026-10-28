@@ -64,22 +64,29 @@ Secrets never go in code or in git:
   To try the flows locally without a Meta app, run
   `META_APP_SECRET=<same secret> node scripts/graph-stand-in.mjs` and set
   `META_GRAPH_BASE_URL=http://127.0.0.1:4020` for the API and the worker. It is not Meta: it
-  knows two demo pages and one WhatsApp number and accepts any login code.
+  knows two demo pages and one WhatsApp number, accepts any login code, and serves demo photos
+  (`/__photo/<name>.jpg`, and WhatsApp media ids starting `wa-media-`).
+- Customers' photos from Messenger, Instagram and WhatsApp are copied into file storage as
+  private files (ADR 0012). `CHAT_MEDIA_MAX_MB` (default 16) is the largest one kept; they
+  count against the plan's storage. On S3, make only `o/*/products/*` publicly readable:
+  `o/*/chat/*` must stay private (the API serves those to signed-in staff). Photos shown to the
+  AI are resized on the server with `sharp` (a prebuilt native module for Linux, macOS and
+  Windows; nothing to install separately).
 
 ## Scripts
 
-| Command                                                       | What it does                                                                          |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `npm run dev` / `npm run dev:worker`                          | API / worker with reload (reads `.env`).                                              |
-| `npm run build` then `npm start` / `npm run start:worker`     | Production build (SWC) and processes.                                                 |
-| `npm run typecheck` · `npm run lint` · `npm run format:check` | Static checks.                                                                        |
-| `npm test`                                                    | Unit and end-to-end tests (see below).                                                |
-| `npm run db:indexes`                                          | Builds every MongoDB index (run on deploy; `MONGODB_AUTO_INDEX=false` in production). |
-| `npm run keys:generate`                                       | New JWT key pair and encryption keys.                                                 |
-| `npm run platform:bootstrap`                                  | First platform owner (only when there are no platform accounts).                      |
-| `npm run openapi:export`                                      | Writes the OpenAPI document.                                                          |
-| `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI).       |
-| `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).          |
+| Command                                                       | What it does                                                                                                             |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev` / `npm run dev:worker`                          | API / worker with reload (reads `.env`).                                                                                 |
+| `npm run build` then `npm start` / `npm run start:worker`     | Production build (SWC) and processes.                                                                                    |
+| `npm run typecheck` · `npm run lint` · `npm run format:check` | Static checks.                                                                                                           |
+| `npm test`                                                    | Unit and end-to-end tests (see below).                                                                                   |
+| `npm run db:indexes`                                          | Builds every MongoDB index (run on deploy; `MONGODB_AUTO_INDEX=false` in production).                                    |
+| `npm run keys:generate`                                       | New JWT key pair and encryption keys.                                                                                    |
+| `npm run platform:bootstrap`                                  | First platform owner (only when there are no platform accounts).                                                         |
+| `npm run openapi:export`                                      | Writes the OpenAPI document.                                                                                             |
+| `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI; cannot see photos, says how many it got). |
+| `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).                                             |
 
 ## Tests
 

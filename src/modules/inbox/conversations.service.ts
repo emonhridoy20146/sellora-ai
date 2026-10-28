@@ -6,6 +6,7 @@ import { AppError } from '../../common/errors/app-error.js';
 import { normalizePhone } from '../../common/validation/schemas.js';
 import { EntitlementsService } from '../billing/entitlements.service.js';
 import { escapeRegex } from '../commerce/text.js';
+import { FilesService, type FileDoc } from '../files/files.service.js';
 import { MembersService } from '../orgs/members.service.js';
 import { OrgsService } from '../orgs/orgs.service.js';
 import { TenantAccessService } from '../orgs/tenant-access.service.js';
@@ -64,6 +65,7 @@ export class ConversationsService {
     private readonly entitlements: EntitlementsService,
     private readonly members: MembersService,
     private readonly events: EventEmitter2,
+    private readonly files: FilesService,
   ) {}
 
   private can(permission: string): boolean {
@@ -179,6 +181,18 @@ export class ConversationsService {
     const conv = await this.messaging.ensureUnlocked(await this.visible(id));
     const page = await this.messages.paginate({ conversationId: conv._id }, q);
     return { items: page.items.map(toMessageDto), nextCursor: page.nextCursor };
+  }
+
+  /** A saved photo on a message, for staff who can see the conversation. */
+  async attachment(id: string, messageId: string, index: number): Promise<FileDoc> {
+    const conv = await this.messaging.ensureUnlocked(await this.visible(id));
+    const message = await this.messages.findOne({
+      _id: new Types.ObjectId(messageId),
+      conversationId: conv._id,
+    });
+    const fileId = message?.attachments[index]?.fileId;
+    if (!fileId) throw AppError.notFound('attachment');
+    return this.files.get(fileId.toHexString());
   }
 
   async markRead(id: string): Promise<ConversationDto> {

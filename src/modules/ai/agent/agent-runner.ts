@@ -10,6 +10,7 @@ import type {
   AiTurnResult,
 } from '../provider/ai-provider.js';
 import { AgentTools, type HandoverReason, type ToolRunContext } from './agent-tools.js';
+import { imageTokens } from './agent-images.js';
 import { estimateTokens } from './chat-text.js';
 
 /** Model turns per reply: enough to search, check a product, quote and answer. */
@@ -45,6 +46,16 @@ export interface AgentRunResult {
   handover?: { reason: HandoverReason; summary: string };
   orders: { id: string; number: string; preview: boolean }[];
   toolCalls: { name: string; ok: boolean }[];
+}
+
+/** Text by its length; photos by their pixel area, never by the size of their bytes. */
+export function estimateMessageTokens(messages: AiMessage[]): number {
+  let tokens = estimateTokens(
+    JSON.stringify(messages, (k, v: unknown) => (k === 'images' ? undefined : v)),
+  );
+  for (const m of messages)
+    if (m.role === 'user') for (const img of m.images ?? []) tokens += imageTokens(img);
+  return tokens;
 }
 
 /**
@@ -87,8 +98,7 @@ export class AgentRunner {
         requestId,
         feature: input.feature,
         tier: input.tier,
-        estimatedInputTokens:
-          systemSize + toolsSize + estimateTokens(JSON.stringify(messages)) + 200,
+        estimatedInputTokens: systemSize + toolsSize + estimateMessageTokens(messages) + 200,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         reference: input.reference,
       });

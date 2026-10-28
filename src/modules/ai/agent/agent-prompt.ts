@@ -69,6 +69,8 @@ export interface AgentPromptInput {
   zones: PromptZone[];
   customer: PromptCustomer | null;
   now: Date;
+  /** The model can look at the photos customers send. */
+  seesPhotos?: boolean;
 }
 
 const LANGUAGE_RULES: Record<AiLanguage, string> = {
@@ -166,6 +168,16 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
       '- Use the save_customer_details tool when the customer tells you their name, phone, ' +
         'address or a lasting preference (size, colour, style), so the team and future chats ' +
         'remember it.',
+      input.seesPhotos
+        ? '- Customers often send a photo of what they want. Look at it closely (kind of ' +
+          'product, colour, pattern, print, fabric, design) and use search_products with words ' +
+          'that describe it. Say honestly whether you found the same item or something similar; ' +
+          'never claim an exact match you cannot see. If the photo is not a product (a payment ' +
+          'screenshot, an address, a parcel), read it and help with that. Only the newest ' +
+          'photos are attached ("Photo 1", "Photo 2"); an older one shows as "[The customer sent ' +
+          'a photo]", so ask them to send it again if you need it.'
+        : '- Customers may send photos you cannot see (shown as "[The customer sent a photo]"). ' +
+          'Ask them to describe what they are looking for in words.',
     ].join('\n'),
   );
 

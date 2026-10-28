@@ -33,8 +33,20 @@ export interface AiToolResult {
   isError?: boolean;
 }
 
+/** A photo for models that can see. Already resized and re-encoded by the caller. */
+export interface AiImage {
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  /** Base64 of the bytes. */
+  data: string;
+  width: number;
+  height: number;
+  /** How the turn's text refers to it ("Photo 2"); sent next to the image. */
+  label?: string;
+}
+
 export type AiMessage =
-  | { role: 'user'; text: string }
+  /** A customer turn; its photos come before its text, each next to its label. */
+  | { role: 'user'; text: string; images?: AiImage[] }
   | { role: 'assistant'; text: string }
   /** A provider's own assistant turn, sent back unchanged so tool calls keep their ids. */
   | { role: 'assistant_raw'; provider: AiProviderName; content: unknown }

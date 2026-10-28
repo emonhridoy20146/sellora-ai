@@ -42,7 +42,9 @@ business without trusting anything in it but the account id.
   `pending` and a job on the `outbox` queue (`send-<messageId>`, 6 attempts, exponential
   backoff from 10 s). The worker splits long text at sentence or line breaks to each channel's
   limit (Messenger 2000, Instagram 1000, WhatsApp 4096 characters), records which parts went
-  out in Redis so a retry never sends a part twice, and waits while an earlier reply in the
+  out in Redis so a retry never sends a part twice (the record is cleared only after the
+  "sent" state is saved, so a failure while saving it does not message the customer again),
+  and waits while an earlier reply in the
   same conversation is still pending, so replies arrive in order. Delivery states only move
   forward (pending → sent → delivered → read, or failed); Messenger read watermarks and
   WhatsApp status webhooks drive them.

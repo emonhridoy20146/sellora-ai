@@ -11,6 +11,7 @@ import { UsersModule } from './modules/users/users.module.js';
 import { AiProcessor } from './workers/ai.processor.js';
 import { MailProcessor } from './workers/mail.processor.js';
 import { MaintenanceProcessor } from './workers/maintenance.processor.js';
+import { MediaProcessor } from './workers/media.processor.js';
 import { OutboxProcessor } from './workers/outbox.processor.js';
 import { WebhooksProcessor } from './workers/webhooks.processor.js';
 
@@ -33,6 +34,7 @@ export class WorkerModule {
         MaintenanceProcessor,
         AiProcessor,
         OutboxProcessor,
+        MediaProcessor,
         WebhooksProcessor,
         // Messages that arrive by webhook are stored here, so AI replies are scheduled here too.
         AiRepliesListener,

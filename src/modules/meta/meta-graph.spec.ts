@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { AppConfig } from '../../config/app-config.js';
-import { classifyGraphError, MetaGraph, MetaGraphError } from './meta-graph.js';
+import { classifyGraphError, MetaGraph, MetaGraphError, MetaMediaError } from './meta-graph.js';
 
 const config = (values: Record<string, string | undefined>) =>
   ({ get: (key: string) => values[key] }) as unknown as AppConfig;
@@ -129,5 +129,127 @@ describe('MetaGraph', () => {
     expect(graph.configured()).toBe(false);
     expect(() => graph.appId()).toThrow(MetaGraphError);
     await expect(graph.get('me', 'T')).rejects.toMatchObject({ kind: 'not_configured' });
+  });
+});
+
+describe('MetaGraph.download', () => {
+  const CDN = 'https://scontent.xx.fbcdn.net/v/t1.15752-9/photo.jpg?_nc_oc=abc';
+  const graphWith = (fn: (url: string, init: RequestInit) => Response) =>
+    new MetaGraph(config(env), fakeFetch(fn));
+  const bytes = (n: number) => new Response(new Uint8Array(n), { status: 200 });
+
+  it('accepts only Meta’s media hosts over https, and the configured Graph API origin', () => {
+    const graph = graphWith(() => bytes(1));
+    expect(graph.isMediaUrl(CDN)).toBe(true);
+    expect(
+      graph.isMediaUrl('https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=1'),
+    ).toBe(true);
+    expect(graph.isMediaUrl('https://scontent-sin6-1.cdninstagram.com/v/a.jpg')).toBe(true);
+    expect(graph.isMediaUrl('http://graph.test/__media/1')).toBe(true);
+    expect(graph.isMediaUrl('http://scontent.xx.fbcdn.net/photo.jpg')).toBe(false);
+    expect(graph.isMediaUrl('https://fbcdn.net.evil.example/photo.jpg')).toBe(false);
+    expect(graph.isMediaUrl('https://evilfbcdn.net/photo.jpg')).toBe(false);
+    expect(graph.isMediaUrl('https://169.254.169.254/latest/meta-data')).toBe(false);
+    expect(graph.isMediaUrl('not a url')).toBe(false);
+  });
+
+  it('refuses other hosts without fetching them', async () => {
+    let calls = 0;
+    const graph = graphWith(() => {
+      calls += 1;
+      return bytes(1);
+    });
+    await expect(
+      graph.download('https://example.com/a.jpg', { maxBytes: 100 }),
+    ).rejects.toMatchObject({ reason: 'host_not_allowed' });
+    expect(calls).toBe(0);
+  });
+
+  it('follows redirects only while they stay on Meta, and sends the token to the first link only', async () => {
+    const seen: { url: string; auth: string | undefined }[] = [];
+    const graph = graphWith((url, init) => {
+      seen.push({ url, auth: (init.headers as Record<string, string>).authorization });
+      if (url === CDN)
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'https://video.xx.fbcdn.net/final.jpg' },
+        });
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { 'content-type': 'image/jpeg; charset=binary' },
+      });
+    });
+    const out = await graph.download(CDN, { token: 'TOKEN', maxBytes: 100 });
+    expect([...out.bytes]).toEqual([1, 2, 3]);
+    expect(out.contentType).toBe('image/jpeg');
+    expect(seen).toEqual([
+      { url: CDN, auth: 'Bearer TOKEN' },
+      { url: 'https://video.xx.fbcdn.net/final.jpg', auth: undefined },
+    ]);
+
+    const away = graphWith(
+      () =>
+        new Response(null, {
+          status: 301,
+          headers: { location: 'http://10.0.0.5/internal' },
+        }),
+    );
+    await expect(away.download(CDN, { maxBytes: 100 })).rejects.toMatchObject({
+      reason: 'host_not_allowed',
+    });
+    const loop = graphWith(() => new Response(null, { status: 302, headers: { location: CDN } }));
+    await expect(loop.download(CDN, { maxBytes: 100 })).rejects.toBeInstanceOf(MetaMediaError);
+  });
+
+  it('stops at the size limit, whether declared or streamed', async () => {
+    const declared = graphWith(
+      () => new Response(new Uint8Array(10), { headers: { 'content-length': '5000' } }),
+    );
+    await expect(declared.download(CDN, { maxBytes: 1000 })).rejects.toMatchObject({
+      reason: 'too_large',
+    });
+    // No content-length: counted while reading.
+    const streamed = graphWith(
+      () =>
+        new Response(
+          new ReadableStream({
+            start(c) {
+              for (let i = 0; i < 5; i++) c.enqueue(new Uint8Array(400));
+              c.close();
+            },
+          }),
+        ),
+    );
+    await expect(streamed.download(CDN, { maxBytes: 1000 })).rejects.toMatchObject({
+      reason: 'too_large',
+    });
+    expect(
+      (await graphWith(() => bytes(1000)).download(CDN, { maxBytes: 1000 })).bytes,
+    ).toHaveLength(1000);
+  });
+
+  it('tells a gone file from a refusal, a rate limit and an outage', async () => {
+    const status = (code: number) => graphWith(() => new Response('x', { status: code }));
+    await expect(status(403).download(CDN, { maxBytes: 9 })).rejects.toMatchObject({
+      reason: 'unavailable',
+    });
+    await expect(status(404).download(CDN, { maxBytes: 9 })).rejects.toMatchObject({
+      reason: 'unavailable',
+    });
+    await expect(status(401).download(CDN, { maxBytes: 9 })).rejects.toMatchObject({
+      kind: 'auth',
+    });
+    await expect(status(429).download(CDN, { maxBytes: 9 })).rejects.toMatchObject({
+      kind: 'rate_limited',
+    });
+    await expect(status(502).download(CDN, { maxBytes: 9 })).rejects.toMatchObject({
+      kind: 'transient',
+    });
+    const offline = graphWith(() => {
+      throw new TypeError('fetch failed');
+    });
+    await expect(offline.download(CDN, { maxBytes: 9 })).rejects.toMatchObject({
+      kind: 'network',
+    });
   });
 });

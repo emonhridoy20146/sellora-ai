@@ -7,6 +7,12 @@ export const META_FETCH = Symbol('META_FETCH');
 
 const DEFAULT_BASE_URL = 'https://graph.facebook.com';
 const REQUEST_TIMEOUT_MS = 15_000;
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+/**
+ * Hosts Meta serves customers' media from: the Facebook and Instagram CDNs and WhatsApp's
+ * media store. Media links arrive in webhooks, so downloads are refused anywhere else.
+ */
+const MEDIA_HOSTS = ['fbcdn.net', 'fbsbx.com', 'cdninstagram.com', 'facebook.com', 'whatsapp.net'];
 
 /**
  * Graph API error codes this app reacts to (developers.facebook.com/docs/graph-api/guides/error-handling).
@@ -45,6 +51,17 @@ export class MetaGraphError extends Error {
     super(message);
     this.name = 'MetaGraphError';
     this.retryable = kind === 'rate_limited' || kind === 'transient' || kind === 'network';
+  }
+}
+
+/** Media that cannot be fetched, now or later: retrying would not help. */
+export class MetaMediaError extends Error {
+  constructor(
+    readonly reason: 'too_large' | 'unavailable' | 'host_not_allowed',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'MetaMediaError';
   }
 }
 
@@ -183,6 +200,96 @@ export class MetaGraph {
 
   delete<T>(path: string, token: string, query: Record<string, string> = {}): Promise<T> {
     return this.call<T>('DELETE', path, { token, query });
+  }
+
+  /** Whether a media link points at Meta (or at the configured Graph API, for local stand-ins). */
+  isMediaUrl(raw: string): boolean {
+    let url: URL;
+    try {
+      url = new URL(raw);
+    } catch {
+      return false;
+    }
+    const base = this.config.get('META_GRAPH_BASE_URL');
+    if (base && url.origin === new URL(base).origin) return true;
+    if (url.protocol !== 'https:') return false;
+    const host = url.hostname.toLowerCase();
+    return MEDIA_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
+  }
+
+  /**
+   * Downloads a customer's photo or file from Meta. WhatsApp's media store needs the
+   * channel's token; the CDN links of Messenger and Instagram do not. Reads at most
+   * `maxBytes`. Throws MetaMediaError when retrying cannot help, MetaGraphError otherwise.
+   */
+  async download(
+    url: string,
+    opts: { token?: string; maxBytes: number; timeoutMs?: number },
+  ): Promise<{ bytes: Buffer; contentType: string | null }> {
+    if (!this.isMediaUrl(url))
+      throw new MetaMediaError('host_not_allowed', 'The media link does not point at Meta');
+    const tooLarge = () =>
+      new MetaMediaError(
+        'too_large',
+        `The file is larger than ${Math.round(opts.maxBytes / 1024 / 1024)} MB`,
+      );
+    const signal = AbortSignal.timeout(opts.timeoutMs ?? DOWNLOAD_TIMEOUT_MS);
+    let res: Response;
+    let next = url;
+    for (let hop = 0; ; hop++) {
+      try {
+        res = await this.fetchImpl(next, {
+          method: 'GET',
+          // The token goes to the link Meta gave, never to where it redirects.
+          headers: opts.token && hop === 0 ? { authorization: `Bearer ${opts.token}` } : {},
+          redirect: 'manual',
+          signal,
+        });
+      } catch (err) {
+        throw new MetaGraphError(
+          'network',
+          `Could not download from Meta: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+      if (!location) break;
+      await res.body?.cancel();
+      next = new URL(location, next).toString();
+      // Every hop must stay on Meta's hosts.
+      if (hop >= 3 || !this.isMediaUrl(next))
+        throw new MetaMediaError('host_not_allowed', 'The media link redirects away from Meta');
+    }
+    if (!res.ok) {
+      await res.body?.cancel();
+      if (res.status === 401)
+        throw new MetaGraphError('auth', 'Meta refused the media download', 401);
+      if (res.status === 429)
+        throw new MetaGraphError('rate_limited', 'Meta rate-limited the media download', 429);
+      if (res.status >= 500)
+        throw new MetaGraphError('transient', `Meta answered ${res.status}`, res.status);
+      // Expired CDN links answer 403; deleted media 404 or 410.
+      throw new MetaMediaError('unavailable', `Meta answered ${res.status}: the media is gone`);
+    }
+    const declared = Number(res.headers.get('content-length') ?? NaN);
+    if (Number.isFinite(declared) && declared > opts.maxBytes) {
+      await res.body?.cancel();
+      throw tooLarge();
+    }
+    const chunks: Buffer[] = [];
+    let total = 0;
+    if (res.body)
+      for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
+        total += chunk.length;
+        if (total > opts.maxBytes) {
+          await res.body.cancel().catch(() => undefined);
+          throw tooLarge();
+        }
+        chunks.push(Buffer.from(chunk));
+      }
+    return {
+      bytes: Buffer.concat(chunks),
+      contentType: res.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? null,
+    };
   }
 
   /** The app id when the platform's Meta app is set up, else null. */

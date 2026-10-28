@@ -43,6 +43,7 @@ function modelInput(body: Partial<z.infer<typeof dto.aiModelBody>>): Partial<AiM
       : undefined;
   }
   if (body.contextWindow !== undefined) out.contextWindow = body.contextWindow;
+  if (body.imageInput !== undefined) out.imageInput = body.imageInput;
   if (body.enabled !== undefined) out.enabled = body.enabled;
   if (body.isDefaultForTier !== undefined) out.isDefaultForTier = body.isDefaultForTier;
   return out;

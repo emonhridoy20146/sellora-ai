@@ -19,7 +19,21 @@ export function toAnthropicMessages(messages: AiMessage[]): Anthropic.MessagePar
   return messages.map((m): Anthropic.MessageParam => {
     switch (m.role) {
       case 'user':
-        return { role: 'user', content: m.text };
+        if (!m.images?.length) return { role: 'user', content: m.text };
+        return {
+          role: 'user',
+          content: [
+            // Anthropic's advice for several images: a short label before each one.
+            ...m.images.flatMap((img): (Anthropic.TextBlockParam | Anthropic.ImageBlockParam)[] => [
+              ...(img.label ? [{ type: 'text' as const, text: `${img.label}:` }] : []),
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: img.mediaType, data: img.data },
+              },
+            ]),
+            { type: 'text', text: m.text },
+          ],
+        };
       case 'assistant':
         return { role: 'assistant', content: m.text };
       case 'assistant_raw':

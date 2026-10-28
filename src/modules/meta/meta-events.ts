@@ -1,5 +1,17 @@
 import type { MetaChannelType } from './meta.types.js';
 
+/**
+ * A photo or file on an incoming message. Messenger and Instagram send a link to Meta's CDN
+ * (it expires); WhatsApp sends a media id that needs an authorised download.
+ */
+export interface MetaAttachment {
+  kind: 'image' | 'file';
+  url?: string;
+  mediaId?: string;
+  contentType?: string;
+  name?: string;
+}
+
 /** One thing that happened on a Meta channel, in a shape the inbox understands. */
 export type MetaEvent =
   | {
@@ -13,7 +25,7 @@ export type MetaEvent =
       at: Date;
       type: 'text' | 'image' | 'file';
       text: string;
-      attachments: { url: string; contentType?: string; name?: string }[];
+      attachments: MetaAttachment[];
       /** WhatsApp sends the customer's profile name with each message. */
       profileName?: string;
     }
@@ -95,7 +107,7 @@ function parseMessaging(
       ];
     // Reactions, unsends and deleted messages are not new messages.
     if (msg.is_deleted === true || msg.is_unsupported === true) return [];
-    const attachments: { url: string; contentType?: string; name?: string }[] = [];
+    const attachments: MetaAttachment[] = [];
     let type: 'text' | 'image' | 'file' = 'text';
     for (const a of arr(msg.attachments)) {
       if (!isObj(a)) continue;
@@ -104,10 +116,10 @@ function parseMessaging(
       if (!url) continue;
       if (kind === 'image') {
         if (type === 'text') type = 'image';
-        attachments.push({ url, contentType: 'image/*' });
+        attachments.push({ kind: 'image', url });
       } else {
         type = 'file';
-        attachments.push({ url, ...(kind ? { name: kind } : {}) });
+        attachments.push({ kind: 'file', url, ...(kind ? { name: kind } : {}) });
       }
     }
     const text = str(msg.text) ?? '';
@@ -198,7 +210,7 @@ function parseWhatsApp(value: Json): MetaEvent[] {
     const kind = str(m.type) ?? '';
     let text: string;
     let type: 'text' | 'image' | 'file' = 'text';
-    const attachments: { url: string; contentType?: string; name?: string }[] = [];
+    const attachments: MetaAttachment[] = [];
     switch (kind) {
       case 'text':
         text = str(isObj(m.text) ? m.text.body : undefined) ?? '';
@@ -218,10 +230,17 @@ function parseWhatsApp(value: Json): MetaEvent[] {
       }
       case 'image':
       case 'sticker': {
-        // Media needs an authorised download; the inbox shows that a photo arrived.
+        // Media needs an authorised download with the channel's token; it is fetched later.
         type = 'image';
         const media = isObj(m[kind]) ? m[kind] : {};
         text = str(media.caption) ?? '';
+        const mediaId = str(media.id);
+        if (mediaId)
+          attachments.push({
+            kind: 'image',
+            mediaId,
+            ...(str(media.mime_type) ? { contentType: str(media.mime_type)! } : {}),
+          });
         break;
       }
       case 'document':

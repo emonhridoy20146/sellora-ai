@@ -9,6 +9,9 @@
  *   node scripts/claude-stand-in.mjs            # listens on 127.0.0.1:4010
  *   AI_ANTHROPIC_API_KEY=sk-ant-stand-in AI_ANTHROPIC_BASE_URL=http://127.0.0.1:4010 npm run dev:worker
  *
+ * It cannot see photos. When the customer's newest turn carries some, it says so in its
+ * reply, and GET /__requests (a test hook) lists what each request carried, photos included.
+ *
  * Never point a production deployment at it.
  */
 import { createServer } from 'node:http';
@@ -24,13 +27,25 @@ const COMPLAINT =
   /(complain|torn|chhera|chera|broken|bhanga|refund|faulty|wrong item|খারাপ|ছেঁড়া|অভিযোগ)/i;
 
 let seq = 0;
+/** What recent requests carried, newest last (for GET /__requests). */
+const requests = [];
 
-function lastCustomerText(messages) {
+/** The customer's newest turn: its text and its photos (tool results are not customer turns). */
+function lastCustomerTurn(messages) {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
-    if (m.role === 'user' && typeof m.content === 'string') return m.content;
+    if (m.role !== 'user') continue;
+    if (typeof m.content === 'string') return { text: m.content, images: [] };
+    if (m.content.some((b) => b.type === 'tool_result')) continue;
+    return {
+      text: m.content
+        .filter((b) => b.type === 'text')
+        .map((b) => b.text)
+        .join('\n'),
+      images: m.content.filter((b) => b.type === 'image'),
+    };
   }
-  return '';
+  return { text: '', images: [] };
 }
 
 function toolUse(name, input) {
@@ -40,7 +55,8 @@ function toolUse(name, input) {
 function reply(body) {
   const messages = body.messages ?? [];
   const last = messages.at(-1);
-  const customer = lastCustomerText(messages);
+  const turn = lastCustomerTurn(messages);
+  const customer = turn.text;
   const bangla = BENGALI.test(customer);
   const tools = new Set((body.tools ?? []).map((t) => t.name));
 
@@ -86,6 +102,18 @@ function reply(body) {
     ];
   }
 
+  // A real model would look at the photo and search for the item; this one cannot see.
+  if (last?.role === 'user' && turn.images.length)
+    return [
+      {
+        type: 'text',
+        text:
+          `Photo peyechi, dhonnobad! (Stand-in AI: received ${turn.images.length} photo` +
+          `${turn.images.length > 1 ? 's' : ''}; a real Claude model would look at it and ` +
+          'search the catalog.) Ki khujchen ektu likhe bolben?',
+      },
+    ];
+
   if (COMPLAINT.test(customer) && tools.has('handover_to_human'))
     return [toolUse('handover_to_human', { reason: 'complaint', summary: customer.slice(0, 120) })];
 
@@ -117,6 +145,7 @@ const server = createServer((req, res) => {
       });
       res.end(JSON.stringify(payload));
     };
+    if (req.method === 'GET' && req.url === '/__requests') return send(200, { requests });
     if (req.method !== 'POST' || !req.url?.startsWith('/v1/messages'))
       return send(404, { type: 'error', error: { type: 'not_found_error', message: req.url } });
     if (!req.headers['x-api-key'])
@@ -133,6 +162,17 @@ const server = createServer((req, res) => {
         error: { type: 'invalid_request_error', message: 'bad JSON' },
       });
     }
+    const turn = lastCustomerTurn(body.messages ?? []);
+    requests.push({
+      at: new Date().toISOString(),
+      model: body.model,
+      customer: turn.text.slice(0, 200),
+      images: turn.images.map((b) => ({
+        mediaType: b.source?.media_type,
+        bytes: Math.floor(((b.source?.data ?? '').length * 3) / 4),
+      })),
+    });
+    if (requests.length > 50) requests.shift();
     const content = reply(body);
     const usesTool = content.some((b) => b.type === 'tool_use');
     const outText = JSON.stringify(content);

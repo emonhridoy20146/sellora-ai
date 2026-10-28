@@ -76,6 +76,8 @@ export const envSchema = z
     S3_PUBLIC_BASE_URL: z.string().optional(),
     /** Largest photo a merchant may upload, in megabytes. */
     FILE_MAX_IMAGE_MB: z.coerce.number().min(1).max(100).default(10),
+    /** Largest photo from a customer's chat that is saved, in megabytes. */
+    CHAT_MEDIA_MAX_MB: z.coerce.number().min(1).max(100).default(16),
     /** How long an upload link stays valid. */
     STORAGE_UPLOAD_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
 

@@ -860,6 +860,7 @@ describe('AI sales agent', () => {
         outputUsdMicrosPerMTok: 400_000,
         cachedInputUsdMicrosPerMTok: 0,
         contextWindow: 128_000,
+        imageInput: false,
         enabled: true,
         isDefaultForTier: true,
       });

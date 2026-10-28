@@ -38,6 +38,8 @@ interface PurposeRule {
 }
 
 const imageMax = (config: AppConfig) => config.get('FILE_MAX_IMAGE_MB') * MB;
+/** Time a server-side save may take before an unfinished record is swept. */
+const SAVE_GRACE_MS = 10 * 60_000;
 
 export const FILE_RULES: Record<FilePurpose, PurposeRule> = {
   product_image: {
@@ -48,6 +50,17 @@ export const FILE_RULES: Record<FilePurpose, PurposeRule> = {
     module: 'commerce',
     permission: 'catalog.manage',
     removeWhenUnused: true,
+  },
+  // Photos customers send in chats. Private: served only to signed-in staff through the
+  // inbox, never from the public storage route or a public bucket. Kept with the message.
+  chat_media: {
+    types: Object.keys(IMAGE_TYPES),
+    maxBytes: (config) => config.get('CHAT_MEDIA_MAX_MB') * MB,
+    visibility: 'private',
+    dir: 'chat',
+    module: 'inbox',
+    permission: 'inbox.reply',
+    removeWhenUnused: false,
   },
 };
 
@@ -244,6 +257,91 @@ export class FilesService {
     const now = await this.files.findById(id);
     if (now?.status === 'ready') return now;
     throw AppError.conflict('upload_expired', 'This upload took too long. Upload the file again.');
+  }
+
+  /**
+   * Saves bytes the server received itself (a photo a customer sent on WhatsApp, for
+   * example). The real type is read from the bytes, the plan's storage limit applies (402
+   * when full), and the file is ready and marked as used by `usedBy` when this returns.
+   */
+  async saveBytes(input: {
+    purpose: FilePurpose;
+    bytes: Buffer;
+    filename: string;
+    usedBy?: FileRef;
+  }): Promise<FileDoc> {
+    const rule = FILE_RULES[input.purpose];
+    const contentType = sniffImageType(input.bytes.subarray(0, SNIFF_BYTES));
+    if (!contentType || !rule.types.includes(contentType))
+      throw AppError.unprocessable('unsupported_file_type', 'The file is not a supported image.');
+    const max = rule.maxBytes(this.config);
+    if (input.bytes.length > max)
+      throw AppError.unprocessable(
+        'file_too_large',
+        `Files can be up to ${Math.round(max / MB)} MB.`,
+      );
+
+    const size = input.bytes.length;
+    await this.reserve(size);
+    const id = new Types.ObjectId();
+    const key = `o/${this.orgId()}/${rule.dir}/${id.toHexString()}.${IMAGE_TYPES[contentType]}`;
+    const actor = RequestContext.actor();
+    let file: FileDoc;
+    try {
+      // Pending until the bytes are stored, so a crash in between leaves something the sweep removes.
+      file = await this.files.create({
+        _id: id,
+        key,
+        purpose: input.purpose,
+        filename: cleanFilename(input.filename),
+        contentType,
+        size,
+        status: 'pending',
+        visibility: rule.visibility,
+        usedBy: input.usedBy ? [input.usedBy] : [],
+        createdBy: { type: actor.type, id: actor.id },
+        expiresAt: new Date(Date.now() + SAVE_GRACE_MS),
+      });
+    } catch (err) {
+      await this.release(size);
+      throw err;
+    }
+    try {
+      await this.storage.put(key, input.bytes, contentType);
+    } catch (err) {
+      await this.purge(file, { status: 'pending' });
+      throw err;
+    }
+    const ready = await this.files.findOneAndUpdate(
+      { _id: id, status: 'pending' },
+      { $set: { status: 'ready', readyAt: new Date() }, $unset: { expiresAt: '' } },
+    );
+    if (!ready) throw new Error(`Saved file ${id.toHexString()} vanished before it was ready`);
+    return ready;
+  }
+
+  /** A ready file's bytes, or null when it is missing or larger than `maxBytes`. */
+  async readBytes(file: FileDoc, maxBytes: number): Promise<Buffer | null> {
+    if (file.status !== 'ready' || file.size > maxBytes) return null;
+    const object = await this.storage.open(file.key);
+    if (!object) return null;
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const chunk of object.body as AsyncIterable<Buffer>) {
+      total += chunk.length;
+      if (total > maxBytes) {
+        object.body.destroy();
+        return null;
+      }
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  }
+
+  /** Streams a ready file for an authorised route, or null when it is missing. */
+  async open(file: FileDoc) {
+    if (file.status !== 'ready') return null;
+    return this.storage.open(file.key);
   }
 
   publicUrl(file: FileDoc): string {

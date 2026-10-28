@@ -70,9 +70,13 @@ describe('parseMetaWebhook', () => {
     expect(photo).toMatchObject({
       type: 'image',
       text: '',
-      attachments: [{ url: 'https://cdn.example/p.jpg', contentType: 'image/*' }],
+      attachments: [{ kind: 'image', url: 'https://cdn.example/p.jpg' }],
     });
-    expect(file).toMatchObject({ type: 'file', text: 'invoice' });
+    expect(file).toMatchObject({
+      type: 'file',
+      text: 'invoice',
+      attachments: [{ kind: 'file', url: 'https://cdn.example/a.pdf', name: 'file' }],
+    });
     expect(tap).toMatchObject({ kind: 'message', messageId: 'm_tap', text: 'Order now' });
   });
 
@@ -233,7 +237,12 @@ describe('parseMetaWebhook', () => {
               type: 'interactive',
               interactive: { type: 'list_reply', list_reply: { id: 'r', title: 'Size M' } },
             },
-            { ...base, id: 'w3', type: 'image', image: { id: 'MEDIA', caption: 'this one' } },
+            {
+              ...base,
+              id: 'w3',
+              type: 'image',
+              image: { id: 'MEDIA', caption: 'this one', mime_type: 'image/jpeg' },
+            },
             { ...base, id: 'w4', type: 'document', document: { id: 'M2', filename: 'memo.pdf' } },
             {
               ...base,
@@ -252,6 +261,9 @@ describe('parseMetaWebhook', () => {
         ['file', 'memo.pdf'],
         ['text', 'Shared a location: Gulshan: https://maps.google.com/?q=23.81,90.41'],
       ]);
+      expect(events[2]).toMatchObject({
+        attachments: [{ kind: 'image', mediaId: 'MEDIA', contentType: 'image/jpeg' }],
+      });
     });
 
     it('reads statuses, with the reason for a failure', () => {

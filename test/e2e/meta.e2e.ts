@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { QUEUES } from '../../src/infra/queue/queue.constants.js';
 import { AiRepliesService } from '../../src/modules/ai/agent/ai-replies.service.js';
 import { InboxRealtime } from '../../src/modules/inbox/inbox-realtime.service.js';
+import { MessagingService } from '../../src/modules/inbox/messaging.service.js';
 import type { OutboxJob } from '../../src/modules/inbox/outbox.js';
 import { MetaInbound, type InboundOutcome } from '../../src/modules/meta/meta-inbound.service.js';
 import { MetaSender, type SendOutcome } from '../../src/modules/meta/meta-sender.service.js';
@@ -663,6 +664,28 @@ describe('Messenger, Instagram and WhatsApp', () => {
       });
       const stored = await t.db.collection('messages').findOne({ text: 'Ji ache, ৳3,000.' });
       expect(stored?.externalId).toMatch(/^m_out_/);
+    });
+
+    it('never messages the customer twice when saving the result fails once', async () => {
+      const conv = await conversationOn(channel.messenger.id);
+      const spy = vi
+        .spyOn(t.app.get(MessagingService), 'updateDelivery')
+        .mockRejectedValueOnce(new Error('database blip'));
+      try {
+        await reply(conv.id, 'Ekbar-i jabe').expect(201);
+        // Sent, but recording it failed: the queue keeps the job to try again.
+        expect(await drainOutbox({ finalAttempt: false })).toEqual([{ error: expect.any(Error) }]);
+        expect(graph.sent()).toHaveLength(1);
+      } finally {
+        spy.mockRestore();
+      }
+      expect(await drainOutbox()).toEqual([
+        { status: 'sent', parts: 1, externalId: expect.stringMatching(/^m_out_/) },
+      ]);
+      expect(graph.sent()).toHaveLength(1);
+      expect(await byText(conv.id, 'Ekbar-i jabe')).toMatchObject({
+        delivery: { status: 'sent', error: null },
+      });
     });
 
     it('splits a long Instagram reply and sends the parts in order', async () => {

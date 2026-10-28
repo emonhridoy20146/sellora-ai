@@ -66,6 +66,19 @@ export function toConversationDto(
 
 export type ConversationDto = ReturnType<typeof toConversationDto>;
 
+/**
+ * Where staff load an attachment from. Saved photos are private and served by the inbox
+ * (relative to the API, like every route); a photo still being saved, or one that could
+ * not be, has no address yet.
+ */
+export function attachmentUrl(m: MessageDoc, index: number): string | null {
+  const a = m.attachments[index]!;
+  if (a.fileId)
+    return `/v1/orgs/${m.orgId.toHexString()}/conversations/${m.conversationId.toHexString()}/messages/${m._id.toHexString()}/attachments/${index}`;
+  if (a.status === 'pending' || a.status === 'failed') return null;
+  return a.url || null;
+}
+
 export function toMessageDto(m: MessageDoc) {
   return {
     id: m._id.toHexString(),
@@ -74,11 +87,13 @@ export function toMessageDto(m: MessageDoc) {
     type: m.type,
     sender: { type: m.sender.type, id: m.sender.id ?? null, name: m.sender.name ?? null },
     text: m.text,
-    attachments: m.attachments.map((a) => ({
-      url: a.url,
+    attachments: m.attachments.map((a, i) => ({
+      url: attachmentUrl(m, i),
       contentType: a.contentType ?? null,
       name: a.name ?? null,
       size: a.size ?? null,
+      status: a.status ?? ('ready' as const),
+      error: a.status === 'failed' ? (a.error ?? 'Could not be saved') : null,
     })),
     clientId: m.clientId ?? null,
     delivery: { status: m.delivery.status, error: m.delivery.error ?? null },
@@ -101,11 +116,14 @@ export function toVisitorMessageDto(m: MessageDoc, businessName: string) {
     name: mine ? null : m.sender.type === 'user' ? (m.sender.name ?? businessName) : businessName,
     type: m.type,
     text: m.text,
-    attachments: m.attachments.map((a) => ({
-      url: a.url,
-      contentType: a.contentType ?? null,
-      name: a.name ?? null,
-    })),
+    // Private files (saved chat photos) are for staff only.
+    attachments: m.attachments
+      .filter((a) => !a.fileId && a.url)
+      .map((a) => ({
+        url: a.url,
+        contentType: a.contentType ?? null,
+        name: a.name ?? null,
+      })),
     clientId: mine ? (m.clientId ?? null) : null,
     createdAt: m.createdAt.toISOString(),
   };
