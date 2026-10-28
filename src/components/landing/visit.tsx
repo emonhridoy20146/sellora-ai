@@ -46,10 +46,12 @@ export function LandingVisit({
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(id ? { visitorId: id } : {}),
-      keepalive: true,
-    }).catch(() => {
-      // Counting is best effort.
-    });
+    })
+      // Read the (tiny) answer so the browser can close the request.
+      .then((res) => res.text())
+      .catch(() => {
+        // Counting is best effort.
+      });
   }, [slug, pageId, live]);
   return null;
 }

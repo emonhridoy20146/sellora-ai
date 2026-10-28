@@ -79,37 +79,48 @@ function PriceTag({ ctx, size = 'lg' }: { ctx: Ctx; size?: 'lg' | 'xl' }) {
 }
 
 function Hero({ s, ctx }: { s: LandingSectionOf<'hero'>; ctx: Ctx }) {
+  // An empty headline shows the product's name and no picture its first one (as the editor says).
+  const product = ctx.view.product;
+  const heading = s.heading || product?.name || '';
+  const first = product?.images[0];
+  const image =
+    s.image ?? (first ? { url: first.url, alt: first.alt || product?.name || '' } : null);
   return (
     <section className="bg-surface">
-      <div className="mx-auto grid max-w-5xl items-center gap-8 px-4 py-10 sm:py-14 md:grid-cols-2">
-        <div className={cn('text-center', s.image && 'md:text-left')}>
+      <div
+        className={cn(
+          'mx-auto grid max-w-5xl items-center gap-8 px-4 py-10 sm:py-14',
+          image && 'md:grid-cols-2',
+        )}
+      >
+        <div className={cn('text-center', image && 'md:text-left')}>
           {s.badge ? (
             <span className="mb-4 inline-block rounded-full bg-accent px-3 py-1 text-sm font-semibold text-on-accent">
               {s.badge}
             </span>
           ) : null}
           <h1 className="font-display text-3xl font-bold tracking-tight text-balance sm:text-4xl lg:text-5xl">
-            {s.heading}
+            {heading}
           </h1>
           {s.subheading ? (
             <p className="mt-4 text-lg text-pretty text-muted">{s.subheading}</p>
           ) : null}
           {s.showPrice ? (
-            <div className={cn('mt-6', s.image && 'md:[&>p]:justify-start')}>
+            <div className={cn('mt-6', image && 'md:[&>p]:justify-start')}>
               <PriceTag ctx={ctx} size="xl" />
             </div>
           ) : null}
-          {s.buttonLabel && ctx.view.product ? (
+          {s.buttonLabel && product ? (
             <OrderButton label={s.buttonLabel} className="mt-6 w-full sm:w-auto" />
           ) : null}
         </div>
-        {s.image ? (
-          <div className={cn(!s.heading && 'md:col-span-2')}>
+        {image ? (
+          <div className="max-md:order-first">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={s.image.url}
-              alt={s.image.alt}
-              className="mx-auto w-full max-w-md rounded-store-lg object-cover"
+              src={image.url}
+              alt={image.alt}
+              className="mx-auto aspect-square w-full max-w-md rounded-store-lg object-cover"
               fetchPriority="high"
             />
           </div>
@@ -146,7 +157,17 @@ function Gallery({ s, ctx }: { s: LandingSectionOf<'gallery'>; ctx: Ctx }) {
   return (
     <section className="mx-auto max-w-5xl px-4 py-10">
       <Title>{s.title}</Title>
-      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <ul
+        className={cn(
+          'grid gap-3',
+          // One or two pictures sit centred instead of leaving empty grid cells.
+          images.length === 1
+            ? 'mx-auto max-w-md'
+            : images.length === 2
+              ? 'mx-auto max-w-3xl grid-cols-2'
+              : 'grid-cols-2 sm:grid-cols-3',
+        )}
+      >
         {images.map((img, i) => (
           <li key={`${img.url}-${i}`} className="overflow-hidden rounded-store-lg bg-tint">
             {/* eslint-disable-next-line @next/next/no-img-element */}

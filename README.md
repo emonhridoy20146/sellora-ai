@@ -2,15 +2,17 @@
 
 The online stores of Sellora AI. One Next.js app serves every business's shop: the `Host`
 header says which store a request is for (`<handle>.<STOREFRONT_BASE_DOMAIN>`, set in
-sellora-api, or a business's own domain once it is connected). Shoppers browse, add to a cart and order with cash on delivery; the order lands
-in the business's Orders in the dashboard like any other.
+sellora-api, or a business's own domain once it is connected). Shoppers browse, add to a cart
+and order with cash on delivery, or order one product straight from a landing page
+(`<store>/<slug>`); the order lands in the business's Orders in the dashboard like any other.
 
 Next.js 16 (App Router), React 19, TypeScript (strict), Tailwind CSS 4. No database: every
 page renders on the server from [sellora-api](../sellora-api)'s storefront routes.
 
 Stores are created, designed and sent for review in sellora-web (Online store), and approved by
-the super-admin there. See `docs/adr/0014-online-stores.md` (stores) and
-`docs/adr/0015-store-custom-domains.md` (custom domains) in sellora-api for the design.
+the super-admin there; landing pages likewise (Landing pages). See
+`docs/adr/0014-online-stores.md` (stores), `docs/adr/0015-store-custom-domains.md` (custom
+domains) and `docs/adr/0016-landing-pages.md` (landing pages) in sellora-api for the design.
 
 ## Run it locally
 
@@ -95,7 +97,9 @@ sellora-web, and connecting a custom domain by `scripts/domains-flow.mjs` there.
 | `/order?receipt=…`            | The receipt after ordering (a signed token valid for 90 days).                         |
 | `/track`                      | Order tracking by order number and phone.                                              |
 | `/pages/[key]`                | The business's pages: about, delivery, returns, privacy, terms.                        |
-| `/sitemap.xml`, `/robots.txt` | Per store; drafts and previews are never indexed.                                      |
+| `/[slug]`                     | A landing page: its sections, the order form, a sticky order button on phones.         |
+| `/[slug]/thanks?receipt=…`    | The thank-you page after a landing page order (signed receipt, never indexed).         |
+| `/sitemap.xml`, `/robots.txt` | Per store, with its live landing pages; drafts and previews are never indexed.         |
 
 A store that is not open yet shows "opening soon", a paused store shows a closed note, a
 suspended store shows "not available", and an address with no store shows a page saying so.
@@ -128,6 +132,18 @@ suspended store shows "not available", and an address with no store shows a page
   (`lib/theme-style.ts`), so all six themes share one set of components.
 - **Language.** Every word shoppers see is in `lib/i18n.ts`, in English and Bangla; the store's
   language picks one. Prices use `Intl` with the business's currency.
+- **Landing pages.** The app has two root layouts in route groups: `(shop)` for the store
+  (header, footer, cart) and `(landing)/[slug]` for landing pages (a slim header and footer,
+  no cart). The API decides whether a slug is a live page, a paused or unavailable one (a
+  short holding page) or nothing (404); `getLanding` is cached per request so the layout and
+  the page share one call. A preview of the draft comes from the dashboard as
+  `?preview=<token>`, which `src/proxy.ts` moves into the `x-sl-landing-preview` header
+  (replacing whatever the browser sent). The order form (`components/landing/order-form.tsx`)
+  shows the same prices the API will charge (`lib/landing-offer.ts` mirrors its package
+  arithmetic) and posts to `/api/landing/[slug]/order` with an `Idempotency-Key`; the API
+  prices it again. Where the shopper came from (UTM tags, ad click ids, the referring site)
+  is kept for the visit in session storage and sent with the order; a small beacon counts the
+  visit once the page has rendered.
 - **Security headers.** No framing, no referrer beyond the origin, no camera, microphone or
   location (`next.config.ts`).
 
@@ -137,13 +153,19 @@ suspended store shows "not available", and an address with no store shows a page
 src/
   proxy.ts                gives the layout the page's path (for main-address redirects)
   app/
-    page.tsx              home page (sections)
-    products/ cart/ checkout/ order/ track/ pages/[key]/
-    api/                  cart, checkout and track routes for the browser (same-site only)
+    (shop)/               the store's root layout and pages
+      page.tsx            home page (sections)
+      products/ cart/ checkout/ order/ track/ pages/[key]/
+      [...rest]/          the store's 404 for deeper unknown paths
+    (landing)/[slug]/     a landing page's own root layout, the page and thanks/
+    api/                  cart, checkout, track and landing (order, visit) routes for the
+                          browser (same-site only)
     preview/              opens a signed preview (reached as /__preview)
     sitemap.xml/ robots.txt/
   components/
     sections/             home page sections
+    landing/              landing page sections, order form, countdown, sticky button,
+                          visit beacon
     header, footer, mobile nav, product card, gallery, add to cart, cart view,
     checkout form, track form, order status, holding page
   lib/
@@ -151,6 +173,9 @@ src/
     forward.ts            browser → API forwarding for the /api routes
     request.ts            shopper address behind proxies, same-origin check
     main-address.ts       where to send shoppers on another address of the store
+    landing.ts            the landing page for a slug (server, cached per request)
+    landing-offer.ts      package prices, totals, countdown, video and attribution helpers
+    shopper.ts            the shopper's saved name, phone and address
     cart.ts, cart-lines.ts  the cart in localStorage (30 lines, 50 of each)
     money.ts phone.ts color.ts i18n.ts theme-style.ts types.ts
 ```
@@ -158,7 +183,9 @@ src/
 ## Not built yet
 
 - Online payments at checkout: cash on delivery only.
-- Visit and conversion numbers.
+- Visit and conversion numbers for the store (landing pages have them).
+- Landing page videos were checked only by the player address: YouTube is not reachable from
+  the build machine, so a stand-in answered the player in the browser test.
 - Tested only on development addresses (`*.sellora.localhost` and made-up custom domains
   answered by a DNS stand-in), not yet on a real domain with wildcard DNS, Caddy and
   certificates.

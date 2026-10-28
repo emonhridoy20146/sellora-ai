@@ -565,7 +565,7 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
           </p>
         </div>
         {preview ? (
-          <p className="rounded-store bg-ink p-3 text-sm text-white">{t.previewLanding}</p>
+          <p className="rounded-store bg-ink p-3 text-sm text-white">{t.previewLandingForm}</p>
         ) : null}
         {formError ? (
           <p className="text-sm font-medium text-red-700" role="alert">
