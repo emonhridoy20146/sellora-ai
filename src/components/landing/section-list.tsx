@@ -34,6 +34,7 @@ import {
 } from '@/lib/landing';
 import { moveItem, newSectionId } from '@/lib/stores';
 import { cn } from '@/lib/utils';
+import { useStarterTexts } from './hooks';
 import { LandingSectionFields, type LandingPatch } from './section-fields';
 
 /**
@@ -54,6 +55,7 @@ export function LandingSectionList({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState<string | null>(null);
+  const starter = useStarterTexts(orgId);
   const update = (id: string, patch: LandingPatch) =>
     setSections((list) =>
       list.map((s) => (s.id === id ? ({ ...s, ...patch } as LandingSection) : s)),
@@ -81,7 +83,7 @@ export function LandingSectionList({
       <ol className="grid gap-2">
         {sections.map((s, i) => {
           const expanded = open === s.id;
-          const problem = landingSectionProblem(s);
+          const problem = landingSectionProblem(s, starter);
           const label = LANDING_SECTION_LABEL[s.type];
           return (
             <li

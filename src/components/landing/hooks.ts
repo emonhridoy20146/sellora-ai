@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { api } from '@/lib/api/client';
 import type {
   LandingPage,
@@ -51,7 +52,16 @@ export function useLandingStats(orgId: string, id: string, days: number) {
 export function useLandingTemplates(orgId: string) {
   return useQuery({
     queryKey: landingKeys.templates(orgId),
-    queryFn: () => api<{ items: LandingTemplate[] }>(`/orgs/${orgId}/landing-pages/templates`),
+    queryFn: () =>
+      api<{ items: LandingTemplate[]; starterTexts: string[] }>(
+        `/orgs/${orgId}/landing-pages/templates`,
+      ),
     staleTime: 30 * 60_000,
   });
+}
+
+/** The template words a page cannot go live with (empty until the list has loaded). */
+export function useStarterTexts(orgId: string): ReadonlySet<string> {
+  const { data } = useLandingTemplates(orgId);
+  return useMemo(() => new Set(data?.starterTexts ?? []), [data]);
 }

@@ -126,6 +126,8 @@ src/
     stores/               store status, web address field, theme picker, section editor,
                           picture picker, preview button, custom domain card with its DNS
                           records, the super-admin's domain decision buttons
+    landing/              landing page editor: section list and fields, offer editor
+                          (packages, add-on), picture field, address field, preview button
   lib/
     api/                  fetch wrapper (CSRF, one refresh on 401), error type, response types
     format.ts             money in minor units, credits, dates (Intl, any currency)
@@ -137,6 +139,8 @@ src/
     couriers.ts           courier statuses and filters, weights in kg, risk labels
     stores.ts             store statuses and actions, readiness steps, sections, colour
                           contrast, store pages, custom domain statuses and next steps
+    landing.ts            landing page statuses, sections and their checks before
+                          publishing, package prices, the reviewer's "words on the page"
   config/
     site.ts               public settings from env
     marketing.ts          feature list with live/coming-soon flags
@@ -260,6 +264,30 @@ credentials as above:
 node scripts/domains-flow.mjs
 ```
 
+### Landing pages browser flow
+
+`scripts/landing-flow.mjs` follows a landing page from the first click to a cancelled order,
+on the open store `stores-flow.mjs` leaves behind: the empty Landing pages list, a new page
+(product, template, a reserved address refused), the editor (the template's sample words and
+sample reviews listed as things to fix before publishing, then replaced or hidden; headline,
+two packages, an add-on, a video and a countdown added, a section hidden, saved), the signed
+preview on the shop address, publishing for review while shoppers still get "not found", the
+super-admin's queue, review page and approval, then a shopper on a phone arriving from a
+Facebook ad: the sticky order button, a package, a size and the add-on, ordering, and the
+thank-you page. It then checks the order in Orders with the page and the ad it came from, the
+page's numbers, the same phone ordering again within 15 minutes getting its first order back,
+the "only 9 left" stock line after the order is confirmed, pausing and resuming, the
+super-admin taking the page down and putting it back, a short page in Bangla, and the sitemap.
+Screenshots go to `smoke-output/landing/`. It deletes the business's earlier landing pages
+first and cancels the orders it placed at the end. Automatic landing page approval is turned
+off for the run. YouTube cannot be reached from the build machine, so the browser answers the
+video player with a stand-in page; the check is that the page embeds the right player. Same
+credentials as above:
+
+```bash
+node scripts/landing-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -306,7 +334,10 @@ parcel has been booked with each real courier. Online stores work (M6 part 1: th
 Online store pages, the super-admin's review queue, custom domains, and the shops themselves
 in `sellora-storefront`), but only on development addresses (`*.sellora.localhost`, and made-up
 custom domains answered by a DNS stand-in) so far, so the public site keeps "Your own online
-store" coming soon until stores run on a real domain with real certificates. Marketing and analytics appear in the merchant sidebar as
+store" coming soon until stores run on a real domain with real certificates. Landing pages
+work (M7 part 1: the dashboard's Landing pages editor and numbers, the super-admin's review
+queue, and the pages in `sellora-storefront`) on the same development addresses. Marketing and
+analytics appear in the merchant sidebar as
 disabled "Soon" items. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.
 

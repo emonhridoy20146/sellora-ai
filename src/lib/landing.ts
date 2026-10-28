@@ -390,12 +390,20 @@ export function isVideoLink(raw: string): boolean {
   return false;
 }
 
+/** No template words to look for (before the list has loaded). */
+const NO_STARTER: ReadonlySet<string> = new Set();
+
 /**
  * What a shown section still needs before the page can be published; null when it is fine.
- * Hidden sections never block publishing.
+ * Hidden sections never block publishing. `starter` is the API's list of template words that
+ * are instructions or sample reviews, which cannot go live as they are.
  */
-export function landingSectionProblem(s: LandingSection): string | null {
+export function landingSectionProblem(
+  s: LandingSection,
+  starter: ReadonlySet<string> = NO_STARTER,
+): string | null {
   if (!s.enabled) return null;
+  const isStarter = (text: string) => starter.has(text.trim());
   switch (s.type) {
     case 'video':
       if (!s.url.trim()) return 'Add the video link.';
@@ -409,16 +417,34 @@ export function landingSectionProblem(s: LandingSection): string | null {
     case 'before_after':
       return s.before && s.after ? null : 'Add both the before and the after picture.';
     case 'reviews':
-      return s.items.some((r) => !r.text.trim() && !r.image)
-        ? 'Every review needs words or a screenshot.'
+      if (s.items.some((r) => !r.text.trim() && !r.image))
+        return 'Every review needs words or a screenshot.';
+      return s.items.some((r) => isStarter(r.name) || isStarter(r.text))
+        ? 'Replace the sample reviews with real ones from your buyers, or hide this section.'
         : null;
+    case 'benefits':
+    case 'problem_solution':
+    case 'steps': {
+      const words =
+        s.type === 'benefits'
+          ? s.items.map((x) => x.text)
+          : s.type === 'steps'
+            ? s.steps.map((x) => x.text)
+            : [s.problem, s.solution];
+      return words.some(isStarter)
+        ? 'Replace the template’s sample words with your own, or hide this section.'
+        : null;
+    }
     default:
       return null;
   }
 }
 
 /** Everything that stops the draft from being published, as sentences. */
-export function publishBlockers(content: LandingContent): string[] {
+export function publishBlockers(
+  content: LandingContent,
+  starter: ReadonlySet<string> = NO_STARTER,
+): string[] {
   const out: string[] = [];
   const forms = content.sections.filter((s) => s.type === 'order_form' && s.enabled).length;
   if (forms !== 1) out.push('Show one order form on the page.');
@@ -426,7 +452,7 @@ export function publishBlockers(content: LandingContent): string[] {
   if (content.offer.addOn && content.offer.addOn.productId === content.offer.productId)
     out.push('Choose a different product for the add-on.');
   for (const s of content.sections) {
-    const p = landingSectionProblem(s);
+    const p = landingSectionProblem(s, starter);
     if (p) out.push(`${LANDING_SECTION_LABEL[s.type]}: ${p}`);
   }
   return out;

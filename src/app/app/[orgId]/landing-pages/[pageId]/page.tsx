@@ -6,7 +6,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { LandingImageField } from '@/components/landing/image-field';
-import { landingKeys, useLandingPage } from '@/components/landing/hooks';
+import { landingKeys, useLandingPage, useStarterTexts } from '@/components/landing/hooks';
 import { OfferEditor } from '@/components/landing/offer-editor';
 import { LandingPreviewButton } from '@/components/landing/preview-button';
 import { LandingSectionList } from '@/components/landing/section-list';
@@ -48,9 +48,10 @@ function Editor({ page }: { page: LandingPage }) {
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
 
+  const starter = useStarterTexts(org.id);
   const draft: LandingContent = { sections, offer, seo, settings };
   const dirty = canonicalJson(draft) !== canonicalJson(page.draft);
-  const blockers = publishBlockers(draft);
+  const blockers = publishBlockers(draft, starter);
   const pkgProblem = Object.values(packageProblems(offer.packages, null))[0] ?? null;
   const addOnProblem = offer.addOn && !offer.addOn.label.trim() ? 'Say what the add-on is.' : null;
   const saveProblem = pkgProblem ?? addOnProblem;

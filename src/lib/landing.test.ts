@@ -106,6 +106,29 @@ describe('publishing', () => {
       ),
     ).toEqual(['Picture: Add the picture.']);
   });
+
+  it("holds back the template's sample words until they are replaced or hidden", () => {
+    const starter = new Set(['Write the first step.', 'A happy buyer']);
+    const steps = {
+      ...newLandingSection('steps', 'en'),
+      steps: [{ text: ' Write the first step. ' }],
+    };
+    const reviews = {
+      ...newLandingSection('reviews', 'en'),
+      items: [{ name: 'A happy buyer', text: 'Loved it', rating: 5, image: null }],
+    };
+    const page = content({ sections: [...content().sections, steps, reviews] as never });
+    expect(publishBlockers(page, starter)).toEqual([
+      'How to use: Replace the template’s sample words with your own, or hide this section.',
+      'Reviews: Replace the sample reviews with real ones from your buyers, or hide this section.',
+    ]);
+    // Without the list (still loading) the editor does not guess; the API checks again.
+    expect(publishBlockers(page)).toEqual([]);
+    expect(landingSectionProblem({ ...steps, enabled: false } as never, starter)).toBeNull();
+    expect(
+      landingSectionProblem({ ...steps, steps: [{ text: 'Shake well.' }] } as never, starter),
+    ).toBeNull();
+  });
 });
 
 describe('packages', () => {
