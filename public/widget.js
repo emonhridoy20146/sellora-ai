@@ -82,7 +82,7 @@
 
   window.SelloraChat = {
     open: function () {
-      frame.contentWindow &&
+      if (frame.contentWindow)
         frame.contentWindow.postMessage({ source: 'sellora-host', type: 'open' }, origin);
     },
   };

@@ -839,9 +839,43 @@ export interface Channel {
     color: string;
     askContact: boolean;
   } | null;
-  account: { externalId: string; displayName: string } | null;
+  /** The page, Instagram account or WhatsApp number behind a Meta channel. */
+  account: {
+    externalId: string;
+    displayName: string;
+    username: string | null;
+    pageId: string | null;
+    wabaId: string | null;
+  } | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** Whether Messenger, Instagram and WhatsApp can be connected on this platform. */
+export interface MetaSettings {
+  configured: boolean;
+  appId: string | null;
+  graphVersion: string;
+  /** WhatsApp Embedded Signup configuration id, when the one-click flow is set up. */
+  whatsappEmbeddedSignup: string | null;
+  redirectUri: string;
+}
+
+/** A Facebook page from a login, and what of it is already connected. */
+export interface MetaPageChoice {
+  id: string;
+  name: string;
+  canMessage: boolean;
+  instagram: { id: string; username: string | null } | null;
+  connected: {
+    messenger: 'here' | 'elsewhere' | null;
+    instagram: 'here' | 'elsewhere' | null;
+  };
+}
+
+export interface MetaLoginResult {
+  sessionId: string;
+  pages: MetaPageChoice[];
 }
 
 export interface Contact {
@@ -873,6 +907,8 @@ export interface Conversation {
   lastMessage: { text: string; at: string; direction: 'in' | 'out'; senderType: string } | null;
   lastMessageAt: string;
   lastInboundAt: string | null;
+  /** Messenger, Instagram and WhatsApp: replies are allowed until then. Null: no limit. */
+  replyWindowEndsAt: string | null;
   unread: number;
   tags: string[];
   locked: boolean;
@@ -895,10 +931,12 @@ export interface InboxMessage {
     size: number | null;
   }[];
   clientId: string | null;
-  delivery: { status: string; error: string | null };
+  delivery: { status: DeliveryStatus; error: string | null };
   ai: { credits: number } | null;
   createdAt: string;
 }
+
+export type DeliveryStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 
 export interface TeamMember {
   userId: string;

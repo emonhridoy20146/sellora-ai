@@ -1,10 +1,16 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ExternalLink, Globe, MessageCircle, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ExternalLink, Globe, MessageCircle, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useSyncExternalStore } from 'react';
 import { toast } from 'sonner';
+import { ChannelGlyph } from '@/components/channel-icons';
+import {
+  WhatsAppDialog,
+  useMetaSettings,
+  useStartPageLogin,
+} from '@/components/channels/meta-connect';
 import { inboxKeys, useChannels } from '@/components/inbox/data';
 import { useOrg } from '@/components/org-context';
 import { Alert } from '@/components/ui/alert';
@@ -21,7 +27,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api/client';
 import { ApiError, errorMessage } from '@/lib/api/errors';
-import type { Channel } from '@/lib/api/types';
+import type { Channel, MetaSettings } from '@/lib/api/types';
+import { accountLine } from '@/lib/channels';
 import { CHANNEL_LABEL, embedSnippet } from '@/lib/inbox';
 
 interface Draft {
@@ -217,11 +224,21 @@ function WebChatForm({ channel, onDone }: { channel?: Channel; onDone: () => voi
   );
 }
 
-function ChannelCard({ channel, origin }: { channel: Channel; origin: string }) {
+function ChannelCard({
+  channel,
+  origin,
+  meta,
+}: {
+  channel: Channel;
+  origin: string;
+  meta: MetaSettings | undefined;
+}) {
   const { org } = useOrg();
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [reconnectingWa, setReconnectingWa] = useState(false);
+  const startLogin = useStartPageLogin(org.id);
   const refresh = () => qc.invalidateQueries({ queryKey: inboxKeys.channels(org.id) });
 
   const patch = useMutation({
@@ -238,14 +255,18 @@ function ChannelCard({ channel, origin }: { channel: Channel; origin: string }) 
   });
 
   const on = channel.status === 'active';
-  const Icon = channel.type === 'web_chat' ? Globe : MessageCircle;
   const key = channel.webChat?.publicKey;
+  const social = channel.type !== 'web_chat';
+  const account = accountLine(channel);
+  const needsReconnect = channel.status === 'error';
+  const reconnect = () =>
+    channel.type === 'whatsapp' ? setReconnectingWa(true) : startLogin.mutate();
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-start gap-3">
         <span className="grid size-10 shrink-0 place-content-center rounded-lg bg-muted">
-          <Icon className="size-5 text-muted-foreground" aria-hidden />
+          <ChannelGlyph type={channel.type} className="text-muted-foreground" />
         </span>
         <div className="min-w-0 flex-1">
           <CardTitle className="flex flex-wrap items-center gap-2">
@@ -256,17 +277,30 @@ function ChannelCard({ channel, origin }: { channel: Channel; origin: string }) 
           </CardTitle>
           <CardDescription>
             {CHANNEL_LABEL[channel.type]}
-            {channel.statusReason ? ` · ${channel.statusReason}` : ''}
+            {account && account !== channel.name ? ` · ${account}` : ''}
           </CardDescription>
         </div>
         <Switch
           checked={on}
-          disabled={patch.isPending}
+          disabled={patch.isPending || needsReconnect}
           onCheckedChange={(v) => patch.mutate({ status: v ? 'active' : 'disabled' })}
           aria-label={`${channel.name} on or off`}
         />
       </CardHeader>
       <CardContent className="grid gap-4">
+        {needsReconnect && (
+          <Alert tone="danger" title="Replies are stopped">
+            {channel.statusReason ??
+              'Meta stopped accepting messages from this channel. Reconnect it to reply again.'}
+            {meta?.configured && (
+              <div className="mt-2">
+                <Button size="sm" onClick={reconnect} loading={startLogin.isPending}>
+                  <RefreshCw /> Reconnect
+                </Button>
+              </div>
+            )}
+          </Alert>
+        )}
         {key && (
           <div className="grid gap-2">
             <p className="text-sm font-medium">Embed code</p>
@@ -287,12 +321,29 @@ function ChannelCard({ channel, origin }: { channel: Channel; origin: string }) 
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-          <span className="mr-auto text-[13px] text-muted-foreground">
-            AI replies {channel.aiEnabled ? 'on' : 'off'}
-            {channel.webChat?.allowedOrigins.length
-              ? ` · shows on ${channel.webChat.allowedOrigins.join(', ')}`
-              : ' · shows on any site'}
-          </span>
+          {social ? (
+            <label className="mr-auto flex items-center gap-2 text-[13px] text-muted-foreground">
+              <Switch
+                checked={channel.aiEnabled}
+                disabled={patch.isPending}
+                onCheckedChange={(v) => patch.mutate({ aiEnabled: v })}
+                aria-label={`AI replies on ${channel.name}`}
+              />
+              AI replies {channel.aiEnabled ? 'on' : 'off'}
+            </label>
+          ) : (
+            <span className="mr-auto text-[13px] text-muted-foreground">
+              AI replies {channel.aiEnabled ? 'on' : 'off'}
+              {channel.webChat?.allowedOrigins.length
+                ? ` · shows on ${channel.webChat.allowedOrigins.join(', ')}`
+                : ' · shows on any site'}
+            </span>
+          )}
+          {social && !needsReconnect && meta?.configured && (
+            <Button variant="ghost" size="sm" onClick={reconnect} loading={startLogin.isPending}>
+              <RefreshCw /> Reconnect
+            </Button>
+          )}
           {channel.type === 'web_chat' && (
             <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
               <Pencil /> Settings
@@ -303,12 +354,27 @@ function ChannelCard({ channel, origin }: { channel: Channel; origin: string }) 
           </Button>
         </div>
       </CardContent>
-      <WebChatDialog open={editing} onOpenChange={setEditing} channel={channel} />
+      {channel.type === 'web_chat' && (
+        <WebChatDialog open={editing} onOpenChange={setEditing} channel={channel} />
+      )}
+      {channel.type === 'whatsapp' && meta?.configured && (
+        <WhatsAppDialog
+          orgId={org.id}
+          settings={meta}
+          open={reconnectingWa}
+          onOpenChange={setReconnectingWa}
+          reconnect={channel}
+        />
+      )}
       <ConfirmDialog
         open={removing}
         onOpenChange={setRemoving}
         title={`Remove ${channel.name}?`}
-        description="The chat stops working on your website. Its conversations stay in the inbox as history."
+        description={
+          social
+            ? `Customers’ ${CHANNEL_LABEL[channel.type]} messages stop arriving in Sellora. Past conversations stay in the inbox as history.`
+            : 'The chat stops working on your website. Its conversations stay in the inbox as history.'
+        }
         confirmLabel="Remove"
         destructive
         onConfirm={() => remove.mutateAsync()}
@@ -321,34 +387,60 @@ const noSubscribe = () => () => undefined;
 
 export default function ChannelsPage() {
   const { org, can } = useOrg();
+  const manage = can('org.integrations.manage');
   const channels = useChannels(org.id);
+  const meta = useMetaSettings(org.id, manage);
+  const startLogin = useStartPageLogin(org.id);
   const [adding, setAdding] = useState(false);
+  const [addingWa, setAddingWa] = useState(false);
   const origin = useSyncExternalStore(
     noSubscribe,
     () => window.location.origin,
     () => '',
   );
 
-  if (!can('org.integrations.manage'))
+  if (!manage)
     return (
       <EmptyState icon={MessageCircle} title="Only admins manage channels">
         Ask the business owner to connect your website chat or social pages.
       </EmptyState>
     );
 
+  const metaReady = meta.data?.configured === true;
+
   return (
     <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="max-w-xl text-sm text-muted-foreground">
+      <div className="grid gap-3">
+        <p className="max-w-2xl text-sm text-muted-foreground">
           Where customers can message you. Every channel lands in the same{' '}
           <Link href={`/app/${org.id}/inbox`} className="text-primary hover:underline">
             inbox
           </Link>
-          . Messenger, Instagram and WhatsApp are coming next.
+          , and the AI sales agent can answer on each one.
         </p>
-        <Button onClick={() => setAdding(true)}>
-          <Plus /> Add website chat
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setAdding(true)}>
+            <Plus /> Website chat
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!metaReady}
+            loading={startLogin.isPending}
+            onClick={() => startLogin.mutate()}
+          >
+            <ChannelGlyph type="messenger" /> Facebook page &amp; Instagram
+          </Button>
+          <Button variant="outline" disabled={!metaReady} onClick={() => setAddingWa(true)}>
+            <ChannelGlyph type="whatsapp" /> WhatsApp
+          </Button>
+        </div>
+        {meta.data && !metaReady && (
+          <Alert tone="info">
+            Messenger, Instagram and WhatsApp are not switched on for this platform yet. The website
+            chat works now.
+          </Alert>
+        )}
+        {startLogin.isError && <Alert tone="danger">{errorMessage(startLogin.error)}</Alert>}
       </div>
       {channels.isPending ? (
         <Skeleton className="h-48 w-full" />
@@ -360,12 +452,24 @@ export default function ChannelsPage() {
           title="No channels yet"
           action={<Button onClick={() => setAdding(true)}>Add website chat</Button>}
         >
-          Add a chat bubble to your website and answer customers from the inbox.
+          Add a chat bubble to your website
+          {metaReady ? ', or connect your Facebook page, Instagram or WhatsApp,' : ''} and answer
+          customers from the inbox.
         </EmptyState>
       ) : (
-        channels.data.map((c) => <ChannelCard key={c.id} channel={c} origin={origin} />)
+        channels.data.map((c) => (
+          <ChannelCard key={c.id} channel={c} origin={origin} meta={meta.data} />
+        ))
       )}
       <WebChatDialog open={adding} onOpenChange={setAdding} />
+      {meta.data?.configured && (
+        <WhatsAppDialog
+          orgId={org.id}
+          settings={meta.data}
+          open={addingWa}
+          onOpenChange={setAddingWa}
+        />
+      )}
     </div>
   );
 }

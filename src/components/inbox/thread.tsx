@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Bot,
   CheckCircle2,
+  Clock,
   Lock,
   RotateCcw,
   RotateCw,
@@ -17,6 +18,7 @@ import {
 import Link from 'next/link';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useOrg } from '@/components/org-context';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -37,12 +39,16 @@ import type { Conversation, InboxMessage, Page, TeamMember } from '@/lib/api/typ
 import { formatCredits, formatDateTime, formatRelative } from '@/lib/format';
 import {
   CHANNEL_LABEL,
+  DELIVERY_LABEL,
   addMessage,
   aiPauseReason,
   contactLabel,
+  durationLabel,
+  failedOnServer,
   isAiHandover,
   isDotCommand,
   newClientId,
+  replyWindow,
 } from '@/lib/inbox';
 import { cn } from '@/lib/utils';
 import { Avatar, ChannelIcon } from './conversation-list';
@@ -50,10 +56,25 @@ import {
   applyConversation,
   applyMessage,
   inboxKeys,
+  useChannels,
   useInboxLive,
   useTeam,
   type MessagesData,
 } from './data';
+
+/** Shows Meta's reply window closing soon when this little time is left. */
+const WINDOW_WARN_MS = 3 * 3600_000;
+
+/** The current time, refreshed every minute while `active`. */
+function useMinuteClock(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, [active]);
+  return now;
+}
 
 interface Perms {
   reply: boolean;
@@ -69,10 +90,13 @@ function timeOf(iso: string) {
 
 function MessageRow({
   m,
+  social,
   onRetry,
   onDiscard,
 }: {
   m: InboxMessage;
+  /** Messenger, Instagram or WhatsApp: Meta reports delivery and reads. */
+  social: boolean;
   onRetry?: () => void;
   onDiscard?: () => void;
 }) {
@@ -128,6 +152,12 @@ function MessageRow({
         {mine && m.sender.type === 'ai' && m.ai && ` · ${formatCredits(m.ai.credits)}`}
         {mine && ' · '}
         {pending ? 'Sending…' : timeOf(m.createdAt)}
+        {mine && social && !pending && !failed && m.delivery.status !== 'sent' && (
+          <span className={m.delivery.status === 'read' ? 'text-primary' : undefined}>
+            {' · '}
+            {DELIVERY_LABEL[m.delivery.status]}
+          </span>
+        )}
       </span>
       {failed && (
         <span className="mt-0.5 flex items-center gap-2 text-[12px] text-destructive">
@@ -183,6 +213,8 @@ export function Thread({
   const qc = useQueryClient();
   const live = useInboxLive();
   const team = useTeam(orgId);
+  const { can } = useOrg();
+  const channels = useChannels(orgId);
   const conv = useQuery({
     queryKey: inboxKeys.conversation(orgId, conversationId),
     queryFn: () => api<Conversation>(`/orgs/${orgId}/conversations/${conversationId}`),
@@ -280,6 +312,16 @@ export function Thread({
         : data,
     );
 
+  // A message Meta refused, sent again from the server's copy.
+  const resend = useMutation({
+    mutationFn: (messageId: string) =>
+      api<{ message: InboxMessage }>(
+        `/orgs/${orgId}/conversations/${conversationId}/messages/${messageId}/retry`,
+        { method: 'POST' },
+      ),
+    onSuccess: (res) => applyMessage(qc, orgId, res.message),
+  });
+
   const send = useMutation({
     meta: { silent: true },
     mutationFn: (v: { text: string; note: boolean; clientId: string }) =>
@@ -332,11 +374,19 @@ export function Thread({
     },
   });
 
+  const windowEndsAt = conv.data?.replyWindowEndsAt ?? null;
+  const now = useMinuteClock(windowEndsAt !== null);
+  const replyWin = replyWindow({ replyWindowEndsAt: windowEndsAt }, now);
+  const channel = channels.data?.find((x) => x.id === conv.data?.channelId);
+  const needsReconnect = channel?.status === 'error';
+  const canReply = replyWin.open && !needsReconnect;
+  const composing = canReply ? mode : 'note';
+
   const submit = () => {
     const value = text.trim();
     if (!value || !c) return;
     setText('');
-    send.mutate({ text: value, note: mode === 'note', clientId: newClientId() });
+    send.mutate({ text: value, note: composing === 'note', clientId: newClientId() });
   };
 
   if (conv.isPending)
@@ -354,7 +404,7 @@ export function Thread({
       </div>
     );
 
-  const label = contactLabel(c.contact);
+  const label = contactLabel(c.contact, c.channelType);
   const assignee = team.data?.find((m) => m.userId === c.assigneeId);
   const lockedError =
     messages.error instanceof ApiError && messages.error.status === 402 ? messages.error : null;
@@ -555,21 +605,26 @@ export function Thread({
                 <MessageRow
                   key={m.id}
                   m={m}
-                  {...(m.delivery.status === 'failed' && m.clientId
-                    ? {
-                        onRetry: () => {
-                          patchMessage(m.clientId!, {
-                            delivery: { status: 'pending', error: null },
-                          });
-                          send.mutate({
-                            text: m.text,
-                            note: m.type === 'note',
-                            clientId: m.clientId!,
-                          });
-                        },
-                        onDiscard: () => dropMessage(m.clientId!),
-                      }
-                    : {})}
+                  social={c.channelType !== 'web_chat'}
+                  {...(failedOnServer(m)
+                    ? perms.reply && canReply
+                      ? { onRetry: () => resend.mutate(m.id) }
+                      : {}
+                    : m.delivery.status === 'failed' && m.clientId
+                      ? {
+                          onRetry: () => {
+                            patchMessage(m.clientId!, {
+                              delivery: { status: 'pending', error: null },
+                            });
+                            send.mutate({
+                              text: m.text,
+                              note: m.type === 'note',
+                              clientId: m.clientId!,
+                            });
+                          },
+                          onDiscard: () => dropMessage(m.clientId!),
+                        }
+                      : {})}
                 />
               ))}
             </ol>
@@ -577,9 +632,44 @@ export function Thread({
         )}
       </div>
 
+      {perms.reply && !lockedError && !canReply && (
+        <div
+          role="status"
+          className="flex items-start gap-2 border-t bg-muted/60 px-4 py-2 text-[13px]"
+        >
+          {needsReconnect ? (
+            <>
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden />
+              <span>
+                Meta stopped accepting messages from this {CHANNEL_LABEL[c.channelType]} channel, so
+                replies cannot go out.{' '}
+                {can('org.integrations.manage') ? (
+                  <Link
+                    href={`/app/${orgId}/settings/channels`}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    Reconnect it
+                  </Link>
+                ) : (
+                  'Ask an admin to reconnect it in Settings › Channels.'
+                )}{' '}
+                Notes still work.
+              </span>
+            </>
+          ) : (
+            <>
+              <Clock className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <span>
+                More than 24 hours have passed since {label} last wrote. Meta allows replies only
+                within 24 hours, so you can answer when they write again. Notes still work.
+              </span>
+            </>
+          )}
+        </div>
+      )}
       {perms.reply && !lockedError && (
         <form
-          className={cn('border-t p-3', mode === 'note' && 'bg-warning-soft/50')}
+          className={cn('border-t p-3', composing === 'note' && 'bg-warning-soft/50')}
           onSubmit={(e) => {
             e.preventDefault();
             submit();
@@ -588,20 +678,36 @@ export function Thread({
           <div className="mb-2 flex items-center justify-between gap-2">
             <Segmented
               label="Message type"
-              value={mode}
+              value={composing}
               onChange={setMode}
-              options={[
-                { value: 'reply', label: 'Reply' },
-                { value: 'note', label: 'Note' },
-              ]}
+              options={
+                canReply
+                  ? [
+                      { value: 'reply', label: 'Reply' },
+                      { value: 'note', label: 'Note' },
+                    ]
+                  : [{ value: 'note', label: 'Note' }]
+              }
             />
-            {c.ai.mode === 'auto' && perms.aiInPlan && mode === 'reply' && (
-              <span className="text-xs text-muted-foreground">Replying pauses the AI here</span>
+            {canReply &&
+            replyWin.msLeft !== null &&
+            replyWin.msLeft < WINDOW_WARN_MS &&
+            composing === 'reply' ? (
+              <span className="flex items-center gap-1 text-xs text-warning">
+                <Clock className="size-3.5" aria-hidden /> Reply window closes in{' '}
+                {durationLabel(replyWin.msLeft)}
+              </span>
+            ) : (
+              c.ai.mode === 'auto' &&
+              perms.aiInPlan &&
+              composing === 'reply' && (
+                <span className="text-xs text-muted-foreground">Replying pauses the AI here</span>
+              )
             )}
           </div>
           <div className="flex items-end gap-2">
             <label htmlFor="composer" className="sr-only">
-              {mode === 'note' ? 'Internal note' : 'Reply'}
+              {composing === 'note' ? 'Internal note' : 'Reply'}
             </label>
             <Textarea
               id="composer"
@@ -609,7 +715,7 @@ export function Thread({
               value={text}
               maxLength={4000}
               placeholder={
-                mode === 'note'
+                composing === 'note'
                   ? 'Only your team sees notes'
                   : `Reply to ${label}${perms.aiControl && perms.aiInPlan ? ' (send “.” to pause or resume the AI)' : ''}`
               }
@@ -617,7 +723,7 @@ export function Thread({
               onChange={(e) => {
                 setText(e.target.value);
                 const now = Date.now();
-                if (mode === 'reply' && now - lastTyping.current > 2_000) {
+                if (composing === 'reply' && now - lastTyping.current > 2_000) {
                   lastTyping.current = now;
                   live.sendTyping(conversationId);
                 }
@@ -632,7 +738,7 @@ export function Thread({
             <Button
               type="submit"
               size="icon"
-              aria-label={mode === 'note' ? 'Add note' : 'Send'}
+              aria-label={composing === 'note' ? 'Add note' : 'Send'}
               disabled={!text.trim()}
             >
               {send.isPending && isDotCommand(text) ? (

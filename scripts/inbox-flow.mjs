@@ -101,11 +101,11 @@ try {
 
   await step('add the website chat in Settings › Channels', async () => {
     await staff.goto(`${BASE}${org}/settings/channels`);
-    await staff.getByRole('button', { name: 'Add website chat' }).first().click();
+    await staff.getByRole('button', { name: 'Website chat', exact: true }).click();
     await staff.fill('#wc-name', channelName);
     await staff.fill('#wc-greeting', 'Assalamu alaikum! How can we help?');
     await staff.fill('#wc-color', '#0f766e');
-    await staff.getByRole('button', { name: 'Add website chat' }).last().click();
+    await staff.getByRole('dialog').getByRole('button', { name: 'Add website chat' }).click();
     await staff.getByText('Website chat added').waitFor();
     const card = staff
       .locator('div', { hasText: channelName })

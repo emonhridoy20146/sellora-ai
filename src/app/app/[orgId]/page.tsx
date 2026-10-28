@@ -5,6 +5,7 @@ import { ArrowRight, Check, Circle, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { UsageChart } from '@/components/billing/usage-chart';
 import { commerceKeys, useShopSettings } from '@/components/commerce/hooks';
+import { useChannels } from '@/components/inbox/data';
 import { useOrg } from '@/components/org-context';
 import { StatusBadge } from '@/components/status-badge';
 import { Alert } from '@/components/ui/alert';
@@ -17,7 +18,7 @@ import { Stat } from '@/components/ui/stat';
 import { api } from '@/lib/api/client';
 import { ApiError } from '@/lib/api/errors';
 import { useBillingSummary, useMe } from '@/lib/api/queries';
-import type { Member, OrdersSummary, UsageSummary } from '@/lib/api/types';
+import type { AiAgentView, Member, OrdersSummary, UsageSummary } from '@/lib/api/types';
 import { daysUntil, formatDate, formatMoney, formatNumber } from '@/lib/format';
 import { rangeFromDays } from '@/lib/series';
 
@@ -33,7 +34,7 @@ function greeting(timeZone: string): string {
 }
 
 export default function OverviewPage() {
-  const { org, can } = useOrg();
+  const { org, can, modules } = useOrg();
   const me = useMe();
   const billing = useBillingSummary(org.id, can('billing.view'));
   const range = rangeFromDays(14);
@@ -56,6 +57,14 @@ export default function OverviewPage() {
   const commerceOff =
     orders.error instanceof ApiError && orders.error.code === 'module_not_in_plan';
   const shop = useShopSettings(org.id, can('org.settings.manage') && !commerceOff);
+  const inboxInPlan = modules === null || modules.includes('inbox');
+  const channels = useChannels(org.id, can('org.integrations.manage') && inboxInPlan);
+  const aiInPlan = modules === null || modules.includes('ai_agent');
+  const agent = useQuery({
+    queryKey: ['org', org.id, 'ai-agent'],
+    queryFn: () => api<AiAgentView>(`/orgs/${org.id}/ai-agent`),
+    enabled: can('ai.settings.manage') && aiInPlan,
+  });
   const user = me.data!.user;
   const b = billing.data;
   const s = b?.subscription;
@@ -94,6 +103,26 @@ export default function OverviewPage() {
           },
         ]
       : []),
+    ...(channels.data
+      ? [
+          {
+            done: channels.data.length > 0,
+            label: 'Connect where customers message you',
+            href: `${base}/settings/channels`,
+            note: 'Website chat, Facebook page, Instagram or WhatsApp',
+          },
+        ]
+      : []),
+    ...(agent.data
+      ? [
+          {
+            done: agent.data.settings.enabled,
+            label: 'Turn on the AI sales agent',
+            href: `${base}/ai-agent`,
+            note: 'It answers customers and takes orders while you are busy',
+          },
+        ]
+      : []),
     ...(can('org.members.manage')
       ? [
           {
@@ -115,7 +144,8 @@ export default function OverviewPage() {
         ]
       : []),
   ];
-  const upcoming = ['Connect Facebook, Instagram and WhatsApp', 'Turn on the AI sales agent'];
+  /** Setup steps for features still being built (none right now). */
+  const upcoming: string[] = [];
   const o = orders.data;
   const toHandle = o ? o.toHandle.pending + o.toHandle.confirmed + o.toHandle.packed : 0;
   const ordersLink = (status: string, text: string) => (

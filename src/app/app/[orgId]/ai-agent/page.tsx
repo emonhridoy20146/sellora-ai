@@ -189,14 +189,14 @@ function Notices({
       <Alert
         key="channels"
         tone="info"
-        title="Add a website chat so the agent can reply"
+        title="Connect a channel so the agent can reply"
         action={
           <Button asChild size="sm" variant="outline">
             <Link href={`/app/${orgId}/settings/channels`}>Channels</Link>
           </Button>
         }
       >
-        Replies on Messenger, Instagram and WhatsApp arrive with those connections.
+        Add the website chat, or connect your Facebook page, Instagram or WhatsApp.
       </Alert>,
     );
   if (!settings.enabled && canManage && status.serviceReady)
@@ -410,7 +410,7 @@ function AgentEditor({ view: initial }: { view: AiAgentView }) {
   const languageHint = LANGUAGE_OPTIONS.find((l) => l.value === draft.language)?.hint;
   // Channels where the agent stays quiet, so the merchant is not surprised.
   const quiet = view.status.channels.filter(
-    (c) => c.status === 'active' && (!c.aiEnabled || !c.aiCanReply),
+    (c) => (c.status === 'active' && !c.aiEnabled) || (c.status === 'error' && c.aiEnabled),
   );
   const blockedReason = !draftTier?.available
     ? 'The AI service is not available right now, so the test chat cannot run.'
@@ -759,7 +759,7 @@ function AgentEditor({ view: initial }: { view: AiAgentView }) {
                 {quiet
                   .map(
                     (c) =>
-                      `${c.name} (${CHANNEL_LABEL[c.type]}: ${c.aiEnabled ? 'arrives with the connection' : 'AI turned off for it'})`,
+                      `${c.name} (${CHANNEL_LABEL[c.type]}: ${c.status === 'error' ? 'needs reconnecting' : 'AI turned off for it'})`,
                   )
                   .join(', ')}
                 .

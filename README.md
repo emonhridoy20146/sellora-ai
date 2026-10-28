@@ -138,6 +138,29 @@ src/
 public/widget.js          the embed script merchants paste into their site
 ```
 
+### Messenger, Instagram and WhatsApp browser flow
+
+`scripts/meta-flow.mjs` connects a Facebook page with its Instagram account and a WhatsApp
+number in Settings › Channels, then plays the customer side with webhooks it signs with the
+app secret, exactly as Meta sends them. It checks that messages arrive live in the inbox, that
+staff and AI replies reach the Graph API, "Seen" from read receipts, replies sent from the
+Instagram app showing in the thread and pausing the AI, a refused message with Retry, the
+24-hour reply window (notes only), and a revoked token asking for a reconnect, then fixing it.
+It runs against `sellora-api/scripts/graph-stand-in.mjs`, **not Meta**: Facebook's login page
+is replaced by an instant redirect back to Sellora. It proves Sellora's side of the flows, not
+Meta's.
+
+```bash
+# in sellora-api (with the Claude stand-in from the AI flow above, for the AI's replies)
+export META_APP_ID=100200300400500 META_APP_SECRET=stand-in-app-secret-0123456789 \
+  META_WEBHOOK_VERIFY_TOKEN=stand-in-verify-token-123 META_GRAPH_BASE_URL=http://127.0.0.1:4020
+node scripts/graph-stand-in.mjs &
+npm run dev & npm run dev:worker &
+# in sellora-web
+SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
+META_APP_SECRET=stand-in-app-secret-0123456789 node scripts/meta-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -165,10 +188,13 @@ public/widget.js          the embed script merchants paste into their site
 
 ## What is not built yet
 
-Orders, products, customers and product photo uploads are live (M3). The inbox works with
-the website chat (M4a); Messenger, Instagram and WhatsApp come next, so the public site still
-labels the inbox "coming soon". Pages for the AI agent, couriers, store builder, marketing and
-analytics appear in the merchant sidebar as disabled "Soon" items. They will be added milestone by milestone; see `docs/TRACKER.md` in
+Orders, products, customers and product photo uploads are live (M3). The inbox works with the
+website chat, Messenger, Instagram and WhatsApp, and the AI sales agent answers on all of them
+(M4). Two things are still unproven with the real services: Messenger, Instagram and WhatsApp
+have only run against a stand-in for Meta's API, and the AI agent only against a stand-in for
+Claude. So the public site keeps labelling the inbox and the AI "coming soon" until both have
+run for real. Couriers, store builder, marketing and analytics appear in the merchant sidebar
+as disabled "Soon" items. They will be added milestone by milestone; see `docs/TRACKER.md` in
 sellora-api.
 
 Photo uploads (`lib/upload.ts`) shrink photos to 1600 px in the browser, ask the API for an

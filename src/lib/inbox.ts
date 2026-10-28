@@ -1,4 +1,10 @@
-import type { ChannelType, Contact, Conversation, InboxMessage } from '@/lib/api/types';
+import type {
+  ChannelType,
+  Contact,
+  Conversation,
+  DeliveryStatus,
+  InboxMessage,
+} from '@/lib/api/types';
 
 export type InboxView = 'open' | 'mine' | 'unassigned' | 'paused' | 'closed';
 
@@ -65,9 +71,21 @@ export function addMessage(list: InboxMessage[], m: InboxMessage): InboxMessage[
   return [m, ...list];
 }
 
-export function contactLabel(contact: Contact | null | undefined): string {
+/**
+ * What to call a contact: their name, else phone or email, else where they wrote from (a
+ * Messenger customer whose profile Meta did not share has none of these).
+ */
+export function contactLabel(
+  contact: Contact | null | undefined,
+  channelType: ChannelType = 'web_chat',
+): string {
   if (!contact) return 'Customer';
-  return contact.name || contact.phone || contact.email || 'Website visitor';
+  return (
+    contact.name ||
+    contact.phone ||
+    contact.email ||
+    (channelType === 'web_chat' ? 'Website visitor' : `${CHANNEL_LABEL[channelType]} customer`)
+  );
 }
 
 export function initials(label: string): string {
@@ -99,6 +117,7 @@ const AI_PAUSE_REASONS: Record<string, string> = {
   ai_error: 'The AI could not reply',
   ai_refused: 'The AI could not answer a message',
   ai_incomplete: 'The AI could not finish an answer',
+  replied_elsewhere: 'Someone replied from outside Sellora',
 };
 
 /** Why the AI is paused in a conversation, in words for the team. */
@@ -108,7 +127,10 @@ export function aiPauseReason(reason: string | null): string {
 
 /** Whether the AI paused on its own and the customer is waiting for a person. */
 export function isAiHandover(reason: string | null): boolean {
-  return reason !== null && !['manual', 'dot_command', 'human_reply'].includes(reason);
+  return (
+    reason !== null &&
+    !['manual', 'dot_command', 'human_reply', 'replied_elsewhere'].includes(reason)
+  );
 }
 
 /** A message of only "." pauses or resumes the AI instead of being sent. */
@@ -135,4 +157,48 @@ export function shortTime(iso: string, now = new Date()): string {
 /** The embed code a merchant pastes into their site. */
 export function embedSnippet(origin: string, publicKey: string): string {
   return `<script src="${origin}/widget.js" data-key="${publicKey}" async></script>`;
+}
+
+/** What the delivery tick under a sent message says. */
+export const DELIVERY_LABEL: Record<DeliveryStatus, string> = {
+  pending: 'Sending…',
+  sent: 'Sent',
+  delivered: 'Delivered',
+  read: 'Seen',
+  failed: 'Not delivered',
+};
+
+/**
+ * A message the server stored but the channel refused (Meta said no). It can be sent again
+ * on the server; a message that never reached the server is re-posted instead.
+ */
+export function failedOnServer(m: Pick<InboxMessage, 'id' | 'delivery'>): boolean {
+  return m.delivery.status === 'failed' && !m.id.startsWith('tmp-');
+}
+
+export interface ReplyWindow {
+  /** Staff can reply now. */
+  open: boolean;
+  /** Milliseconds left, or null when the channel has no window. */
+  msLeft: number | null;
+}
+
+/** Meta's 24-hour reply window for a conversation (the website chat has none). */
+export function replyWindow(
+  c: Pick<Conversation, 'replyWindowEndsAt'>,
+  now = Date.now(),
+): ReplyWindow {
+  if (!c.replyWindowEndsAt) return { open: true, msLeft: null };
+  const left = Date.parse(c.replyWindowEndsAt) - now;
+  return { open: left > 0, msLeft: Math.max(0, left) };
+}
+
+/** "23h 10m", "45m", "under a minute". */
+export function durationLabel(ms: number): string {
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return 'under a minute';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }

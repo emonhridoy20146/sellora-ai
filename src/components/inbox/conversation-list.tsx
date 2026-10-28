@@ -1,7 +1,8 @@
 'use client';
 
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
-import { Bot, Globe, Lock, MessageCircle, Search } from 'lucide-react';
+import { Bot, Lock, Search } from 'lucide-react';
+import { ChannelGlyph } from '@/components/channel-icons';
 import { ErrorState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { LoadMore } from '@/components/ui/load-more';
@@ -9,7 +10,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api/client';
 import type { ChannelType, Conversation, Page } from '@/lib/api/types';
 import {
-  CHANNEL_LABEL,
   INBOX_VIEWS,
   contactLabel,
   initials,
@@ -21,8 +21,7 @@ import { cn } from '@/lib/utils';
 import { inboxKeys, useInboxLive } from './data';
 
 export function ChannelIcon({ type, className }: { type: ChannelType; className?: string }) {
-  const Icon = type === 'web_chat' ? Globe : MessageCircle;
-  return <Icon className={cn('size-3.5', className)} aria-label={CHANNEL_LABEL[type]} />;
+  return <ChannelGlyph type={type} label className={cn('size-3.5', className)} />;
 }
 
 export function Avatar({ label, className }: { label: string; className?: string }) {
@@ -143,7 +142,7 @@ export function ConversationList({
         ) : (
           <ul aria-label="Conversations">
             {items.map((c) => {
-              const label = contactLabel(c.contact);
+              const label = contactLabel(c.contact, c.channelType);
               const typingWho = typing[c.id]?.who;
               const isTyping = Boolean(typingWho);
               return (

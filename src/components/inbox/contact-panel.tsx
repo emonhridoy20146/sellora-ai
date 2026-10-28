@@ -235,9 +235,9 @@ export function ContactPanel({
   return (
     <div className="space-y-5 p-4">
       <div className="flex items-center gap-3">
-        <Avatar label={contactLabel(contact)} className="size-11 text-sm" />
+        <Avatar label={contactLabel(contact, c.channelType)} className="size-11 text-sm" />
         <div className="min-w-0">
-          <p className="truncate font-semibold">{contactLabel(contact)}</p>
+          <p className="truncate font-semibold">{contactLabel(contact, c.channelType)}</p>
           <p className="text-xs text-muted-foreground">
             {contact?.lastSeenAt ? `Last seen ${formatRelative(contact.lastSeenAt)}` : ' '}
           </p>

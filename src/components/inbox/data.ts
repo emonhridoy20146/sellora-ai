@@ -176,6 +176,10 @@ export function useInboxConnection(orgId: string, meId: string): InboxLive {
         });
     });
     socket.on('message.updated', (m: InboxMessage) => applyMessage(qc, orgId, m));
+    // A channel was switched off, removed, or needs reconnecting: reload who can reply where.
+    socket.on('channel.updated', () => {
+      void qc.invalidateQueries({ queryKey: inboxKeys.channels(orgId) });
+    });
     socket.on('typing', (d: { conversationId: string; who: string }) => {
       const who = d.who === 'contact' || d.who === 'ai' ? d.who : null;
       if (who) setTyping((t) => ({ ...t, [d.conversationId]: { who, at: Date.now() } }));
