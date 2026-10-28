@@ -74,8 +74,8 @@ export class AiAgentController {
           type: c.type,
           status: c.status,
           aiEnabled: c.aiEnabled,
-          // Replies go out on website chat now; the other channels arrive with their connections.
-          aiCanReply: c.type === 'web_chat',
+          // A turned-off channel, or one Meta stopped accepting, cannot carry replies.
+          aiCanReply: c.status === 'active',
         })),
       },
     };

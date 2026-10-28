@@ -17,6 +17,7 @@ import {
   ConversationRepository,
   MessageRepository,
 } from '../../inbox/repositories.js';
+import { replyWindowOpen } from '../../inbox/reply-window.js';
 import type { ChannelType, ConversationAi, MessageType } from '../../inbox/schemas.js';
 import { OrgsService } from '../../orgs/orgs.service.js';
 import { AiAgentSettingsService, type AiAgentSettingsDoc } from '../agent-settings.service.js';
@@ -219,8 +220,9 @@ export class AiRepliesService {
     if (conversation.limitedMonth === (await this.messaging.currentMonth())) return 'locked';
     const channel = await this.channels.find(conversation.channelId.toHexString());
     if (!channel || channel.status === 'disabled' || !channel.aiEnabled) return 'channel_off';
-    // Sending on Messenger, Instagram and WhatsApp arrives with their connections.
-    if (channel.type !== 'web_chat') return 'channel_send_unavailable';
+    if (channel.status === 'error') return 'channel_needs_reconnect';
+    // Meta allows free replies for 24 hours after the customer's last message.
+    if (!replyWindowOpen(channel.type, conversation.lastInboundAt)) return 'outside_reply_window';
     const contact = await this.contacts.findById(conversation.contactId);
     if (!contact) return 'contact_missing';
 

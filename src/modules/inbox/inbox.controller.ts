@@ -101,6 +101,17 @@ export class ConversationsController {
     return this.conversations.send(id, body);
   }
 
+  @Post(':conversationId/messages/:messageId/retry')
+  @HttpCode(200)
+  @RequirePermissions('inbox.reply')
+  @ApiOperation({ summary: 'Send a failed Messenger, Instagram or WhatsApp message again' })
+  retry(
+    @ZodParam('conversationId', objectIdSchema) id: string,
+    @ZodParam('messageId', objectIdSchema) messageId: string,
+  ) {
+    return this.conversations.retryMessage(id, messageId);
+  }
+
   @Post(':conversationId/read')
   @HttpCode(200)
   read(@ZodParam('conversationId', objectIdSchema) id: string) {

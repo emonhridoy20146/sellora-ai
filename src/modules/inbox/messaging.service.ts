@@ -10,6 +10,7 @@ import { OrgsService } from '../orgs/orgs.service.js';
 import type { ChannelDoc } from './channels.service.js';
 import { InboxRealtime } from './inbox-realtime.service.js';
 import {
+  CUSTOMER_VISIBLE_TYPES,
   preview,
   toConversationDto,
   toMessageDto,
@@ -19,8 +20,17 @@ import {
   type ConversationDto,
   type MessageDoc,
 } from './inbox.mappers.js';
+import { OutboxQueue } from './outbox.js';
+import { replyWindowOpen, sendsThroughMeta } from './reply-window.js';
 import { ContactRepository, ConversationRepository, MessageRepository } from './repositories.js';
-import type { Message, MessageAttachment, MessageType, SenderType } from './schemas.js';
+import type {
+  ConversationAi,
+  DeliveryStatus,
+  Message,
+  MessageAttachment,
+  MessageType,
+  SenderType,
+} from './schemas.js';
 
 /** Emitted after a customer message is stored. The AI agent listens for it. */
 export const INBOX_MESSAGE_RECEIVED = 'inbox.message.received';
@@ -76,6 +86,14 @@ export interface OutgoingInput {
   ai?: Message['ai'];
 }
 
+/** Statuses a message may move to a given status from; delivery never goes backwards. */
+const DELIVERY_FROM: Record<Exclude<DeliveryStatus, 'pending'>, DeliveryStatus[]> = {
+  sent: ['pending'],
+  delivered: ['pending', 'sent'],
+  read: ['pending', 'sent', 'delivered'],
+  failed: ['pending', 'sent'],
+};
+
 /** 'YYYY-MM' of `at` in the business's time zone. */
 export function monthKey(at: Date, timeZone: string): string {
   const { year, month } = zonedParts(at, timeZone);
@@ -100,6 +118,7 @@ export class MessagingService {
     private readonly entitlements: EntitlementsService,
     private readonly realtime: InboxRealtime,
     private readonly events: EventEmitter2,
+    private readonly outbox: OutboxQueue,
   ) {}
 
   orgId(): string {
@@ -352,12 +371,22 @@ export class MessagingService {
           'channel_disabled',
           'This channel is turned off. Turn it on in Settings › Channels to reply.',
         );
-      if (channel.type !== 'web_chat')
-        throw AppError.conflict(
-          'channel_send_unavailable',
-          'Sending on this channel is not available yet.',
-        );
+      if (sendsThroughMeta(channel.type)) {
+        if (channel.status === 'error')
+          throw AppError.conflict(
+            'channel_needs_reconnect',
+            'Meta stopped accepting messages from this channel. Reconnect it in Settings › Channels to reply.',
+          );
+        if (!replyWindowOpen(channel.type, conv.lastInboundAt, now))
+          throw AppError.conflict(
+            'outside_reply_window',
+            'More than 24 hours have passed since the customer’s last message, so Meta does not allow a reply. You can answer when they write again.',
+            { lastInboundAt: conv.lastInboundAt?.toISOString() ?? null },
+          );
+      }
     }
+    // Meta channels deliver through the outbox queue; the worker records the outcome.
+    const viaMeta = !internal && channel !== null && sendsThroughMeta(channel.type);
 
     let message: MessageDoc;
     try {
@@ -372,7 +401,7 @@ export class MessagingService {
         ...(input.clientId ? { clientId: input.clientId } : {}),
         // Web chat delivers through the live connection; the visitor's page loads
         // anything it missed when it reconnects.
-        delivery: { status: 'sent', at: now },
+        delivery: viaMeta ? { status: 'pending' } : { status: 'sent', at: now },
         ...(input.ai ? { ai: input.ai } : {}),
       });
     } catch (err) {
@@ -386,6 +415,7 @@ export class MessagingService {
     }
 
     const orgId = this.orgId();
+    if (viaMeta) await this.outbox.enqueue(orgId, message._id.toHexString());
     if (!internal && channel?.type === 'web_chat') {
       const org = await this.orgs.get(orgId);
       await this.realtime.toVisitor(
@@ -414,6 +444,197 @@ export class MessagingService {
     await this.realtime.messageCreated(orgId, updated.assigneeId, toMessageDto(message));
     if (!internal) await this.publishConversation(updated, { contact });
     return { message, conversation: updated, duplicate: false };
+  }
+
+  /**
+   * Sends a failed Messenger, Instagram or WhatsApp message again. The same window and
+   * channel rules as a new reply apply.
+   */
+  async retryDelivery(
+    conv: ConversationDoc,
+    channel: ChannelDoc | null,
+    messageId: string,
+    now = new Date(),
+  ): Promise<MessageDoc> {
+    const message = Types.ObjectId.isValid(messageId)
+      ? await this.messages.findOne({
+          _id: new Types.ObjectId(messageId),
+          conversationId: conv._id,
+        })
+      : null;
+    if (!message || message.direction !== 'out') throw AppError.notFound('message');
+    if (message.delivery.status !== 'failed')
+      throw AppError.conflict('not_failed', 'Only a message that failed can be sent again.');
+    if (!channel)
+      throw AppError.conflict(
+        'channel_removed',
+        'This conversation’s channel was removed, so replies cannot be delivered.',
+      );
+    if (!sendsThroughMeta(channel.type))
+      throw AppError.conflict('not_failed', 'Only a message that failed can be sent again.');
+    if (channel.status !== 'active')
+      throw AppError.conflict(
+        channel.status === 'error' ? 'channel_needs_reconnect' : 'channel_disabled',
+        channel.status === 'error'
+          ? 'Meta stopped accepting messages from this channel. Reconnect it in Settings › Channels to reply.'
+          : 'This channel is turned off. Turn it on in Settings › Channels to reply.',
+      );
+    if (!replyWindowOpen(channel.type, conv.lastInboundAt, now))
+      throw AppError.conflict(
+        'outside_reply_window',
+        'More than 24 hours have passed since the customer’s last message, so Meta does not allow a reply. You can answer when they write again.',
+        { lastInboundAt: conv.lastInboundAt?.toISOString() ?? null },
+      );
+    const updated = await this.messages.findOneAndUpdate(
+      { _id: message._id, 'delivery.status': 'failed' },
+      { $set: { delivery: { status: 'pending' } } },
+    );
+    if (!updated)
+      throw AppError.conflict('not_failed', 'Only a message that failed can be sent again.');
+    await this.outbox.enqueue(this.orgId(), updated._id.toHexString(), { retry: true });
+    await this.realtime.messageUpdated(this.orgId(), conv.assigneeId, toMessageDto(updated));
+    return updated;
+  }
+
+  /**
+   * Records what happened to a message on the channel. A status only moves forward
+   * (pending, sent, delivered, read); a late "sent" never undoes "read".
+   */
+  async updateDelivery(
+    filter: { _id: Types.ObjectId } | { channelId: Types.ObjectId; externalId: string },
+    status: Exclude<DeliveryStatus, 'pending'>,
+    opts: { error?: string; externalId?: string; at?: Date } = {},
+  ): Promise<MessageDoc | null> {
+    const set: Record<string, unknown> = {
+      'delivery.status': status,
+      'delivery.at': opts.at ?? new Date(),
+    };
+    if (opts.externalId) set.externalId = opts.externalId;
+    const update: Record<string, unknown> = { $set: set };
+    if (status === 'failed')
+      set['delivery.error'] = opts.error ?? 'The message could not be delivered';
+    else update.$unset = { 'delivery.error': 1 };
+    const message = await this.messages.findOneAndUpdate(
+      { ...filter, direction: 'out', 'delivery.status': { $in: DELIVERY_FROM[status] } },
+      update,
+    );
+    if (message) await this.publishMessage(message);
+    return message;
+  }
+
+  /**
+   * Messenger reports reads and deliveries as "everything up to this time". Marks the
+   * contact's earlier messages and tells live clients about the newest few.
+   */
+  async updateDeliveryUpTo(
+    channelId: Types.ObjectId,
+    contactExternalId: string,
+    status: 'delivered' | 'read',
+    upTo: Date,
+  ): Promise<number> {
+    const contact = await this.contacts.findOne({ channelId, externalId: contactExternalId });
+    if (!contact) return 0;
+    const conv = await this.conversations.findOne({ contactId: contact._id });
+    if (!conv) return 0;
+    const filter = {
+      conversationId: conv._id,
+      direction: 'out' as const,
+      type: { $in: [...CUSTOMER_VISIBLE_TYPES] },
+      'delivery.status': { $in: DELIVERY_FROM[status] },
+      createdAt: { $lte: upTo },
+    };
+    const affected = await this.messages.find(filter, { sort: { _id: -1 }, limit: 20 });
+    if (!affected.length) return 0;
+    const modified = await this.messages.updateMany(filter, {
+      $set: { 'delivery.status': status, 'delivery.at': new Date() },
+    });
+    for (const m of affected)
+      await this.realtime.messageUpdated(
+        this.orgId(),
+        conv.assigneeId,
+        toMessageDto({ ...m, delivery: { status, at: new Date() } }),
+      );
+    return modified;
+  }
+
+  private async publishMessage(message: MessageDoc): Promise<void> {
+    const conv = await this.conversations.findById(message.conversationId);
+    await this.realtime.messageUpdated(this.orgId(), conv?.assigneeId, toMessageDto(message));
+  }
+
+  /**
+   * Stores a message the business sent from outside the inbox (the Facebook page inbox or
+   * the phone app), so the thread shows the whole conversation. Returns null when the
+   * customer is unknown here or the message was stored before.
+   */
+  async recordSentElsewhere(
+    channel: ChannelDoc,
+    contactExternalId: string,
+    input: { externalId: string; text: string; senderName: string },
+    now = new Date(),
+  ): Promise<{ conversation: ConversationDoc; contact: ContactDoc; message: MessageDoc } | null> {
+    const contact = await this.contacts.findOne({
+      channelId: channel._id,
+      externalId: contactExternalId,
+    });
+    if (!contact) return null;
+    const conv = await this.conversations.findOne({ contactId: contact._id });
+    if (!conv) return null;
+    if (await this.messages.exists({ channelId: channel._id, externalId: input.externalId }))
+      return null;
+    let message: MessageDoc;
+    try {
+      message = await this.messages.create({
+        conversationId: conv._id,
+        channelId: channel._id,
+        direction: 'out',
+        type: 'text',
+        sender: { type: 'user', name: input.senderName },
+        text: input.text,
+        attachments: [],
+        externalId: input.externalId,
+        delivery: { status: 'sent', at: now },
+      });
+    } catch (err) {
+      if (isDuplicateKey(err)) return null;
+      throw err;
+    }
+    const updated =
+      (await this.conversations.findOneAndUpdate(
+        { _id: conv._id },
+        {
+          $set: {
+            lastMessage: {
+              text: preview(input.text, 'text'),
+              at: now,
+              direction: 'out',
+              senderType: 'user',
+            },
+            lastMessageAt: now,
+          },
+        },
+      )) ?? conv;
+    await this.realtime.messageCreated(this.orgId(), updated.assigneeId, toMessageDto(message));
+    await this.publishConversation(updated, { contact });
+    return { conversation: updated, contact, message };
+  }
+
+  /** Pauses the AI in a conversation (if it is on), with a line for the team. */
+  async pauseAi(
+    conv: ConversationDoc,
+    contact: ContactDoc,
+    changedBy: NonNullable<ConversationAi['changedBy']>,
+    reason: string,
+    line: string,
+  ): Promise<ConversationDoc | null> {
+    const updated = await this.conversations.findOneAndUpdate(
+      { _id: conv._id, 'ai.mode': 'auto' },
+      { $set: { ai: { mode: 'paused', changedAt: new Date(), changedBy, reason } } },
+    );
+    if (!updated) return null;
+    await this.systemLine(updated, contact, line);
+    await this.publishConversation(updated, { contact });
+    return updated;
   }
 
   /** A staff-only line in the thread, e.g. "Rahim paused the AI". */

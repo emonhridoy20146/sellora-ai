@@ -22,6 +22,7 @@ import { BillingModule } from './modules/billing/billing.module.js';
 import { CommerceModule } from './modules/commerce/commerce.module.js';
 import { FilesModule } from './modules/files/files.module.js';
 import { InboxModule } from './modules/inbox/inbox.module.js';
+import { MetaModule } from './modules/meta/meta.module.js';
 import { AccessGuard } from './modules/auth/guards/access.guard.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
@@ -101,6 +102,7 @@ export class AppModule {
         CommerceModule,
         InboxModule,
         AiModule,
+        MetaModule,
       ],
       controllers: [MetricsController],
       providers: [

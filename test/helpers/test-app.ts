@@ -15,6 +15,7 @@ import {
 } from '../../src/modules/billing/payments/gateway.types.js';
 import { PlatformAdminsService } from '../../src/modules/platform/platform-admins.service.js';
 import { AI_FETCH } from '../../src/modules/ai/provider/ai-provider.js';
+import { META_FETCH } from '../../src/modules/meta/meta-graph.js';
 import { REDIS } from '../../src/infra/redis/redis.module.js';
 import type { Redis } from 'ioredis';
 import { testEnv } from './env.js';
@@ -55,6 +56,8 @@ export class TestApp {
       controllers?: Type[];
       /** Replaces the fetch AI providers use, so tests can play the AI provider's part. */
       aiFetch?: typeof fetch;
+      /** Replaces the fetch the Graph API client uses, so tests can play Meta's part. */
+      metaFetch?: typeof fetch;
     } = {},
   ): Promise<TestApp> {
     const env = testEnv(overrides);
@@ -65,6 +68,7 @@ export class TestApp {
     if (opts.gatewayFetch)
       builder = builder.overrideProvider(GATEWAY_FETCH).useValue(opts.gatewayFetch);
     if (opts.aiFetch) builder = builder.overrideProvider(AI_FETCH).useValue(opts.aiFetch);
+    if (opts.metaFetch) builder = builder.overrideProvider(META_FETCH).useValue(opts.metaFetch);
     const moduleRef = await builder.compile();
     const app = moduleRef.createNestApplication<NestExpressApplication>({
       bodyParser: false,

@@ -244,6 +244,17 @@ export class ConversationsService {
     };
   }
 
+  /** Sends a failed Messenger, Instagram or WhatsApp message again. */
+  async retryMessage(
+    id: string,
+    messageId: string,
+  ): Promise<{ message: ReturnType<typeof toMessageDto> }> {
+    const conv = await this.messaging.ensureUnlocked(await this.visible(id));
+    const channel = await this.channels.find(conv.channelId.toHexString());
+    const message = await this.messaging.retryDelivery(conv, channel, messageId);
+    return { message: toMessageDto(message) };
+  }
+
   async setAiMode(
     id: string,
     mode: ConversationAi['mode'],

@@ -15,6 +15,7 @@ import {
 } from './inbox.controller.js';
 import { AgentsGateway, WebchatGateway } from './inbox.gateways.js';
 import { MessagingService } from './messaging.service.js';
+import { OutboxQueue } from './outbox.js';
 import {
   ChannelRepository,
   ContactRepository,
@@ -44,8 +45,8 @@ const repositories = [
  */
 @Module({
   imports: [OrgsModule, BillingModule, models],
-  providers: [...repositories, ChannelsService, InboxRealtime, MessagingService],
-  exports: [...repositories, ChannelsService, InboxRealtime, MessagingService],
+  providers: [...repositories, ChannelsService, InboxRealtime, MessagingService, OutboxQueue],
+  exports: [...repositories, ChannelsService, InboxRealtime, MessagingService, OutboxQueue],
 })
 export class InboxCoreModule {}
 

@@ -6,6 +6,8 @@ export const QUEUES = {
   backups: 'backups',
   ai: 'ai',
   webhooks: 'webhooks',
+  /** Messages to customers on Messenger, Instagram and WhatsApp. */
+  outbox: 'outbox',
   maintenance: 'maintenance',
 } as const;
 

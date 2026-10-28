@@ -2,13 +2,17 @@ import { DynamicModule, Module } from '@nestjs/common';
 import { coreImports } from './app.module.js';
 import type { Env } from './config/env.js';
 import { AiCoreModule } from './modules/ai/ai.module.js';
+import { AiRepliesListener } from './modules/ai/ai-replies.listener.js';
 import { BillingModule } from './modules/billing/billing.module.js';
 import { FilesCoreModule } from './modules/files/files.module.js';
+import { MetaCoreModule } from './modules/meta/meta.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { AiProcessor } from './workers/ai.processor.js';
 import { MailProcessor } from './workers/mail.processor.js';
 import { MaintenanceProcessor } from './workers/maintenance.processor.js';
+import { OutboxProcessor } from './workers/outbox.processor.js';
+import { WebhooksProcessor } from './workers/webhooks.processor.js';
 
 @Module({})
 export class WorkerModule {
@@ -22,8 +26,17 @@ export class WorkerModule {
         BillingModule,
         FilesCoreModule,
         AiCoreModule,
+        MetaCoreModule,
       ],
-      providers: [MailProcessor, MaintenanceProcessor, AiProcessor],
+      providers: [
+        MailProcessor,
+        MaintenanceProcessor,
+        AiProcessor,
+        OutboxProcessor,
+        WebhooksProcessor,
+        // Messages that arrive by webhook are stored here, so AI replies are scheduled here too.
+        AiRepliesListener,
+      ],
     };
   }
 }

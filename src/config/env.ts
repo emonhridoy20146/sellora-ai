@@ -92,6 +92,23 @@ export const envSchema = z
     AI_OPENAI_API_KEY: z.string().optional(),
     AI_OPENAI_BASE_URL: z.string().optional(),
 
+    /** The platform's Meta app (Messenger, Instagram, WhatsApp). Without it those channels are off. */
+    META_APP_ID: z.string().optional(),
+    META_APP_SECRET: z.string().optional(),
+    /** The string Meta echoes when the webhook is registered in the app dashboard. */
+    META_WEBHOOK_VERIFY_TOKEN: z.string().min(16).optional(),
+    /** Facebook Login for Business configuration id; empty uses the classic scope list. */
+    META_LOGIN_CONFIG_ID: z.string().optional(),
+    /** WhatsApp Embedded Signup configuration id; empty hides the one-click WhatsApp button. */
+    META_WHATSAPP_CONFIG_ID: z.string().optional(),
+    /** Graph API version, e.g. v23.0. Change it when Meta retires the version in use. */
+    META_GRAPH_VERSION: z
+      .string()
+      .regex(/^v\d+\.\d+$/)
+      .default('v23.0'),
+    /** Only for a stand-in or proxy in front of the Graph API. Empty: graph.facebook.com. */
+    META_GRAPH_BASE_URL: z.union([z.url(), z.literal('')]).optional(),
+
     /** Insert the starter plans, AI models and credit price list when missing (never overwrites). */
     BILLING_SEED_DEFAULTS: bool.default(true),
     /** Time zone that platform-wide reports (AI profit per day) use to cut days. */
@@ -152,6 +169,16 @@ export const envSchema = z
         path: ['S3_BUCKET'],
         message:
           'S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY are required for the s3 driver',
+      });
+    }
+    if (
+      Boolean(env.META_APP_ID) !== Boolean(env.META_APP_SECRET) ||
+      (env.META_APP_ID && !env.META_WEBHOOK_VERIFY_TOKEN)
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['META_APP_ID'],
+        message: 'META_APP_ID, META_APP_SECRET and META_WEBHOOK_VERIFY_TOKEN go together',
       });
     }
     if (env.MAIL_TRANSPORT === 'smtp' && !env.SMTP_URL) {

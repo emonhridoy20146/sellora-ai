@@ -24,7 +24,12 @@ export interface MetaChannelConfig {
   /** Page id (Messenger), Instagram account id, or WhatsApp phone number id. */
   externalId: string;
   displayName: string;
+  /** Encrypted with the channel type and externalId as associated data (see MetaTokens). */
   accessTokenEnc: string;
+  /** The Facebook page behind a Messenger or Instagram channel (webhook subscription, sending). */
+  pageId?: string;
+  /** Instagram @username. */
+  username?: string;
   /** WhatsApp Business Account id. */
   wabaId?: string;
 }
@@ -59,6 +64,8 @@ const metaSchema = new Schema<MetaChannelConfig>(
     externalId: { type: String, required: true },
     displayName: { type: String, default: '' },
     accessTokenEnc: { type: String, required: true },
+    pageId: String,
+    username: String,
     wabaId: String,
   },
   { _id: false, strict: 'throw' },

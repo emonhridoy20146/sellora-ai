@@ -1,4 +1,5 @@
 import type { WithId } from '../../infra/database/schema-helpers.js';
+import { replyWindowEndsAt } from './reply-window.js';
 import type { Contact, Conversation, Message } from './schemas.js';
 
 export type ContactDoc = WithId<Contact>;
@@ -51,6 +52,8 @@ export function toConversationDto(
       : null,
     lastMessageAt: c.lastMessageAt.toISOString(),
     lastInboundAt: c.lastInboundAt?.toISOString() ?? null,
+    /** Messenger, Instagram and WhatsApp: replies are possible until then. Null: no window. */
+    replyWindowEndsAt: replyWindowEndsAt(c.channelType, c.lastInboundAt)?.toISOString() ?? null,
     unread: c.unread,
     tags: c.tags,
     /** The customer wrote after this month's conversation limit was used up. */
