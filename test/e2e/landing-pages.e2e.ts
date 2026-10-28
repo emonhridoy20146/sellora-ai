@@ -370,7 +370,7 @@ describe('landing pages', () => {
 
       page = await save(content, 1);
       expect(page.revision).toBe(2);
-      const reviews = page.draft.sections.find((s) => s.id === 'rev001') as {
+      const reviews = page.draft.sections.find((s) => s.id === 'rev001') as unknown as {
         items: { image: { url: string } }[];
       };
       expect(reviews.items[0]!.image.url).toMatch(/^http/);
@@ -456,6 +456,7 @@ describe('landing pages', () => {
       });
       const detail = await P().get(`/v1/platform/landing-pages/${page.id}`).expect(200);
       expect(detail.body.preview.url).toContain(`/${page.slug}?preview=`);
+      expect(detail.body.org).toMatchObject({ id: orgId, currency: 'BDT' });
       expect(detail.body.products.map((p: { role: string }) => p.role).sort()).toEqual([
         'add_on',
         'main',
