@@ -124,7 +124,8 @@ src/
     couriers/             courier account dialog, booking and bulk booking, the order's
                           courier card (timeline, lost replies), risk badges and card
     stores/               store status, web address field, theme picker, section editor,
-                          picture picker, preview button
+                          picture picker, preview button, custom domain card with its DNS
+                          records, the super-admin's domain decision buttons
   lib/
     api/                  fetch wrapper (CSRF, one refresh on 401), error type, response types
     format.ts             money in minor units, credits, dates (Intl, any currency)
@@ -135,7 +136,7 @@ src/
     inbox.ts              inbox views, live list placement, dot command, embed code
     couriers.ts           courier statuses and filters, weights in kg, risk labels
     stores.ts             store statuses and actions, readiness steps, sections, colour
-                          contrast, store pages
+                          contrast, store pages, custom domain statuses and next steps
   config/
     site.ts               public settings from env
     marketing.ts          feature list with live/coming-soon flags
@@ -234,6 +235,31 @@ SMOKE_ADMIN_EMAIL=… SMOKE_ADMIN_PASSWORD=… SMOKE_ADMIN_TOTP_SECRET=… \
 node scripts/stores-flow.mjs
 ```
 
+### Custom domains browser flow
+
+`scripts/domains-flow.mjs` connects a business's own domain to the open store that
+`stores-flow.mjs` leaves behind: the store's Web address tab, a Sellora address refused, a
+pasted link cleaned to `www.nakshi-shop.test`, the DNS records to add, a check that asks for
+the missing CNAME and one that names a CNAME pointing elsewhere, the domain moving to review,
+the super-admin's Custom domains queue and approval, the domain becoming the main address,
+shopping on it (home, product, cart), the Sellora address redirecting there, a bare domain
+approved from the store's review page, switching the main address both ways (each other
+address redirects), the certificate check Caddy would ask, the super-admin disconnecting a
+domain with a reason the owner reads, and removing both. Screenshots go to
+`smoke-output/domains/`.
+
+The domains are made up and nothing reaches a real DNS provider: start
+`node scripts/dns-stand-in.mjs` in sellora-api, start the API with
+`DNS_SERVERS=127.0.0.1:5300 STOREFRONT_DOMAIN_TARGET=edge.sellora.test
+STOREFRONT_DOMAIN_IPS=127.0.0.1`, and the script sets the stand-in's records over HTTP where a
+person would use their provider's page. Chromium reaches the made-up names through
+`--host-resolver-rules`. Automatic domain approval must be off in Admin › Settings. Same
+credentials as above:
+
+```bash
+node scripts/domains-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -260,7 +286,9 @@ node scripts/stores-flow.mjs
   only to decide which buttons to show, and the checklist comes from `readiness` on the store
   response. Previews open in a new tab with a signed link from the API, valid for an hour. The
   design editor keeps unsaved changes in one draft and compares it with the saved theme to
-  enable Save.
+  enable Save. The Web address tab lists the store's domains with the exact records to add
+  (as DNS providers label them), the problems from the last check, and polls every 30 seconds
+  while a domain waits; the API does the checking.
 - **Honesty on the public site.** `config/marketing.ts` marks each feature `live` or `soon`, and
   `LIVE_MODULES` controls the "coming soon" tag on plan modules. Only flip a flag when the
   feature works end to end.
@@ -275,10 +303,10 @@ Claude. So the public site keeps labelling the inbox and the AI "coming soon" un
 run for real. Courier booking, tracking and the fraud check work (M5), but only against a
 stand-in for the couriers' APIs, so the public site also keeps couriers "coming soon" until a
 parcel has been booked with each real courier. Online stores work (M6 part 1: the dashboard's
-Online store pages, the super-admin's review queue, and the shops themselves in
-`sellora-storefront`), but only on development addresses (`*.sellora.localhost`) so far and
-without custom domains, so the public site keeps "Your own online store" coming soon until
-stores run on a real domain. Marketing and analytics appear in the merchant sidebar as
+Online store pages, the super-admin's review queue, custom domains, and the shops themselves
+in `sellora-storefront`), but only on development addresses (`*.sellora.localhost`, and made-up
+custom domains answered by a DNS stand-in) so far, so the public site keeps "Your own online
+store" coming soon until stores run on a real domain with real certificates. Marketing and analytics appear in the merchant sidebar as
 disabled "Soon" items. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.
 

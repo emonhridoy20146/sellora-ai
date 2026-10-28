@@ -15,6 +15,8 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { usePlatform } from '@/components/platform-context';
+import { DomainStatusBadge } from '@/components/stores/domain-card';
+import { DomainDecision } from '@/components/stores/domain-decision';
 import { StoreStatusBadge } from '@/components/stores/store-status';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -26,7 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import type { PlatformStoreDetail, StoreReviewFlag, StoreStatus } from '@/lib/api/types';
-import { formatDateTime, formatMoney, humanize } from '@/lib/format';
+import { formatDateTime, formatMoney, formatRelative, humanize } from '@/lib/format';
 import { PAGE_INFO, PAGE_KEYS, SECTION_LABEL, STORE_STATUS, sectionSummary } from '@/lib/stores';
 
 type Decision = 'approve' | 'reject' | 'suspend' | 'reinstate';
@@ -377,6 +379,59 @@ export default function PlatformStorePage() {
                 </div>
               )}
             </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Custom domains</CardTitle>
+              <CardDescription>
+                {s.domains.length
+                  ? 'Domains the business has added for this store.'
+                  : 'The business has not added a domain. The store uses its Sellora address.'}
+              </CardDescription>
+            </CardHeader>
+            {s.domains.length > 0 && (
+              <CardContent>
+                <ul className="grid gap-3 text-sm">
+                  {s.domains.map((d) => (
+                    <li
+                      key={d.id}
+                      className="grid gap-2 rounded-md border p-3"
+                      data-domain={d.domain}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium break-all">{d.displayDomain}</span>
+                        <DomainStatusBadge status={d.status} />
+                        {d.primary && <span className="text-xs text-muted-foreground">Main</span>}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {d.status === 'pending'
+                          ? `Added ${formatRelative(d.createdAt)}, waiting for its DNS records.`
+                          : d.status === 'rejected'
+                            ? `Not approved${d.review.reason ? `: ${d.review.reason}` : '.'}`
+                            : d.verifiedAt
+                              ? `DNS proven ${formatRelative(d.verifiedAt)}.`
+                              : null}
+                        {d.status === 'active' && d.dns?.routing === false
+                          ? ' Its DNS no longer points here.'
+                          : ''}
+                      </p>
+                      {editable && (
+                        <DomainDecision
+                          domain={d}
+                          onDone={() => {
+                            void queryClient.invalidateQueries({ queryKey: key });
+                            void queryClient.invalidateQueries({
+                              queryKey: ['platform', 'store-domains'],
+                            });
+                          }}
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            )}
           </Card>
         </div>
       </div>

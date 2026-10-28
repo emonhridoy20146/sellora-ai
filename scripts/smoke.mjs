@@ -188,6 +188,7 @@ try {
       ...(orgId ? [[`/admin/tenants/${orgId}`, 'tenant-detail']] : []),
       ['/admin/users', 'users'],
       ['/admin/stores', 'stores'],
+      ['/admin/stores/domains', 'store-domains'],
       ['/admin/payments', 'payments'],
       ['/admin/withdrawals', 'withdrawals'],
       ['/admin/profit', 'profit'],

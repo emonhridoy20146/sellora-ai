@@ -154,7 +154,10 @@ function SettingsForm({
             maxTopupMinor: maxMinor,
           },
           fraudNetwork: { enabled: s.fraudNetwork.enabled },
-          stores: { autoApprove: s.stores.autoApprove },
+          stores: {
+            autoApprove: s.stores.autoApprove,
+            autoApproveDomains: s.stores.autoApproveDomains,
+          },
         },
       }),
     onSuccess: async (next) => {
@@ -384,6 +387,14 @@ function SettingsForm({
             hint="Only when the automatic check finds no warning words in the store or its products. Stores with warnings still wait in Online stores. You can suspend any store later."
             checked={s.stores.autoApprove}
             onChange={(v) => set('stores', { autoApprove: v })}
+            disabled={ro}
+          />
+          <Toggle
+            id="st-domain-auto"
+            label="Connect custom domains without a person reviewing them"
+            hint="A domain connects as soon as its DNS records prove the business owns it and point it at the stores. Otherwise it waits in Online stores › Domains. You can disconnect any domain later."
+            checked={s.stores.autoApproveDomains}
+            onChange={(v) => set('stores', { autoApproveDomains: v })}
             disabled={ro}
           />
         </CardContent>

@@ -25,7 +25,7 @@ import { PlatformProvider } from '@/components/platform-context';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { api } from '@/lib/api/client';
 import { usePlatformMe } from '@/lib/api/queries';
-import type { BillingOverview, PlatformStoreList } from '@/lib/api/types';
+import type { BillingOverview, PlatformStoreDomainList, PlatformStoreList } from '@/lib/api/types';
 
 function nav(
   can: (p: string) => boolean,
@@ -94,7 +94,7 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
     enabled: can('platform.billing.view'),
     refetchInterval: 60_000,
   });
-  // Only the count of stores waiting for review, for the badge.
+  // Only the counts waiting for review, for the badge.
   const storeQueue = useQuery({
     queryKey: ['platform', 'stores', 'pending-count'],
     queryFn: () =>
@@ -102,6 +102,20 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
     enabled: can('platform.stores.approve'),
     refetchInterval: 60_000,
   });
+  const domainQueue = useQuery({
+    queryKey: ['platform', 'store-domains', 'review-count'],
+    queryFn: () =>
+      api<PlatformStoreDomainList>('/platform/store-domains', {
+        query: { status: 'review', pageSize: 1 },
+      }),
+    enabled: can('platform.stores.approve'),
+    refetchInterval: 60_000,
+  });
+  // Stores and custom domains waiting for a person share the badge.
+  const storeWork =
+    storeQueue.data || domainQueue.data
+      ? (storeQueue.data?.pending ?? 0) + (domainQueue.data?.review ?? 0)
+      : undefined;
 
   return (
     <SessionGate realm="platform" query={me}>
@@ -109,7 +123,7 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
         <PlatformProvider value={{ me: me.data, can }}>
           <AppShell
             brand={<Brand href="/admin" suffix="Platform" />}
-            sections={nav(can, overview.data?.queues, storeQueue.data?.pending)}
+            sections={nav(can, overview.data?.queues, storeWork)}
             topRight={
               <>
                 <span className="mr-2 hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">

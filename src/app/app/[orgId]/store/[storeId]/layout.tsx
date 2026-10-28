@@ -38,7 +38,7 @@ export default function StoreEditorLayout({ children }: { children: React.ReactN
             {s.name} <StoreStatusBadge status={s.status} />
           </span>
         }
-        description={<span className="break-all">{s.host}</span>}
+        description={<span className="break-all">{s.primaryDomain ?? s.host}</span>}
         actions={
           <>
             <PreviewButton orgId={org.id} storeId={s.id} />
@@ -58,6 +58,7 @@ export default function StoreEditorLayout({ children }: { children: React.ReactN
           { href: `${base}/design`, label: 'Design' },
           { href: `${base}/details`, label: 'Details' },
           { href: `${base}/pages`, label: 'Pages' },
+          { href: `${base}/domain`, label: 'Web address' },
         ]}
       />
       {children}

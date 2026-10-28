@@ -46,6 +46,11 @@ export default function PlatformStoresPage() {
       <PageHeader
         title="Online stores"
         description="Stores wait here after a business sends them for review. Oldest first: check the preview and the automatic warnings, then approve or ask for changes."
+        actions={
+          <Link href="/admin/stores/domains" className="text-sm text-primary hover:underline">
+            Custom domains
+          </Link>
+        }
       />
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b px-5 py-3">

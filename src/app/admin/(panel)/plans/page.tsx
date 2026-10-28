@@ -33,6 +33,7 @@ import { formatMoney, formatNumber, formatRelative, minorToInput, parseMoney } f
 const LIMIT_LABEL: Record<keyof PlanLimits, { label: string; unit?: string }> = {
   seats: { label: 'Staff seats' },
   stores: { label: 'Online stores' },
+  customDomains: { label: 'Custom domains' },
   products: { label: 'Products' },
   channels: { label: 'Connected channels' },
   ordersPerMonth: { label: 'Orders per month' },

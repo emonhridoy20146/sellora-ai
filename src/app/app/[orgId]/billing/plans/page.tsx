@@ -28,6 +28,7 @@ const LIMIT_LABELS: [keyof Plan['limits'], string, string][] = [
   ['products', 'product', 'products'],
   ['ordersPerMonth', 'order a month', 'orders a month'],
   ['stores', 'online store', 'online stores'],
+  ['customDomains', 'own domain', 'own domains'],
 ];
 
 function limitText(v: number | null, one: string, many: string): string | null {

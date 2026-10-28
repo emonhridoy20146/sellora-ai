@@ -159,6 +159,7 @@ export type ModelTier = 'fast' | 'standard' | 'advanced';
 export interface PlanLimits {
   seats: number | null;
   stores: number | null;
+  customDomains: number | null;
   products: number | null;
   channels: number | null;
   ordersPerMonth: number | null;
@@ -483,7 +484,7 @@ export interface PlatformSettings {
    */
   fraudNetwork: { enabled: boolean; configured: boolean };
   /** Open a submitted store without a person reviewing it, when the automatic check finds nothing. */
-  stores: { autoApprove: boolean };
+  stores: { autoApprove: boolean; autoApproveDomains: boolean };
   updatedAt?: IsoDate;
 }
 
@@ -1358,8 +1359,12 @@ export interface Store {
   id: string;
   name: string;
   handle: string;
+  /** The Sellora address (subdomain), without scheme. */
   host: string;
+  /** Where shoppers find the store: the main custom domain, or the Sellora address. */
   url: string;
+  selloraUrl: string;
+  primaryDomain: string | null;
   category: string;
   language: StoreLanguage;
   themeKey: string;
@@ -1475,4 +1480,65 @@ export interface PlatformStoreDetail extends Store {
   flags: StoreReviewFlag[];
   statusBeforeSuspension: StoreStatus | null;
   preview: PreviewLink | null;
+  domains: StoreDomain[];
+}
+
+export type DomainStatus = 'pending' | 'review' | 'active' | 'rejected';
+
+export interface DnsRecord {
+  type: 'TXT' | 'CNAME' | 'A' | 'AAAA';
+  /** The full name. */
+  name: string;
+  /** The name as most DNS providers' "Host" field wants it ("www", "@"). */
+  host: string;
+  value: string;
+  purpose: string;
+}
+
+export interface StoreDomain {
+  id: string;
+  storeId: string;
+  domain: string;
+  displayDomain: string;
+  apex: boolean;
+  status: DomainStatus;
+  primary: boolean;
+  url: string;
+  records: DnsRecord[];
+  dns: {
+    checkedAt: string;
+    ownership: boolean;
+    routing: boolean;
+    problems: string[];
+    found: { txt: string[]; cname: string[]; addresses: string[] };
+  } | null;
+  nextCheckAt: string | null;
+  verifiedAt: string | null;
+  activatedAt: string | null;
+  review: { decidedAt: string | null; reason: string | null };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StoreDomainList {
+  enabled: boolean;
+  target: string | null;
+  apexAllowed: boolean;
+  maxPerStore: number;
+  items: StoreDomain[];
+  limit: number | null;
+  used: number;
+}
+
+export interface PlatformStoreDomainRow extends StoreDomain {
+  store: { id: string; name: string; handle: string; status: StoreStatus } | null;
+  org: { id: string; name: string; status: string } | null;
+}
+
+export interface PlatformStoreDomainList {
+  items: PlatformStoreDomainRow[];
+  total: number;
+  review: number;
+  page: number;
+  pageSize: number;
 }

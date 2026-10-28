@@ -242,10 +242,18 @@ export default function StoreOverviewPage() {
               <CopyButton value={s.url} label="Copy link" />
             </div>
             <p className="text-muted-foreground">
-              {s.handleLocked
-                ? 'Share it on your Facebook page and in replies.'
-                : 'You can change the address in Details until the store opens.'}
+              {s.primaryDomain
+                ? `Your own domain. The Sellora address ${s.host} still works and sends shoppers here.`
+                : s.handleLocked
+                  ? 'Share it on your Facebook page and in replies.'
+                  : 'You can change the address in Details until the store opens.'}
             </p>
+            <Link
+              href={`/app/${org.id}/store/${s.id}/domain`}
+              className="text-primary hover:underline"
+            >
+              {s.primaryDomain ? 'Manage domains' : 'Use your own domain'}
+            </Link>
           </CardContent>
         </Card>
         {actions.includes('delete') && (

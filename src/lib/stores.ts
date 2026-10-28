@@ -1,4 +1,6 @@
 import type {
+  DomainStatus,
+  StoreDomain,
   FeatureIcon,
   SectionType,
   Store,
@@ -309,4 +311,50 @@ export function canonicalJson(value: unknown): string {
         )
       : v,
   );
+}
+
+// ---------------------------------------------------------------- custom domains
+
+export const DOMAIN_STATUS: Record<
+  DomainStatus,
+  { label: string; tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger'; text: string }
+> = {
+  pending: {
+    label: 'Waiting for DNS',
+    tone: 'neutral',
+    text: 'Add the records below where you bought the domain. Sellora checks them by itself; new records can take a few hours to show.',
+  },
+  review: {
+    label: 'In review',
+    tone: 'warning',
+    text: 'The records are right. Sellora is checking the domain; you get an email when it connects.',
+  },
+  active: {
+    label: 'Connected',
+    tone: 'success',
+    text: 'Shoppers reach your store at this address.',
+  },
+  rejected: {
+    label: 'Not approved',
+    tone: 'danger',
+    text: 'Sellora did not approve this domain. Read the reason below, then remove it.',
+  },
+};
+
+/** What a domain needs next, in one line for the list. */
+export function domainNextStep(d: StoreDomain): string {
+  if (d.status === 'active')
+    return d.dns && !d.dns.routing
+      ? 'Its DNS changed: shoppers may stop reaching the store here. Check the records.'
+      : d.primary
+        ? 'Main address: shoppers on other addresses are sent here.'
+        : 'Also opens the store.';
+  if (d.status === 'pending') {
+    if (!d.dns) return 'Not checked yet.';
+    const left = [!d.dns.ownership && 'TXT', !d.dns.routing && (d.apex ? 'A' : 'CNAME')].filter(
+      Boolean,
+    );
+    return left.length ? `Waiting for the ${left.join(' and ')} record.` : 'Checking…';
+  }
+  return DOMAIN_STATUS[d.status].text;
 }
