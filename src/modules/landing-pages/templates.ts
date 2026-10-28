@@ -1,3 +1,4 @@
+import type { FieldError } from '../../common/errors/app-error.js';
 import {
   blockId,
   type LandingContent,
@@ -190,6 +191,52 @@ const WORDS: Record<LandingLanguage, Words> = {
     priceNote: 'ডেলিভারি চার্জ অর্ডারের সময় যোগ হবে।',
   },
 };
+
+/**
+ * The template words that are instructions to the business ("Write what makes this product
+ * good.") or sample reviews, not words for shoppers. A page cannot go live while a shown
+ * section still has one: shoppers would read the instruction, and a sample review on a live
+ * page would be a made-up review.
+ */
+export const STARTER_TEXTS: ReadonlySet<string> = new Set(
+  Object.values(WORDS).flatMap((w) => [
+    ...w.benefits.map((b) => b.text),
+    ...w.reviews.flatMap((r) => [r.name, r.text]),
+    w.problem,
+    w.solution,
+    ...w.steps,
+  ]),
+);
+
+const isStarter = (text: string) => STARTER_TEXTS.has(text.trim());
+
+/** The shown sections that still have the template's starter words (empty when none do). */
+export function starterTextProblems(content: LandingContent): FieldError[] {
+  const errors: FieldError[] = [];
+  content.sections.forEach((s, i) => {
+    if (!s.enabled) return;
+    const path = `content.sections.${i}`;
+    if (s.type === 'reviews' && s.items.some((r) => isStarter(r.name) || isStarter(r.text)))
+      errors.push({
+        path,
+        message: 'Replace the sample reviews with real ones from your buyers, or hide this section',
+      });
+    const words =
+      s.type === 'benefits'
+        ? s.items.map((x) => x.text)
+        : s.type === 'problem_solution'
+          ? [s.problem, s.solution]
+          : s.type === 'steps'
+            ? s.steps.map((x) => x.text)
+            : [];
+    if (words.some(isStarter))
+      errors.push({
+        path,
+        message: "Replace the template's sample words with your own, or hide this section",
+      });
+  });
+  return errors;
+}
 
 const on = { enabled: true, hideOn: 'none' as const };
 

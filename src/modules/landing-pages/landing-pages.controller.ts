@@ -27,7 +27,7 @@ import * as dto from './landing-pages.dto.js';
 import { LandingPagesService } from './landing-pages.service.js';
 import { LandingReviewService } from './landing-review.service.js';
 import { LandingStorefrontService, type ResolvedLanding } from './landing-storefront.service.js';
-import { TEMPLATES } from './templates.js';
+import { STARTER_TEXTS, TEMPLATES } from './templates.js';
 
 // ---------------------------------------------------------------- merchant
 
@@ -42,7 +42,7 @@ export class LandingPagesController {
   @RequirePermissions('stores.view')
   @ApiOperation({ summary: 'Templates a new page can start from' })
   templates() {
-    return { items: TEMPLATES };
+    return { items: TEMPLATES, starterTexts: [...STARTER_TEXTS] };
   }
 
   @Get('slug-check')

@@ -259,6 +259,19 @@ describe('landing pages', () => {
       });
       expect(page.draft.sections.filter((s) => s.type === 'order_form')).toHaveLength(1);
       expect(JSON.stringify(page.draft)).toContain('Aloe Vera Gel');
+      // The template's "write here" words and sample reviews cannot go live as they are.
+      const early = await O()
+        .post(lp(`/${page.id}/submit`))
+        .expect(422);
+      expect(early.body.code).toBe('page_not_ready');
+      expect(early.body.errors.map((e: { message: string }) => e.message)).toEqual([
+        "Replace the template's sample words with your own, or hide this section",
+        'Replace the sample reviews with real ones from your buyers, or hide this section',
+      ]);
+      const templates = await O().get(lp('/templates')).expect(200);
+      expect(templates.body.starterTexts).toContain(
+        'Replace this with a real review from a customer.',
+      );
 
       const taken = await O()
         .post(lp())
@@ -295,7 +308,20 @@ describe('landing pages', () => {
       const content: Content = {
         ...page.draft,
         sections: [
-          ...page.draft.sections,
+          // The business writes its own benefits and swaps the sample reviews for real ones.
+          ...page.draft.sections
+            .filter((s) => s.type !== 'reviews')
+            .map((s) =>
+              s.type === 'benefits'
+                ? {
+                    ...s,
+                    items: (s.items as { title: string; text: string }[]).map((x, i) => ({
+                      ...x,
+                      text: `Soothes sunburn in minutes (${i + 1})`,
+                    })),
+                  }
+                : s,
+            ),
           {
             id: 'vid001',
             type: 'video',

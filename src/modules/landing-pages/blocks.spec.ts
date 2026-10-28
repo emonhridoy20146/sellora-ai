@@ -12,7 +12,7 @@ import {
   type LandingContent,
   type OfferProducts,
 } from './blocks.js';
-import { TEMPLATE_KEYS, templateContent } from './templates.js';
+import { STARTER_TEXTS, TEMPLATE_KEYS, starterTextProblems, templateContent } from './templates.js';
 
 const PRODUCT = { id: 'a'.repeat(24), name: 'Aloe Vera Gel', description: 'Cools the skin.' };
 const ADDON = 'b'.repeat(24);
@@ -230,6 +230,62 @@ describe('ready to publish', () => {
     expect(publishProblems(same, ready).map((e) => e.message)).toContain(
       'Choose a different product for the add-on',
     );
+  });
+
+  it("holds back the template's sample words and sample reviews until they are replaced or hidden", () => {
+    for (const lang of ['en', 'bn'] as const) {
+      const full = landingContentSchema.parse(templateContent('full_offer', lang, PRODUCT));
+      const where = (c: LandingContent) =>
+        starterTextProblems(c).map((e) => c.sections[Number(e.path.split('.')[2])]!.type);
+      expect(where(full)).toEqual(['benefits', 'reviews']);
+      const problem = landingContentSchema.parse(
+        templateContent('problem_solution', lang, PRODUCT),
+      );
+      expect(where(problem)).toEqual(['problem_solution', 'benefits', 'steps', 'reviews']);
+      // The short template has no sample words at all.
+      expect(starterTextProblems(templateContent('quick_order', lang, PRODUCT))).toEqual([]);
+
+      // Hidden sections and the business's own words pass.
+      const fixed: LandingContent = {
+        ...full,
+        sections: full.sections.map((s) =>
+          s.type === 'reviews'
+            ? { ...s, enabled: false }
+            : s.type === 'benefits'
+              ? { ...s, items: s.items.map((x, i) => ({ ...x, text: `Our own words ${i}` })) }
+              : s,
+        ),
+      };
+      expect(starterTextProblems(fixed)).toEqual([]);
+    }
+    const reviews = page().sections.find((s) => s.type === 'reviews')!;
+    expect(starterTextProblems(page())[1]?.message).toBe(
+      'Replace the sample reviews with real ones from your buyers, or hide this section',
+    );
+    // A sample name with a real review is still a made-up buyer.
+    if (reviews.type === 'reviews')
+      expect(
+        starterTextProblems({
+          ...page(),
+          sections: [{ ...reviews, items: [{ ...reviews.items[0]!, text: 'Loved it' }] }],
+        }),
+      ).toHaveLength(1);
+    // Both languages' words are known, and spaces around them do not hide them.
+    expect(STARTER_TEXTS.has('Write the first step.')).toBe(true);
+    expect(STARTER_TEXTS.has('প্রথম ধাপ লিখুন।')).toBe(true);
+    const benefits = page().sections.find((s) => s.type === 'benefits')!;
+    if (benefits.type === 'benefits')
+      expect(
+        starterTextProblems({
+          ...page(),
+          sections: [
+            {
+              ...benefits,
+              items: [{ ...benefits.items[0]!, text: '  Write why the price is worth it.  ' }],
+            },
+          ],
+        }),
+      ).toHaveLength(1);
   });
 });
 

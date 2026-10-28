@@ -2,7 +2,8 @@
 
 The Sellora AI platform API and background workers: accounts, businesses and staff, the
 super-admin realm, billing (plans, AI-credit wallet, payments, invoices, withdrawals) and,
-milestone by milestone, the inbox, AI agent, commerce and store features.
+milestone by milestone, the inbox, AI agent, commerce, couriers, online stores and landing
+pages.
 
 NestJS 12 · TypeScript (strict) · MongoDB 8 (replica set) · Redis 7 + BullMQ · Zod · Vitest.
 
@@ -179,6 +180,12 @@ src/
                              tools, metered tool loop, reply queue and handover (ADR 0010)
     meta/                    Messenger, Instagram, WhatsApp: Graph API client, webhook
                              parsing, inbound events, outbox sender, connect flows (ADR 0011)
+    couriers/ fraud/         courier bookings and status checks; delivery risk (ADR 0013)
+    stores/                  online stores, launch review, storefront API, custom domains
+                             (ADR 0014, 0015)
+    landing-pages/           landing pages: sections, offer, templates, review, versions,
+                             storefront view and orders, visit numbers (ADR 0016)
+    health/                  liveness and readiness
 test/
   e2e/                       HTTP tests per area, including tenancy.e2e.ts
   helpers/                   test app, fake gateways, fake Anthropic API, fake Graph API,

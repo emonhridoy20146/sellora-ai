@@ -76,6 +76,14 @@ too.
 - **Templates.** A new page starts from a template (three in v1: a full offer page, problem
   and solution, and a short quick-order page), in English or Bangla, filled with the
   product's name, pictures, description and price. Duplicating a page copies its draft.
+  Some template words are instructions to the business ("Write what makes this product
+  good.") or sample reviews ("A happy buyer"). A page cannot be sent for review while a
+  shown section still has one of them (`starterTextProblems`, error `page_not_ready`): the
+  business writes its own words or hides the section. The API serves the list with the
+  templates, so the editor marks those sections before the business presses Publish. A
+  sample review on a live page would be a made-up review.
+- **Empty fields.** An empty hero headline shows the product's name and an empty hero
+  picture its first picture, as the editor says.
 
 **Why.** Tying pages to a store reuses everything a page needs (address, domain, brand,
 policies, receipts) and the existing approval of the address; requiring the store to be

@@ -38,7 +38,7 @@ import {
   LandingPageVersionRepository,
 } from './repositories.js';
 import { landingStatus, type LandingPage, type LandingPageVersion } from './schemas.js';
-import { templateContent, type TemplateKey } from './templates.js';
+import { starterTextProblems, templateContent, type TemplateKey } from './templates.js';
 
 export type LandingPageDoc = WithId<LandingPage>;
 type StoreDoc = WithId<Store>;
@@ -543,7 +543,10 @@ export class LandingPagesService {
       throw AppError.conflict('nothing_to_publish', 'Shoppers already see this version.');
     if (page.submission?.status === 'pending' && page.submission.revision === page.revision)
       throw AppError.conflict('already_in_review', 'This version is already waiting for review.');
-    const problems = publishProblems(page.draft, await this.offerProducts(page.draft));
+    const problems = [
+      ...publishProblems(page.draft, await this.offerProducts(page.draft)),
+      ...starterTextProblems(page.draft),
+    ];
     if (problems.length)
       throw AppError.unprocessable('page_not_ready', 'The page is not ready to publish yet.', {
         errors: problems,

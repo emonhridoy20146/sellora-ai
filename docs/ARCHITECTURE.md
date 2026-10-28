@@ -25,8 +25,8 @@ people who run Sellora (the super-admin panel).
 ```
 
 Repositories are separate (no monorepo): `sellora-api` (this), `sellora-web` (marketing site,
-merchant dashboard, super-admin panel) and `sellora-storefront` (shoppers' online stores; landing
-pages later). See [ADR 0003](adr/0003-separate-repositories.md).
+merchant dashboard, super-admin panel) and `sellora-storefront` (shoppers' online stores and
+landing pages). See [ADR 0003](adr/0003-separate-repositories.md).
 
 ## Online stores
 
@@ -46,6 +46,19 @@ domain) proves it points at the storefront, and only then is the name claimed, t
 unique index, and sent to the super-admin. The storefront resolves any host outside the store
 domain among active domains and redirects shoppers to the store's main address; Caddy asks
 the API before issuing a certificate. See [ADR 0015](adr/0015-store-custom-domains.md).
+
+## Landing pages
+
+A landing page (`landing_pages`) belongs to a store and is served by the same storefront app
+at `<store address>/<slug>`, from `/v1/storefront/landing-pages/*` behind the same storefront
+key and host resolution. A page holds three copies of its content: the _draft_ the business
+edits, the _submission_ (a snapshot sent for review, with the automatic word check's flags)
+and the _published_ version shoppers see; the last 20 published versions are kept. Content is
+typed sections validated by Zod (`landing-pages/blocks.ts`); no HTML is accepted. Orders from
+the page go through the order service with source `landing_page`, the page and the visit's
+attribution; prices are worked out again on the server from the published offer. Visits and
+orders are counted per page and day in `landing_page_stats`. See
+[ADR 0016](adr/0016-landing-pages.md).
 
 ## Request lifecycle
 
