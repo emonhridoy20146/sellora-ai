@@ -17,6 +17,7 @@ export interface PlatformSettingsDto {
   billing: PlatformSettings['billing'];
   /** `configured`: the server has FRAUD_NETWORK_SECRET; without it the switch has no effect. */
   fraudNetwork: PlatformSettings['fraudNetwork'] & { configured: boolean };
+  stores: PlatformSettings['stores'];
   updatedAt: string | null;
 }
 
@@ -66,6 +67,7 @@ export class PlatformSettingsService {
         enabled: doc.fraudNetwork?.enabled ?? false,
         configured: Boolean(this.config.get('FRAUD_NETWORK_SECRET')),
       },
+      stores: { autoApprove: doc.stores?.autoApprove ?? false },
       updatedAt: (doc as unknown as { updatedAt?: Date }).updatedAt?.toISOString() ?? null,
     };
     this.cache = { at: Date.now(), value };

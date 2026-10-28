@@ -40,6 +40,9 @@ export function testEnv(overrides: Record<string, string> = {}): Env {
     STORAGE_SIGNING_SECRET: randomBytes(32).toString('hex'),
     STORAGE_LOCAL_DIR: join(tmpdir(), `sellora-test-storage-${suffix}`),
     RATE_LIMIT_IP_MULTIPLIER: '1000',
+    STOREFRONT_API_KEY: randomBytes(24).toString('hex'),
+    STOREFRONT_BASE_DOMAIN: 'shops.test',
+    STOREFRONT_URL_SCHEME: 'https',
     ...overrides,
   });
 }

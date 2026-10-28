@@ -41,6 +41,10 @@ export class RateLimitService {
       'webchat:visitor': { points: 30, durationSec: 60 },
       'webchat:ip': { points: 120, durationSec: 60 },
       'ai:preview': { points: 20, durationSec: 60 },
+      // Online store shoppers (keyed on the shopper's address the storefront passes on).
+      'checkout:ip': { points: 10, durationSec: 600 },
+      'checkout:phone': { points: 5, durationSec: 3600 },
+      'track:ip': { points: 30, durationSec: 600 },
     };
     const multiplier = config.get('RATE_LIMIT_IP_MULTIPLIER');
     for (const [name, spec] of Object.entries(this.specs)) {

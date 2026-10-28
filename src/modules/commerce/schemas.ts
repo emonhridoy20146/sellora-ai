@@ -118,6 +118,10 @@ export const productSchema = tenantSchema<Product>({
 productSchema.index({ orgId: 1, slug: 1 }, { unique: true });
 productSchema.index({ orgId: 1, status: 1, updatedAt: -1 });
 productSchema.index({ orgId: 1, categoryId: 1 });
+// Online store listings: newest, best sellers, and one category's newest.
+productSchema.index({ orgId: 1, status: 1, createdAt: -1 });
+productSchema.index({ orgId: 1, status: 1, soldCount: -1 });
+productSchema.index({ orgId: 1, status: 1, categoryId: 1, createdAt: -1 });
 // SKUs are unique per business. Enforced in ProductsService: a unique multikey index would
 // also collide on variants that have no SKU.
 productSchema.index({ orgId: 1, 'variants.sku': 1 });
@@ -379,6 +383,8 @@ export interface Order {
   createdBy?: Types.ObjectId;
   /** The inbox conversation the order was taken in. */
   conversationId?: Types.ObjectId;
+  /** The online store the order was placed in. */
+  storeId?: Types.ObjectId;
   /** The latest parcel booked with a courier for this order. */
   shipment?: OrderShipment;
   placedAt: Date;
@@ -451,6 +457,7 @@ export const orderSchema = tenantSchema<Order>({
   },
   createdBy: Schema.Types.ObjectId,
   conversationId: Schema.Types.ObjectId,
+  storeId: Schema.Types.ObjectId,
   shipment: new Schema(
     {
       parcelId: { type: Schema.Types.ObjectId, required: true },

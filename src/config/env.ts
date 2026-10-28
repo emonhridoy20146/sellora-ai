@@ -31,7 +31,26 @@ export const envSchema = z
 
     API_PUBLIC_URL: z.url().default('http://localhost:4000'),
     WEB_APP_URL: z.url().default('http://localhost:3000'),
-    STOREFRONT_BASE_DOMAIN: z.string().min(3).default('sellora.localhost'),
+    /**
+     * Stores live at <handle>.<STOREFRONT_BASE_DOMAIN>. May carry a port in development
+     * (sellora.localhost:3100); browsers send *.localhost to this machine.
+     */
+    STOREFRONT_BASE_DOMAIN: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(/^[a-z0-9.-]+(:\d{2,5})?$/, 'a domain, optionally with :port')
+      .default('sellora.localhost'),
+    STOREFRONT_URL_SCHEME: z.enum(['http', 'https']).default('https'),
+    /**
+     * Shared secret the storefront app sends as X-Storefront-Key on every call to the
+     * storefront routes. Also keys the store preview and order receipt links. Without it the
+     * storefront routes answer 503 and no store can open.
+     */
+    STOREFRONT_API_KEY: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z.string().min(32).optional(),
+    ),
     CORS_ORIGINS: csv.default(['http://localhost:3000']),
     COOKIE_DOMAIN: z.string().optional(),
     COOKIE_SECURE: bool.default(false),
@@ -182,6 +201,13 @@ export const envSchema = z
           code: 'custom',
           path: ['MAIL_TRANSPORT'],
           message: 'log transport is not allowed in production',
+        });
+      }
+      if (env.STOREFRONT_URL_SCHEME !== 'https') {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['STOREFRONT_URL_SCHEME'],
+          message: 'must be https in production',
         });
       }
       if (!env.WEBCHAT_TOKEN_SECRET) {

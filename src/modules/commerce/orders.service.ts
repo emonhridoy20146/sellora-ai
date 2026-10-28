@@ -105,6 +105,8 @@ export interface CreateOrderInput {
   allowBlockedCustomer?: boolean;
   /** The inbox conversation the order was taken in. */
   conversationId?: string;
+  /** The online store the order was placed in. */
+  storeId?: string;
 }
 
 /** Allowed moves between statuses. Cancelling and returning are terminal. */
@@ -181,6 +183,7 @@ export function toOrderDto(o: OrderDoc) {
     },
     stockCommitted: o.stockCommitted,
     conversationId: o.conversationId?.toHexString() ?? null,
+    storeId: o.storeId?.toHexString() ?? null,
     shipment: o.shipment
       ? {
           parcelId: o.shipment.parcelId.toHexString(),
@@ -778,6 +781,7 @@ export class OrdersService {
         ...(input.conversationId
           ? { conversationId: new Types.ObjectId(input.conversationId) }
           : {}),
+        ...(input.storeId ? { storeId: new Types.ObjectId(input.storeId) } : {}),
         placedAt: now,
       });
       if (status === 'confirmed') {

@@ -1,11 +1,14 @@
 import { Schema, type Types } from 'mongoose';
 import { tenantSchema } from '../../infra/database/schema-helpers.js';
 
-export const FILE_PURPOSES = ['product_image', 'chat_media'] as const;
+export const FILE_PURPOSES = ['product_image', 'chat_media', 'store_asset'] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
 
 /** Purposes a browser may upload to. Chat media is saved by the server from the channels. */
-export const UPLOAD_PURPOSES = ['product_image'] as const satisfies readonly FilePurpose[];
+export const UPLOAD_PURPOSES = [
+  'product_image',
+  'store_asset',
+] as const satisfies readonly FilePurpose[];
 
 export const FILE_STATUSES = ['pending', 'ready'] as const;
 export type FileStatus = (typeof FILE_STATUSES)[number];

@@ -65,6 +65,10 @@ const services = [
   ],
   providers: services,
   exports: [
+    // Read by the online store, which shows the catalog and takes orders.
+    CategoryRepository,
+    ProductRepository,
+    OrderRepository,
     ProductsService,
     CustomersService,
     OrdersService,

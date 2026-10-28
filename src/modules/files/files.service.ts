@@ -62,6 +62,16 @@ export const FILE_RULES: Record<FilePurpose, PurposeRule> = {
     permission: 'inbox.reply',
     removeWhenUnused: false,
   },
+  // Online store logo, hero and banner images. Public like product photos.
+  store_asset: {
+    types: Object.keys(IMAGE_TYPES),
+    maxBytes: imageMax,
+    visibility: 'public',
+    dir: 'store',
+    module: 'storefront',
+    permission: 'stores.manage',
+    removeWhenUnused: true,
+  },
 };
 
 /** Keys look like o/<orgId>/<dir>/<fileId>.<ext>; the storage route accepts nothing else. */

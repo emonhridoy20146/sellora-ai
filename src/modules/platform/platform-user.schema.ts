@@ -59,6 +59,8 @@ export interface PlatformSettings {
   };
   /** The shared delivery-outcome network behind the fraud check. */
   fraudNetwork: { enabled: boolean };
+  /** New online stores: wait for a super-admin (default) or open as soon as they are submitted. */
+  stores: { autoApprove: boolean };
   updatedBy?: string;
 }
 
@@ -92,6 +94,9 @@ export const platformSettingsSchema = platformSchema<PlatformSettings>(
     fraudNetwork: {
       // Off until the legal review of sharing customers' delivery outcomes between businesses.
       enabled: { type: Boolean, default: false },
+    },
+    stores: {
+      autoApprove: { type: Boolean, default: false },
     },
     updatedBy: String,
   },

@@ -172,4 +172,89 @@ export const mailTemplates = {
           `We noticed a sign-in at ${p.when} from ${p.ip} (${p.userAgent}). If this was not you, change your password.`,
         ]);
   },
+  storeApproved(locale: Locale, p: { storeName: string; storeUrl: string }): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.storeName} এখন চালু`,
+          [
+            'অভিনন্দন! আপনার অনলাইন স্টোর অনুমোদিত হয়েছে এবং এখন ক্রেতারা দেখতে ও অর্ডার করতে পারবেন।',
+            'ফেসবুক পেজ, ইনস্টাগ্রাম বায়ো এবং হোয়াটসঅ্যাপে লিংকটি শেয়ার করুন।',
+          ],
+          { label: 'স্টোর দেখুন', url: p.storeUrl },
+        )
+      : render(
+          `${p.storeName} is open`,
+          [
+            'Good news: your online store was approved. Shoppers can now browse it and place orders.',
+            'Share the link on your Facebook page, Instagram bio and WhatsApp.',
+          ],
+          { label: 'Open your store', url: p.storeUrl },
+        );
+  },
+
+  storeRejected(
+    locale: Locale,
+    p: { storeName: string; reason: string; dashboardUrl: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.storeName} অনুমোদন পায়নি`,
+          [
+            'আপনার অনলাইন স্টোর এখনই চালু করা যাচ্ছে না। কারণ:',
+            p.reason,
+            'ঠিক করে আবার রিভিউয়ের জন্য পাঠান।',
+          ],
+          { label: 'স্টোর ঠিক করুন', url: p.dashboardUrl },
+        )
+      : render(
+          `${p.storeName} needs changes`,
+          [
+            'Your online store could not be approved yet. The reviewer said:',
+            p.reason,
+            'Fix this and send the store for review again.',
+          ],
+          { label: 'Fix your store', url: p.dashboardUrl },
+        );
+  },
+
+  storeSuspended(
+    locale: Locale,
+    p: { storeName: string; reason: string; dashboardUrl: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.storeName} সাময়িকভাবে বন্ধ`,
+          [
+            'Sellora আপনার অনলাইন স্টোর সাময়িকভাবে বন্ধ করেছে। কারণ:',
+            p.reason,
+            'প্রশ্ন থাকলে সাপোর্টে যোগাযোগ করুন।',
+          ],
+          { label: 'ড্যাশবোর্ড খুলুন', url: p.dashboardUrl },
+        )
+      : render(
+          `${p.storeName} was suspended`,
+          [
+            'Sellora closed your online store for now. The reason:',
+            p.reason,
+            'Contact support if you have questions.',
+          ],
+          { label: 'Open dashboard', url: p.dashboardUrl },
+        );
+  },
+
+  storeReinstated(locale: Locale, p: { storeName: string; dashboardUrl: string }): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.storeName} আবার চালু`,
+          ['আপনার অনলাইন স্টোরের স্থগিতাদেশ তুলে নেওয়া হয়েছে।'],
+          {
+            label: 'ড্যাশবোর্ড খুলুন',
+            url: p.dashboardUrl,
+          },
+        )
+      : render(`${p.storeName} is back`, ['The suspension on your online store was lifted.'], {
+          label: 'Open dashboard',
+          url: p.dashboardUrl,
+        });
+  },
 };

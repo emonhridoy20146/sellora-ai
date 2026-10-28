@@ -77,14 +77,15 @@ export class ProblemDetailsFilter implements ExceptionFilter {
   private toProblem(exception: unknown): ProblemDetails {
     if (exception instanceof AppError) {
       const { errors, ...rest } = exception.details ?? {};
+      // Extra details come first so they can never replace the standard fields.
       return {
+        ...rest,
         type: `https://docs.sellora.ai/errors/${exception.code}`,
         title: TITLES[exception.status] ?? 'Error',
         status: exception.status,
         code: exception.code,
         detail: exception.message,
         ...(errors ? { errors } : {}),
-        ...rest,
       };
     }
     if (exception instanceof ZodError) {
