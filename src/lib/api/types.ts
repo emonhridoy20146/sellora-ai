@@ -484,7 +484,7 @@ export interface PlatformSettings {
    */
   fraudNetwork: { enabled: boolean; configured: boolean };
   /** Open a submitted store without a person reviewing it, when the automatic check finds nothing. */
-  stores: { autoApprove: boolean; autoApproveDomains: boolean };
+  stores: { autoApprove: boolean; autoApproveDomains: boolean; autoApproveLandingPages: boolean };
   updatedAt?: IsoDate;
 }
 
@@ -786,6 +786,10 @@ export interface Order {
   editable: boolean;
   /** The inbox conversation the order was placed in (by the AI sales agent or staff). */
   conversationId: string | null;
+  /** The landing page the order was placed on. */
+  landingPage?: { id: string; name: string; slug: string } | null;
+  /** Where the shopper came from (ad links), for landing page orders. */
+  attribution?: OrderAttribution | null;
   /** The latest courier booking, kept in step with the parcel (null before any booking). */
   shipment: OrderShipment | null;
   placedAt: IsoDate;
@@ -1541,4 +1545,228 @@ export interface PlatformStoreDomainList {
   review: number;
   page: number;
   pageSize: number;
+}
+
+// ---------------------------------------------------------------- landing pages (ADR 0016)
+
+export type OrderAttribution = Partial<
+  Record<
+    | 'utmSource'
+    | 'utmMedium'
+    | 'utmCampaign'
+    | 'utmContent'
+    | 'utmTerm'
+    | 'fbclid'
+    | 'gclid'
+    | 'ttclid'
+    | 'referrer',
+    string
+  >
+>;
+
+export type LandingLanguage = 'en' | 'bn';
+export type LandingStatus =
+  'draft' | 'in_review' | 'changes_requested' | 'live' | 'paused' | 'taken_down';
+export type HideOn = 'none' | 'mobile' | 'desktop';
+export type LandingTemplateKey = 'full_offer' | 'problem_solution' | 'quick_order';
+
+export interface LandingImage {
+  fileId: string;
+  url: string;
+  alt: string;
+}
+
+interface LandingBase {
+  id: string;
+  enabled: boolean;
+  hideOn: HideOn;
+}
+
+export type LandingSection = LandingBase &
+  (
+    | {
+        type: 'hero';
+        heading: string;
+        subheading: string;
+        badge: string;
+        buttonLabel: string;
+        image: LandingImage | null;
+        showPrice: boolean;
+      }
+    | { type: 'image'; image: LandingImage | null; caption: string }
+    | { type: 'gallery'; title: string; source: 'product' | 'custom'; images: LandingImage[] }
+    | { type: 'video'; title: string; url: string }
+    | { type: 'benefits'; title: string; items: { title: string; text: string }[] }
+    | {
+        type: 'problem_solution';
+        problemTitle: string;
+        problem: string;
+        solutionTitle: string;
+        solution: string;
+        image: LandingImage | null;
+      }
+    | { type: 'specs'; title: string; rows: { label: string; value: string }[] }
+    | { type: 'steps'; title: string; steps: { text: string }[] }
+    | {
+        type: 'before_after';
+        title: string;
+        before: LandingImage | null;
+        after: LandingImage | null;
+        caption: string;
+      }
+    | {
+        type: 'reviews';
+        title: string;
+        items: { name: string; text: string; rating: number; image: LandingImage | null }[];
+      }
+    | { type: 'countdown'; heading: string; endsAt: IsoDate | null; endedText: string }
+    | { type: 'stock_left'; text: string; threshold: number }
+    | { type: 'price'; heading: string; note: string }
+    | { type: 'faq'; title: string; items: { question: string; answer: string }[] }
+    | {
+        type: 'guarantee';
+        title: string;
+        items: { icon: FeatureIcon; title: string; text: string }[];
+      }
+    | { type: 'delivery'; heading: string; text: string; showAreas: boolean }
+    | { type: 'contact'; heading: string; text: string; call: boolean; whatsapp: boolean }
+    | { type: 'text'; heading: string; body: string }
+    | { type: 'order_form'; heading: string; subheading: string; buttonLabel: string }
+  );
+export type LandingSectionType = LandingSection['type'];
+
+export interface LandingPackage {
+  id: string;
+  label: string;
+  quantity: number;
+  /** The package's whole price; null charges the product's own price times the quantity. */
+  priceMinor: number | null;
+  badge: string;
+}
+
+export interface LandingAddOn {
+  productId: string;
+  variantId: string;
+  priceMinor: number;
+  label: string;
+}
+
+export interface LandingContent {
+  sections: LandingSection[];
+  offer: {
+    productId: string | null;
+    packages: LandingPackage[];
+    addOn: LandingAddOn | null;
+    noteField: boolean;
+  };
+  seo: { title: string; description: string; image: LandingImage | null; index: boolean };
+  settings: { stickyButton: boolean; stickyLabel: string };
+}
+
+export interface LandingTotals {
+  visitors: number;
+  orders: number;
+  revenueMinor: number;
+}
+
+export interface LandingPageSummary {
+  id: string;
+  storeId: string;
+  store: { id: string; name: string; handle: string; status: StoreStatus; url: string } | null;
+  name: string;
+  slug: string;
+  language: LandingLanguage;
+  url: string | null;
+  status: LandingStatus;
+  revision: number;
+  hasUnpublishedChanges: boolean;
+  slugLocked: boolean;
+  productId: string | null;
+  submission: {
+    status: 'pending' | 'rejected';
+    revision: number;
+    submittedAt: IsoDate;
+    decidedAt: IsoDate | null;
+    reason: string | null;
+    flags: StoreReviewFlag[];
+  } | null;
+  published: {
+    version: number;
+    revision: number;
+    publishedAt: IsoDate;
+    autoApproved: boolean;
+  } | null;
+  paused: boolean;
+  takedown: { reason: string; at: IsoDate } | null;
+  last30Days?: LandingTotals;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export interface LandingPage extends LandingPageSummary {
+  draft: LandingContent;
+}
+
+export interface LandingPageList {
+  items: LandingPageSummary[];
+  limit: number | null;
+  used: number;
+}
+
+export interface LandingTemplate {
+  key: LandingTemplateKey;
+  name: string;
+  description: string;
+}
+
+export interface LandingSlugCheck {
+  slug: string;
+  available: boolean;
+  reason: string | null;
+  url?: string;
+}
+
+export interface LandingVersion {
+  version: number;
+  publishedAt: IsoDate;
+  autoApproved: boolean;
+  live: boolean;
+}
+
+export interface LandingStats {
+  days: ({ day: string } & LandingTotals)[];
+  total: LandingTotals;
+  conversionRate: number | null;
+  currency: string;
+}
+
+/** A row of GET /platform/landing-pages */
+export interface PlatformLandingRow extends LandingPageSummary {
+  org: { id: string; name: string; status: string; category: string; currency: string } | null;
+  flagCount: number;
+}
+
+export interface PlatformLandingList {
+  items: PlatformLandingRow[];
+  total: number;
+  pending: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface PlatformLandingDetail extends LandingPageSummary {
+  org: PlatformLandingRow['org'];
+  submissionContent: LandingContent | null;
+  publishedContent: LandingContent | null;
+  products: {
+    id: string;
+    name: string;
+    description: string;
+    status: string;
+    image: string | null;
+    priceMinor: number;
+    currency: string;
+    role: 'main' | 'add_on';
+  }[];
+  preview: PreviewLink | null;
 }

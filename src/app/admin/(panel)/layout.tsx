@@ -9,6 +9,7 @@ import {
   Gauge,
   KeyRound,
   Layers,
+  PanelsTopLeft,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -25,12 +26,18 @@ import { PlatformProvider } from '@/components/platform-context';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { api } from '@/lib/api/client';
 import { usePlatformMe } from '@/lib/api/queries';
-import type { BillingOverview, PlatformStoreDomainList, PlatformStoreList } from '@/lib/api/types';
+import type {
+  BillingOverview,
+  PlatformLandingList,
+  PlatformStoreDomainList,
+  PlatformStoreList,
+} from '@/lib/api/types';
 
 function nav(
   can: (p: string) => boolean,
   queues?: BillingOverview['queues'],
   pendingStores?: number,
+  pendingLanding?: number,
 ): NavSection[] {
   const s: NavSection[] = [
     {
@@ -43,7 +50,15 @@ function nav(
           ? [{ href: '/admin/users', label: 'Merchant users', icon: Users }]
           : []),
         ...(can('platform.stores.approve')
-          ? [{ href: '/admin/stores', label: 'Online stores', icon: Store, badge: pendingStores }]
+          ? [
+              { href: '/admin/stores', label: 'Online stores', icon: Store, badge: pendingStores },
+              {
+                href: '/admin/landing-pages',
+                label: 'Landing pages',
+                icon: PanelsTopLeft,
+                badge: pendingLanding,
+              },
+            ]
           : []),
       ],
     },
@@ -111,6 +126,15 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
     enabled: can('platform.stores.approve'),
     refetchInterval: 60_000,
   });
+  const landingQueue = useQuery({
+    queryKey: ['platform', 'landing-pages', 'pending-count'],
+    queryFn: () =>
+      api<PlatformLandingList>('/platform/landing-pages', {
+        query: { status: 'pending', pageSize: 1 },
+      }),
+    enabled: can('platform.stores.approve'),
+    refetchInterval: 60_000,
+  });
   // Stores and custom domains waiting for a person share the badge.
   const storeWork =
     storeQueue.data || domainQueue.data
@@ -123,7 +147,7 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
         <PlatformProvider value={{ me: me.data, can }}>
           <AppShell
             brand={<Brand href="/admin" suffix="Platform" />}
-            sections={nav(can, overview.data?.queues, storeWork)}
+            sections={nav(can, overview.data?.queues, storeWork, landingQueue.data?.pending)}
             topRight={
               <>
                 <span className="mr-2 hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">

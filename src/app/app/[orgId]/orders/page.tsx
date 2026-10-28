@@ -1,7 +1,7 @@
 'use client';
 
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Plus, Printer, Search, ShoppingBag, Truck } from 'lucide-react';
+import { PanelsTopLeft, Plus, Printer, Search, ShoppingBag, Truck, X } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -42,21 +42,34 @@ export default function OrdersPage() {
     const v = params.get('shipment');
     return isShipmentFilter(v) ? v : '';
   });
+  // Opened from a landing page ("Orders from this page"): only that page's orders.
+  const [landingPageId, setLandingPageId] = useState<string>(() => {
+    const v = params.get('landingPageId') ?? '';
+    return /^[a-f0-9]{24}$/.test(v) ? v : '';
+  });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // The orders being sent, kept while the dialog shows the result (the selection is cleared).
   const [bulkIds, setBulkIds] = useState<string[] | null>(null);
   const q = useDebounced(search.trim());
-  const filtered = Boolean(q || status || payment || shipment);
+  const filtered = Boolean(q || status || payment || shipment || landingPageId);
 
   const counts = useQuery({
     queryKey: [...commerceKeys.orders(org.id), 'counts'],
     queryFn: () => api<OrderCounts>(`/orgs/${org.id}/orders/counts`),
   });
   const list = useInfiniteQuery({
-    queryKey: [...commerceKeys.orders(org.id), 'list', status, q, payment, shipment],
+    queryKey: [...commerceKeys.orders(org.id), 'list', status, q, payment, shipment, landingPageId],
     queryFn: ({ pageParam }) =>
       api<Page<Order>>(`/orgs/${org.id}/orders`, {
-        query: { status, q, paymentStatus: payment, shipment, limit: 25, cursor: pageParam },
+        query: {
+          status,
+          q,
+          paymentStatus: payment,
+          shipment,
+          landingPageId: landingPageId || undefined,
+          limit: 25,
+          cursor: pageParam,
+        },
       }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
@@ -181,6 +194,24 @@ export default function OrdersPage() {
                 ))}
               </NativeSelect>
             </>
+          )}
+          {landingPageId && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border bg-info-soft px-3 py-1 text-[13px] text-primary">
+              <PanelsTopLeft className="size-3.5" aria-hidden />
+              {items.find((o) => o.landingPage?.id === landingPageId)?.landingPage?.name ??
+                'One landing page'}
+              <button
+                type="button"
+                className="ml-0.5 rounded-full hover:bg-primary/10"
+                aria-label="Show orders from everywhere"
+                onClick={() => {
+                  setLandingPageId('');
+                  setSelected(new Set());
+                }}
+              >
+                <X className="size-3.5" />
+              </button>
+            </span>
           )}
           {selected.size > 0 && (
             <div className="flex flex-wrap items-center gap-2">

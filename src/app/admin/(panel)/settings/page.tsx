@@ -397,6 +397,14 @@ function SettingsForm({
             onChange={(v) => set('stores', { autoApproveDomains: v })}
             disabled={ro}
           />
+          <Toggle
+            id="st-landing-auto"
+            label="Publish landing pages without a person reviewing them"
+            hint="Only when the automatic check finds no warning words on the page. Pages with warnings, and pages the platform took down, still wait in Landing pages. You can take any page down later."
+            checked={s.stores.autoApproveLandingPages}
+            onChange={(v) => set('stores', { autoApproveLandingPages: v })}
+            disabled={ro}
+          />
         </CardContent>
       </Card>
 

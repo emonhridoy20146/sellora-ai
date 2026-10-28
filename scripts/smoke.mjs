@@ -145,6 +145,8 @@ try {
       ['/couriers', 'couriers'],
       ['/store', 'store'],
       ['/store/new', 'store-new'],
+      ['/landing-pages', 'landing-pages'],
+      ['/landing-pages/new', 'landing-pages-new'],
       ['/activity', 'activity'],
     ])
       await check(page, orgPath + sub, `merchant-${name}`);
@@ -189,6 +191,7 @@ try {
       ['/admin/users', 'users'],
       ['/admin/stores', 'stores'],
       ['/admin/stores/domains', 'store-domains'],
+      ['/admin/landing-pages', 'landing-pages'],
       ['/admin/payments', 'payments'],
       ['/admin/withdrawals', 'withdrawals'],
       ['/admin/profit', 'profit'],

@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   Megaphone,
   Package,
+  PanelsTopLeft,
   Plus,
   Settings,
   ShoppingBag,
@@ -65,7 +66,10 @@ function nav(orgId: string, can: (p: string) => boolean): NavSection[] {
         : []),
       ...(can('orders.view') ? [{ href: `${base}/couriers`, label: 'Couriers', icon: Truck }] : []),
       ...(can('stores.view')
-        ? [{ href: `${base}/store`, label: 'Online store', icon: Store }]
+        ? [
+            { href: `${base}/store`, label: 'Online store', icon: Store },
+            { href: `${base}/landing-pages`, label: 'Landing pages', icon: PanelsTopLeft },
+          ]
         : []),
       { href: `${base}/marketing`, label: 'Marketing', icon: Megaphone, soon: true },
       { href: `${base}/analytics`, label: 'Analytics', icon: BarChart3, soon: true },

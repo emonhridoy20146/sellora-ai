@@ -497,6 +497,63 @@ function DetailsDialog({
   );
 }
 
+const ATTRIBUTION_LABEL: Record<string, string> = {
+  utmSource: 'Source',
+  utmMedium: 'Medium',
+  utmCampaign: 'Campaign',
+  utmContent: 'Ad',
+  utmTerm: 'Keyword',
+  fbclid: 'Facebook click',
+  gclid: 'Google click',
+  ttclid: 'TikTok click',
+  referrer: 'Came from',
+};
+
+/** The landing page an order came from and the ad link the shopper followed. */
+function SourceCard({ order: o }: { order: Order }) {
+  const { org, can } = useOrg();
+  const entries = Object.entries(o.attribution ?? {}).filter(([, v]) => Boolean(v));
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Where it came from</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 text-sm">
+        {o.landingPage && (
+          <p>
+            Landing page{' '}
+            {can('stores.view') ? (
+              <Link
+                href={`/app/${org.id}/landing-pages/${o.landingPage.id}`}
+                className="font-medium text-primary hover:underline"
+              >
+                {o.landingPage.name}
+              </Link>
+            ) : (
+              <span className="font-medium">{o.landingPage.name}</span>
+            )}{' '}
+            <span className="text-muted-foreground">/{o.landingPage.slug}</span>
+          </p>
+        )}
+        {entries.length > 0 ? (
+          <dl className="grid gap-1.5">
+            {entries.map(([k, v]) => (
+              <div key={k} className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">{ATTRIBUTION_LABEL[k] ?? k}</dt>
+                <dd className="truncate font-mono text-xs" title={v}>
+                  {v}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className="text-muted-foreground">No ad link: the shopper opened the page directly.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function OrderPage() {
   const { org, can } = useOrg();
   const { orderId } = useParams<{ orderId: string }>();
@@ -547,7 +604,7 @@ export default function OrderPage() {
             <PaymentBadge status={o.payment.status} />
           </span>
         }
-        description={`Placed ${formatDateTime(o.placedAt, org.timezone)} · ${ORDER_SOURCE_LABEL[o.source] ?? o.source}`}
+        description={`Placed ${formatDateTime(o.placedAt, org.timezone)} · ${ORDER_SOURCE_LABEL[o.source] ?? o.source}${o.landingPage ? `: ${o.landingPage.name}` : ''}`}
         actions={
           <>
             {can('orders.manage') &&
@@ -629,6 +686,7 @@ export default function OrderPage() {
           </Card>
         </div>
         <div className="grid gap-6">
+          {(o.landingPage || o.attribution) && <SourceCard order={o} />}
           <CourierCard order={o} />
           {o.status !== 'cancelled' && <RiskCard phone={o.customer.phone} />}
           <Card>
