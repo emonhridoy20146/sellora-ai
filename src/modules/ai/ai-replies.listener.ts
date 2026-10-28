@@ -21,7 +21,10 @@ export class AiRepliesListener {
     try {
       await this.replies.onCustomerMessage(e);
     } catch (err) {
-      this.logger.error({ err, conversationId: e.conversationId }, 'Could not schedule an AI reply');
+      this.logger.error(
+        { err, conversationId: e.conversationId },
+        'Could not schedule an AI reply',
+      );
     }
   }
 
@@ -30,7 +33,10 @@ export class AiRepliesListener {
     try {
       await this.replies.onResumed(e);
     } catch (err) {
-      this.logger.error({ err, conversationId: e.conversationId }, 'Could not schedule an AI reply');
+      this.logger.error(
+        { err, conversationId: e.conversationId },
+        'Could not schedule an AI reply',
+      );
     }
   }
 }

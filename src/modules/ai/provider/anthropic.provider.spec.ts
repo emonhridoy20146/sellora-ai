@@ -38,7 +38,12 @@ describe('Anthropic message mapping', () => {
         role: 'user',
         content: [
           { type: 'tool_result', tool_use_id: 'toolu_1', content: '{"id":"p1"}' },
-          { type: 'tool_result', tool_use_id: 'toolu_2', content: '{"error":"bad"}', is_error: true },
+          {
+            type: 'tool_result',
+            tool_use_id: 'toolu_2',
+            content: '{"error":"bad"}',
+            is_error: true,
+          },
         ],
       },
       { role: 'assistant', content: 'Ji ache.' },

@@ -295,7 +295,10 @@ export class AiRepliesService {
     // A person may have taken over while the agent was thinking: their word stands.
     const current = await this.conversations.findById(conversation._id);
     if (!current || current.ai.mode !== 'auto') {
-      this.logger.log({ conversationId, runId }, 'Dropped an AI reply: the AI was paused meanwhile');
+      this.logger.log(
+        { conversationId, runId },
+        'Dropped an AI reply: the AI was paused meanwhile',
+      );
       return { status: 'skipped', reason: 'paused_during_reply' };
     }
     const answeredMeanwhile = await this.messages.exists({
@@ -327,8 +330,7 @@ export class AiRepliesService {
       },
     );
     thread.conversation = afterPost;
-    if (result.handover)
-      await this.handover(thread, 'ai_handover', result.handover.summary, false);
+    if (result.handover) await this.handover(thread, 'ai_handover', result.handover.summary, false);
     return {
       status: 'replied',
       messageId: message._id.toHexString(),
@@ -511,7 +513,13 @@ export class AiRepliesService {
   private async prompt(
     settings: Pick<
       AiAgentSettings,
-      'assistantName' | 'tone' | 'language' | 'businessInfo' | 'instructions' | 'faqs' | 'takeOrders'
+      | 'assistantName'
+      | 'tone'
+      | 'language'
+      | 'businessInfo'
+      | 'instructions'
+      | 'faqs'
+      | 'takeOrders'
     >,
     channelType: ChannelType,
     contact: ContactDoc | null,
@@ -536,7 +544,11 @@ export class AiRepliesService {
       },
       channel: CHANNEL_LABEL[channelType],
       catalog,
-      zones: shop.deliveryZones.map((z) => ({ id: z.id, name: z.name, chargeMinor: z.chargeMinor })),
+      zones: shop.deliveryZones.map((z) => ({
+        id: z.id,
+        name: z.name,
+        chargeMinor: z.chargeMinor,
+      })),
       customer,
       now: new Date(),
     });
@@ -563,9 +575,15 @@ export class AiRepliesService {
     const saved = await this.settings.get();
     const settings = { ...saved, ...input.draft };
     const org = await this.orgs.get(RequestContext.tenant()!.orgId);
-    const messages: AiMessage[] = input.messages.map((m) =>
-      m.from === 'customer' ? { role: 'user', text: m.text } : { role: 'assistant', text: m.text },
-    );
+    // The model's conversation must open with the customer (the last message always is one).
+    const firstCustomer = input.messages.findIndex((m) => m.from === 'customer');
+    const messages: AiMessage[] = input.messages
+      .slice(firstCustomer)
+      .map((m) =>
+        m.from === 'customer'
+          ? { role: 'user', text: m.text }
+          : { role: 'assistant', text: m.text },
+      );
     const toolContext: ToolRunContext = {
       mode: 'preview',
       orgId: org._id.toHexString(),

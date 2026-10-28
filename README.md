@@ -50,6 +50,10 @@ Secrets never go in code or in git:
   never returned by the API.
 - AI provider keys are environment variables; model ids and their prices live in the database
   and are edited in the admin panel, so nothing about a provider is hard-coded in features.
+  Set `AI_ANTHROPIC_API_KEY` for the AI sales agent (both the API and the worker need it).
+  Without it the agent hands every chat to people and the settings page says the AI service
+  is unavailable. To demo locally without a key, run `node scripts/claude-stand-in.mjs` and
+  set `AI_ANTHROPIC_BASE_URL=http://127.0.0.1:4010` with any key; its replies are scripted.
 
 ## Scripts
 
@@ -63,6 +67,7 @@ Secrets never go in code or in git:
 | `npm run keys:generate`                                       | New JWT key pair and encryption keys.                                                 |
 | `npm run platform:bootstrap`                                  | First platform owner (only when there are no platform accounts).                      |
 | `npm run openapi:export`                                      | Writes the OpenAPI document.                                                          |
+| `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI).       |
 
 ## Tests
 
@@ -108,9 +113,11 @@ src/
     commerce/                products, stock, customers, orders, printing
     inbox/                   channels, contacts, conversations, messages, website chat,
                              live updates (Socket.IO gateways)
+    ai/                      AI sales agent: provider interface (Claude), settings, prompt,
+                             tools, metered tool loop, reply queue and handover (ADR 0010)
 test/
   e2e/                       HTTP tests per area, including tenancy.e2e.ts
-  helpers/                   test app, fake gateways, route inventory
+  helpers/                   test app, fake gateways, fake Anthropic API, route inventory
 scripts/                     keys, bootstrap, indexes, dev seed
 ```
 

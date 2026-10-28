@@ -50,6 +50,7 @@ interface AgentView {
   status: {
     serviceReady: boolean;
     perReply: { credits: number; amountMinor: number; currency: string } | null;
+    tiers: { tier: string; available: boolean; perReply: { credits: number } | null }[];
     wallet: { availableMinor: number; currency: string };
     channels: { id: string; name: string; aiEnabled: boolean; aiCanReply: boolean }[];
   };
@@ -90,16 +91,19 @@ describe('AI sales agent', () => {
   /** Whether the agent is on, so a visitor's message is known to schedule a reply job. */
   let agentOn = false;
   const patchAgent = async (body: Record<string, unknown>, as = owner) => {
-    const view = (await t.as(as.token).patch(url('/ai-agent')).send(body).expect(200)).body as AgentView;
+    const view = (await t.as(as.token).patch(url('/ai-agent')).send(body).expect(200))
+      .body as AgentView;
     agentOn = view.settings.enabled;
     return view;
   };
 
   /** A new website visitor, and a function to send messages as them. */
   const visitor = async () => {
-    const token = ((await t.http().post(widget('/session')).send({}).expect(200)).body as {
-      token: string;
-    }).token;
+    const token = (
+      (await t.http().post(widget('/session')).send({}).expect(200)).body as {
+        token: string;
+      }
+    ).token;
     let conversationId = '';
     const say = async (text: string) => {
       const res = await t
@@ -140,13 +144,23 @@ describe('AI sales agent', () => {
     replies().handleJob({ orgId, conversationId, messageId }, { finalAttempt });
 
   const conversation = async (id: string) =>
-    (await O().get(url(`/conversations/${id}`)).expect(200)).body as ConversationDto;
+    (
+      await O()
+        .get(url(`/conversations/${id}`))
+        .expect(200)
+    ).body as ConversationDto;
 
   /** The conversation's messages, oldest first (the API pages newest first). */
   const thread = async (id: string) =>
-    ((await O().get(url(`/conversations/${id}/messages`)).expect(200)).body as {
-      items: MessageDto[];
-    }).items.reverse();
+    (
+      (
+        await O()
+          .get(url(`/conversations/${id}/messages`))
+          .expect(200)
+      ).body as {
+        items: MessageDto[];
+      }
+    ).items.reverse();
 
   const wallet = async () =>
     (await O().get(url('/billing/wallet')).expect(200)).body as {
@@ -246,19 +260,39 @@ describe('AI sales agent', () => {
       expect(view.status.serviceReady).toBe(true);
       // fast tier: 6,000 input × 2/1K + 400 output × 10/1K = 16 credits at ৳0.10
       expect(view.status.perReply).toEqual({ credits: 16, amountMinor: 160, currency: 'BDT' });
+      expect(view.status.tiers.map((x) => [x.tier, x.available, x.perReply?.credits])).toEqual([
+        ['fast', true, 16],
+        ['standard', true, 48],
+        ['advanced', true, 80],
+      ]);
       expect(view.status.wallet).toEqual({ availableMinor: 25_000, currency: 'BDT' });
       expect(view.status.channels).toEqual([
-        expect.objectContaining({ id: channelId, name: 'Website', aiEnabled: true, aiCanReply: true }),
+        expect.objectContaining({
+          id: channelId,
+          name: 'Website',
+          aiEnabled: true,
+          aiCanReply: true,
+        }),
       ]);
     });
 
     it('lets managers keep the knowledge current but not turn the agent on', async () => {
-      const view = await patchAgent({ businessInfo: 'We deliver all over Bangladesh in 2-4 days.' }, manager);
+      const view = await patchAgent(
+        { businessInfo: 'We deliver all over Bangladesh in 2-4 days.' },
+        manager,
+      );
       expect(view.settings.businessInfo).toBe('We deliver all over Bangladesh in 2-4 days.');
-      const denied = await t.as(manager.token).patch(url('/ai-agent')).send({ enabled: true }).expect(403);
+      const denied = await t
+        .as(manager.token)
+        .patch(url('/ai-agent'))
+        .send({ enabled: true })
+        .expect(403);
       expect(denied.body.required).toEqual(['ai.settings.manage']);
       await t.as(sales.token).get(url('/ai-agent')).expect(403);
-      const bad = await O().patch(url('/ai-agent')).send({ replyDelaySeconds: 99, tone: 'rude' }).expect(422);
+      const bad = await O()
+        .patch(url('/ai-agent'))
+        .send({ replyDelaySeconds: 99, tone: 'rude' })
+        .expect(422);
       expect((bad.body.errors as { path: string }[]).map((e) => e.path).sort()).toEqual([
         'body.replyDelaySeconds',
         'body.tone',
@@ -374,7 +408,10 @@ describe('AI sales agent', () => {
       expect(platformRow?.costUsdMicros).toBe(313);
 
       // Running the same job again does nothing: the customer is answered.
-      expect(await run(v.conversationId, id)).toEqual({ status: 'skipped', reason: 'nothing_to_answer' });
+      expect(await run(v.conversationId, id)).toEqual({
+        status: 'skipped',
+        reason: 'nothing_to_answer',
+      });
       expect(ai.requests).toHaveLength(1);
     });
 
@@ -382,7 +419,10 @@ describe('AI sales agent', () => {
       const v = await visitor();
       const first = await v.say('ami ekta panjabi chai');
       const second = await v.say('L size ache?');
-      expect(await run(v.conversationId, first)).toEqual({ status: 'skipped', reason: 'superseded' });
+      expect(await run(v.conversationId, first)).toEqual({
+        status: 'skipped',
+        reason: 'superseded',
+      });
       ai.then(FakeAnthropic.text('Ji ache! Cotton Panjabi ৳1,500.'));
       expect(await run(v.conversationId, second)).toMatchObject({ status: 'replied' });
       expect(ai.requests).toHaveLength(1);
@@ -452,7 +492,12 @@ describe('AI sales agent', () => {
       expect(product).toMatchObject({ id: saree.id, name: 'Jamdani Saree' });
       expect(product.variants).toEqual([
         expect.objectContaining({ id: red().id, title: 'Red', price: '৳3,000', available: true }),
-        expect.objectContaining({ id: blue().id, title: 'Blue', price: '৳3,200', available: false }),
+        expect.objectContaining({
+          id: blue().id,
+          title: 'Blue',
+          price: '৳3,200',
+          available: false,
+        }),
       ]);
       expect(third.body.messages).toHaveLength(5);
       expect(onlyToolResult(third)).toMatchObject({
@@ -492,21 +537,32 @@ describe('AI sales agent', () => {
       expect(placed).toMatchObject({ ok: true, status: 'pending', total_to_pay: '৳3,060' });
       expect(placed.order_number).toMatch(/^SL-\d+$/);
 
-      const orders = (await O().get(url('/orders')).expect(200)).body.items as Record<string, unknown>[];
+      const orders = (await O().get(url('/orders')).expect(200)).body.items as Record<
+        string,
+        unknown
+      >[];
       const order = orders.find((o) => o.number === placed.order_number)!;
       expect(order).toMatchObject({
         status: 'pending',
         source: 'inbox',
         conversationId: buyer.conversationId,
         customer: { name: 'Rahim Uddin', phone: '+8801712345678' },
-        shippingAddress: { line1: 'House 12, Road 5, Dhanmondi', area: 'Dhanmondi', district: 'Dhaka' },
+        shippingAddress: {
+          line1: 'House 12, Road 5, Dhanmondi',
+          area: 'Dhanmondi',
+          district: 'Dhaka',
+        },
         deliveryZone: { id: 'dhaka', name: 'Inside Dhaka' },
         totalMinor: 306_000,
         payment: { method: 'cod', status: 'unpaid' },
         internalNote: 'Placed by the AI sales agent in a chat.',
       });
       // Pending orders do not take stock yet.
-      const product = (await O().get(url(`/products/${saree.id}`)).expect(200)).body as ProductDto;
+      const product = (
+        await O()
+          .get(url(`/products/${saree.id}`))
+          .expect(200)
+      ).body as ProductDto;
       expect(product.variants[0]!.stock).toBe(5);
 
       // The chat's contact is now that customer.
@@ -534,13 +590,17 @@ describe('AI sales agent', () => {
       expect(after).toHaveLength(orders.length);
     });
 
-    it("tells customers about their own orders only", async () => {
+    it('tells customers about their own orders only', async () => {
       const id = await buyer.say('amar order er ki obostha?');
       ai.then(FakeAnthropic.tool('get_my_orders', {}), FakeAnthropic.text('Pending ache.'));
       await run(buyer.conversationId, id);
       const mine = onlyToolResult(ai.requests[1]!);
       expect(mine.orders).toEqual([
-        expect.objectContaining({ status: 'pending', total: '৳3,060', items: '1× Jamdani Saree (Red)' }),
+        expect.objectContaining({
+          status: 'pending',
+          total: '৳3,060',
+          items: '1× Jamdani Saree (Red)',
+        }),
       ]);
       // The system prompt now knows this customer and their order.
       expect(ai.requests[0]!.body.system).toContain('Phone: +8801712345678');
@@ -549,10 +609,15 @@ describe('AI sales agent', () => {
       ai.reset();
       const stranger = await visitor();
       const sid = await stranger.say('amar order kothay?');
-      ai.then(FakeAnthropic.tool('get_my_orders', {}), FakeAnthropic.text('Kon number e order korechilen?'));
+      ai.then(
+        FakeAnthropic.tool('get_my_orders', {}),
+        FakeAnthropic.text('Kon number e order korechilen?'),
+      );
       await run(stranger.conversationId, sid);
       expect(onlyToolResult(ai.requests[1]!)).toMatchObject({ orders: [] });
-      expect(ai.requests[0]!.body.system).toContain('A new customer: nothing is known about them yet.');
+      expect(ai.requests[0]!.body.system).toContain(
+        'A new customer: nothing is known about them yet.',
+      );
     });
 
     it("cannot read another business's products", async () => {
@@ -585,7 +650,9 @@ describe('AI sales agent', () => {
       expect((found.results as { name: string }[]).map((r) => r.name)).toEqual(['Cotton Panjabi']);
       const bad = onlyToolResult(ai.requests[2]!);
       expect(bad).toMatchObject({ _isError: true, error: 'invalid_input' });
-      expect((bad.problems as string[]).join(' ')).toMatch(/items\.0\.product_id.*items\.0\.quantity/);
+      expect((bad.problems as string[]).join(' ')).toMatch(
+        /items\.0\.product_id.*items\.0\.quantity/,
+      );
     });
 
     it('remembers customer details, and staff can correct them', async () => {
@@ -651,7 +718,10 @@ describe('AI sales agent', () => {
 
       const later = await v.say('hello?');
       await eventually(() => queue().getJob(`reply-${later}`));
-      expect(await run(v.conversationId, later)).toEqual({ status: 'skipped', reason: 'ai_paused' });
+      expect(await run(v.conversationId, later)).toEqual({
+        status: 'skipped',
+        reason: 'ai_paused',
+      });
       expect(ai.requests).toHaveLength(2);
     });
 
@@ -668,7 +738,9 @@ describe('AI sales agent', () => {
       const b = await visitor();
       const bid = await b.say('আমি মানুষের সাথে কথা বলতে চাই');
       expect(await run(b.conversationId, bid)).toMatchObject({ reason: 'keyword' });
-      expect((await b.seen()).at(-1)?.text).toBe('ধন্যবাদ! আমাদের টিমের একজন শীঘ্রই আপনাকে উত্তর দেবেন।');
+      expect((await b.seen()).at(-1)?.text).toBe(
+        'ধন্যবাদ! আমাদের টিমের একজন শীঘ্রই আপনাকে উত্তর দেবেন।',
+      );
     });
 
     it('answers a waiting customer when a person turns the AI back on', async () => {
@@ -677,13 +749,18 @@ describe('AI sales agent', () => {
       ai.then(FakeAnthropic.text('Hello!'));
       await run(v.conversationId, first);
       const send = (text: string) =>
-        O().post(url(`/conversations/${v.conversationId}/messages`)).send({ text, clientId: cid() });
+        O()
+          .post(url(`/conversations/${v.conversationId}/messages`))
+          .send({ text, clientId: cid() });
       await send('.').expect(201);
       expect((await conversation(v.conversationId)).ai.mode).toBe('paused');
 
       const waiting = await v.say('price koto?');
       await eventually(() => queue().getJob(`reply-${waiting}`));
-      expect(await run(v.conversationId, waiting)).toEqual({ status: 'skipped', reason: 'ai_paused' });
+      expect(await run(v.conversationId, waiting)).toEqual({
+        status: 'skipped',
+        reason: 'ai_paused',
+      });
 
       await send('.').expect(201);
       expect((await conversation(v.conversationId)).ai.mode).toBe('auto');
@@ -742,7 +819,10 @@ describe('AI sales agent', () => {
       const v = await visitor();
       const id = await v.say('something the model will not answer');
       ai.then(FakeAnthropic.refusal());
-      expect(await run(v.conversationId, id)).toEqual({ status: 'handed_over', reason: 'ai_refused' });
+      expect(await run(v.conversationId, id)).toEqual({
+        status: 'handed_over',
+        reason: 'ai_refused',
+      });
       const msgs = await thread(v.conversationId);
       const notice = msgs.find((m) => m.sender.type === 'ai')!;
       // The declined call still cost tokens; the cost shows on the notice.
@@ -784,7 +864,9 @@ describe('AI sales agent', () => {
         isDefaultForTier: true,
       });
       try {
-        expect(((await O().get(url('/ai-agent')).expect(200)).body as AgentView).status.serviceReady).toBe(false);
+        expect(
+          ((await O().get(url('/ai-agent')).expect(200)).body as AgentView).status.serviceReady,
+        ).toBe(false);
         const v = await visitor();
         const id = await v.say('hello');
         expect(await run(v.conversationId, id)).toEqual({
@@ -820,7 +902,8 @@ describe('AI sales agent', () => {
 
   describe('test chat', () => {
     it('runs the real agent with draft settings but saves nothing', async () => {
-      const ordersBefore = ((await O().get(url('/orders')).expect(200)).body.items as unknown[]).length;
+      const ordersBefore = ((await O().get(url('/orders')).expect(200)).body.items as unknown[])
+        .length;
       ai.then(
         FakeAnthropic.tool('create_order', {
           items: [{ product_id: saree.id, variant_id: saree.variants[0]!.id, quantity: 1 }],
@@ -857,12 +940,19 @@ describe('AI sales agent', () => {
       expect(ai.requests[0]!.body.system).toContain('Free gift wrap this week (draft).');
       expect(ai.requests[0]!.body.system).toContain('Reply in Banglish');
       expect(ai.requests[0]!.body.messages).toHaveLength(3);
-      expect(onlyToolResult(ai.requests[1]!)).toMatchObject({ preview: true, total_to_pay: '৳3,120' });
-      expect(((await O().get(url('/orders')).expect(200)).body.items as unknown[]).length).toBe(ordersBefore);
+      expect(onlyToolResult(ai.requests[1]!)).toMatchObject({
+        preview: true,
+        total_to_pay: '৳3,120',
+      });
+      expect(((await O().get(url('/orders')).expect(200)).body.items as unknown[]).length).toBe(
+        ordersBefore,
+      );
       // The saved settings are unchanged.
       const view = (await O().get(url('/ai-agent')).expect(200)).body as AgentView;
       expect(view.settings.language).toBe('auto');
-      const usage = await O().get(url('/billing/ai-usage/requests?feature=ai_agent_preview')).expect(200);
+      const usage = await O()
+        .get(url('/billing/ai-usage/requests?feature=ai_agent_preview'))
+        .expect(200);
       expect((usage.body.items as unknown[]).length).toBeGreaterThan(0);
     });
 
@@ -883,6 +973,20 @@ describe('AI sales agent', () => {
         .expect(503);
       expect(res.body.code).toBe('ai_unavailable');
       expect((await wallet()).heldMinor).toBe(0);
+    });
+
+    it('starts the model’s conversation at the first customer message', async () => {
+      ai.then(FakeAnthropic.text('Ji, bolun!'));
+      await O()
+        .post(url('/ai-agent/preview'))
+        .send({
+          messages: [
+            { from: 'assistant', text: 'Welcome to Dhaka Fashion!' },
+            { from: 'customer', text: 'Hi' },
+          ],
+        })
+        .expect(200);
+      expect(ai.last().body.messages).toEqual([{ role: 'user', content: 'Hi' }]);
     });
   });
 });

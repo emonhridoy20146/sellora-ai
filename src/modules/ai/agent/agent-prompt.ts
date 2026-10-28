@@ -233,8 +233,7 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
     if (customer.phone) lines.push(`Phone: ${customer.phone}`);
     if (customer.email) lines.push(`Email: ${customer.email}`);
     if (customer.address) lines.push(`Saved address: ${customer.address}`);
-    if (customer.facts.length)
-      lines.push('Remembered:', ...customer.facts.map((f) => `- ${f}`));
+    if (customer.facts.length) lines.push('Remembered:', ...customer.facts.map((f) => `- ${f}`));
     if (customer.stats && customer.stats.orders > 0)
       lines.push(
         `Order history: ${customer.stats.orders} orders, ${customer.stats.delivered} delivered, ` +

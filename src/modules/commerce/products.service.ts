@@ -212,7 +212,12 @@ export class ProductsService {
     const words = [
       ...new Set(
         terms
-          .flatMap((t) => t.normalize('NFKC').toLowerCase().split(/[\s,.;:/|()]+/))
+          .flatMap((t) =>
+            t
+              .normalize('NFKC')
+              .toLowerCase()
+              .split(/[\s,.;:/|()]+/),
+          )
           .filter((w) => w.length >= 2),
       ),
     ].slice(0, 8);
@@ -235,10 +240,7 @@ export class ProductsService {
   /** Best-selling active products and how many are active, for the AI agent's catalog. */
   async topActive(limit: number): Promise<{ products: ProductDoc[]; totalActive: number }> {
     const [products, totalActive] = await Promise.all([
-      this.products.find(
-        { status: 'active' },
-        { sort: { soldCount: -1, updatedAt: -1 }, limit },
-      ),
+      this.products.find({ status: 'active' }, { sort: { soldCount: -1, updatedAt: -1 }, limit }),
       this.products.count({ status: 'active' }),
     ]);
     return { products, totalActive };

@@ -101,6 +101,10 @@ repeatable jobs (one runner per tick across the cluster) handle subscription ren
 expiries, monthly included-credit grants, releasing reservations left by crashed AI calls, and
 ending expired demo access. Jobs are idempotent, so retries are safe.
 
+The `ai` queue runs the AI sales agent's replies (ADR 0010): the API schedules a job when a
+customer writes, and the worker answers after the business's reply delay, one reply at a time
+per conversation, reserving and settling AI credits for every model turn.
+
 ## Configuration and secrets
 
 `config/env.ts` validates every variable at start-up. Secrets (JWT keys, data-encryption keys,

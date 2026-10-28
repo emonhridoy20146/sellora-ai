@@ -24,7 +24,14 @@ const base = (over: Partial<AgentPromptInput> = {}): AgentPromptInput => ({
         options: 'Colour: Red, Blue',
         category: 'Sarees',
       },
-      { id: 'p2', name: 'Cotton Panjabi', minMinor: 150_000, maxMinor: 150_000, available: false, options: '' },
+      {
+        id: 'p2',
+        name: 'Cotton Panjabi',
+        minMinor: 150_000,
+        maxMinor: 150_000,
+        available: false,
+        options: '',
+      },
     ],
     totalActive: 2,
     categories: ['Sarees'],
@@ -39,7 +46,9 @@ const base = (over: Partial<AgentPromptInput> = {}): AgentPromptInput => ({
 describe('agent prompt', () => {
   it('sets out who the agent is, the shop’s knowledge and the catalog', () => {
     const p = buildAgentPrompt(base());
-    expect(p).toMatch(/^You are Mitu, the AI sales assistant of Dhaka Fashion, chatting with a customer on website chat\./);
+    expect(p).toMatch(
+      /^You are Mitu, the AI sales assistant of Dhaka Fashion, chatting with a customer on website chat\./,
+    );
     expect(p).toContain('Reply in the language the customer writes in');
     expect(p).toContain('Warm and friendly');
     expect(p).toContain('Write prices like ৳1,250.');
@@ -48,7 +57,9 @@ describe('agent prompt', () => {
     expect(p).toContain('Q: Return?\nA: Within 3 days.');
     expect(p).toContain('- Inside Dhaka (zone id dhaka): ৳60');
     expect(p).toContain('## Catalog (all 2 products)\nCategories: Sarees');
-    expect(p).toContain('- Jamdani Saree (id p1): ৳3,000–৳3,200; Colour: Red, Blue; category Sarees');
+    expect(p).toContain(
+      '- Jamdani Saree (id p1): ৳3,000–৳3,200; Colour: Red, Blue; category Sarees',
+    );
     expect(p).toContain('- Cotton Panjabi (id p2): ৳1,500, out of stock');
     expect(p).toContain('5. Only after the customer clearly confirms, call create_order.');
     expect(p.endsWith('Today is Wednesday, 28 October 2026.')).toBe(true);
@@ -70,8 +81,12 @@ describe('agent prompt', () => {
 
   it('says when only the best sellers are listed, and handles an empty shop', () => {
     const partial = buildAgentPrompt(base({ catalog: { ...base().catalog, totalActive: 80 } }));
-    expect(partial).toContain('## Catalog (2 of 80 products, best sellers first; use search_products for the rest)');
-    const empty = buildAgentPrompt(base({ catalog: { lines: [], totalActive: 0, categories: [] }, zones: [] }));
+    expect(partial).toContain(
+      '## Catalog (2 of 80 products, best sellers first; use search_products for the rest)',
+    );
+    const empty = buildAgentPrompt(
+      base({ catalog: { lines: [], totalActive: 0, categories: [] }, zones: [] }),
+    );
     expect(empty).toContain('The shop has no products listed yet.');
     expect(empty).toContain('The shop has not set delivery charges');
   });

@@ -125,7 +125,12 @@ export class FakeAnthropic {
         content.push({ type: 'thinking', thinking: '', signature: 'sig_test_signature' });
       if (opts.text) content.push({ type: 'text', text: opts.text });
       for (const c of calls)
-        content.push({ type: 'tool_use', id: `toolu_test_${(toolSeq += 1)}`, name: c.name, input: c.input });
+        content.push({
+          type: 'tool_use',
+          id: `toolu_test_${(toolSeq += 1)}`,
+          name: c.name,
+          input: c.input,
+        });
       return json(message(content, 'tool_use', opts.usage, req.body.model));
     };
   }
@@ -156,12 +161,20 @@ export class FakeAnthropic {
 }
 
 /** The tool results the agent sent back in a request, by tool_use id. */
-export function toolResults(req: FakeRequest): Record<string, { content: string; is_error?: boolean }> {
+export function toolResults(
+  req: FakeRequest,
+): Record<string, { content: string; is_error?: boolean }> {
   const out: Record<string, { content: string; is_error?: boolean }> = {};
   const last = req.body.messages.at(-1);
   if (!last || !Array.isArray(last.content)) return out;
-  for (const block of last.content as { type: string; tool_use_id: string; content: string; is_error?: boolean }[])
-    if (block.type === 'tool_result') out[block.tool_use_id] = { content: block.content, is_error: block.is_error };
+  for (const block of last.content as {
+    type: string;
+    tool_use_id: string;
+    content: string;
+    is_error?: boolean;
+  }[])
+    if (block.type === 'tool_result')
+      out[block.tool_use_id] = { content: block.content, is_error: block.is_error };
   return out;
 }
 
@@ -169,5 +182,8 @@ export function toolResults(req: FakeRequest): Record<string, { content: string;
 export function onlyToolResult(req: FakeRequest): Record<string, unknown> & { _isError?: boolean } {
   const results = Object.values(toolResults(req));
   if (results.length !== 1) throw new Error(`expected one tool result, got ${results.length}`);
-  return { ...(JSON.parse(results[0]!.content) as Record<string, unknown>), _isError: results[0]!.is_error };
+  return {
+    ...(JSON.parse(results[0]!.content) as Record<string, unknown>),
+    _isError: results[0]!.is_error,
+  };
 }

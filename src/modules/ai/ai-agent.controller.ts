@@ -5,11 +5,16 @@ import { RequestContext } from '../../common/context/request-context.js';
 import { ZodBody } from '../../common/validation/zod.js';
 import { RateLimitService } from '../auth/core/rate-limit.service.js';
 import { OrgScoped, RequireAnyPermission, RequireModule } from '../auth/decorators.js';
+import { MODEL_TIERS } from '../billing/credit-schemas.js';
 import { CreditsService } from '../billing/credits.service.js';
 import { WalletService, toBalance } from '../billing/wallet.service.js';
 import { ChannelsService } from '../inbox/channels.service.js';
 import * as dto from './ai-agent.dto.js';
-import { AiAgentSettingsService, toAgentSettingsDto, type AiAgentSettingsDoc } from './agent-settings.service.js';
+import {
+  AiAgentSettingsService,
+  toAgentSettingsDto,
+  type AiAgentSettingsDoc,
+} from './agent-settings.service.js';
 import { AiRepliesService } from './agent/ai-replies.service.js';
 
 /** A typical reply: instructions, catalog and recent chat in, a short answer out. */
@@ -30,20 +35,38 @@ export class AiAgentController {
     private readonly rateLimit: RateLimitService,
   ) {}
 
+  /** Each tier's cost for a typical reply, and whether it can answer now. */
+  private async tiers() {
+    return Promise.all(
+      MODEL_TIERS.map(async (tier) => {
+        const [ready, quote] = await Promise.all([
+          this.replies.serviceReady({ tier }),
+          this.credits.quote(tier, TYPICAL_REPLY).catch(() => null),
+        ]);
+        return {
+          tier,
+          available: ready,
+          perReply: quote
+            ? { credits: quote.credits, amountMinor: quote.amountMinor, currency: quote.currency }
+            : null,
+        };
+      }),
+    );
+  }
+
   private async view(settings: AiAgentSettingsDoc) {
-    const [ready, quote, wallet, channels] = await Promise.all([
-      this.replies.serviceReady(settings),
-      this.credits.quote(settings.tier, TYPICAL_REPLY).catch(() => null),
+    const [tiers, wallet, channels] = await Promise.all([
+      this.tiers(),
       this.wallet.get(),
       this.channels.list(),
     ]);
+    const current = tiers.find((t) => t.tier === settings.tier)!;
     return {
       settings: toAgentSettingsDto(settings),
       status: {
-        serviceReady: ready,
-        perReply: quote
-          ? { credits: quote.credits, amountMinor: quote.amountMinor, currency: quote.currency }
-          : null,
+        serviceReady: current.available,
+        perReply: current.perReply,
+        tiers,
         wallet: { availableMinor: toBalance(wallet).availableMinor, currency: wallet.currency },
         channels: channels.map((c) => ({
           id: c._id.toHexString(),

@@ -136,7 +136,7 @@ const SPECS: Record<AgentToolName, AiToolSpec> = {
   search_products: {
     name: 'search_products',
     description:
-      'Search the shop\'s products by words. Call this when the customer asks for or describes a ' +
+      "Search the shop's products by words. Call this when the customer asks for or describes a " +
       'product that is not in the catalog list, e.g. "red saree" or "baccha der juta". Search in ' +
       'English, and try Bangla or other words if nothing comes back.',
     inputSchema: object({
@@ -335,7 +335,10 @@ export class AgentTools {
   ): Promise<ToolOutcome> {
     const [p] = await this.products.getMany([input.product_id]);
     if (!p || p.status !== 'active')
-      return { result: { error: 'not_found', message: 'No product for sale has this id.' }, isError: true };
+      return {
+        result: { error: 'not_found', message: 'No product for sale has this id.' },
+        isError: true,
+      };
     const { lowStockThreshold } = await this.shopSettings.get();
     return {
       result: {
@@ -549,7 +552,8 @@ export class AgentTools {
         return {
           result: {
             error: 'needs_team',
-            message: 'The team must handle this order. Hand over to a person; do not give a reason.',
+            message:
+              'The team must handle this order. Hand over to a person; do not give a reason.',
           },
           isError: true,
         };
@@ -591,7 +595,8 @@ export class AgentTools {
       return {
         result: {
           orders: [],
-          note: 'No orders are linked to this chat. If they ordered with another phone number, ' +
+          note:
+            'No orders are linked to this chat. If they ordered with another phone number, ' +
             'ask for it and save it with save_customer_details, then try again.',
         },
       };
@@ -602,7 +607,9 @@ export class AgentTools {
           number: o.number,
           status: o.status,
           placed: o.placedAt.toISOString().slice(0, 10),
-          items: o.items.map((i) => `${i.quantity}× ${i.name}${i.variantTitle ? ` (${i.variantTitle})` : ''}`).join(', '),
+          items: o.items
+            .map((i) => `${i.quantity}× ${i.name}${i.variantTitle ? ` (${i.variantTitle})` : ''}`)
+            .join(', '),
           total: chatMoney(o.totalMinor, o.currency),
           payment: o.payment.status,
         })),
@@ -632,11 +639,18 @@ export class AgentTools {
     if (input.name) set.name = input.name;
 
     if (ctx.mode === 'preview' || !ctx.contact)
-      return { result: { ok: problems.length === 0, preview: true, ...(problems.length ? { problems } : {}) } };
+      return {
+        result: {
+          ok: problems.length === 0,
+          preview: true,
+          ...(problems.length ? { problems } : {}),
+        },
+      };
 
     const memory = ctx.contact.memory ?? { facts: [] };
     const facts = [...memory.facts];
-    for (const f of input.facts) if (!facts.some((x) => x.toLowerCase() === f.toLowerCase())) facts.push(f);
+    for (const f of input.facts)
+      if (!facts.some((x) => x.toLowerCase() === f.toLowerCase())) facts.push(f);
     set.memory = {
       // The newest facts win when the list is full.
       facts: facts.slice(-MEMORY_LIMITS.facts),
@@ -644,7 +658,8 @@ export class AgentTools {
       updatedAt: new Date(),
     };
     ctx.contact =
-      (await this.contacts.findOneAndUpdate({ _id: ctx.contact._id }, { $set: set })) ?? ctx.contact;
+      (await this.contacts.findOneAndUpdate({ _id: ctx.contact._id }, { $set: set })) ??
+      ctx.contact;
     if (phone && !ctx.contact.customerId) {
       const customer = await this.customers.findByPhone(phone);
       if (customer)

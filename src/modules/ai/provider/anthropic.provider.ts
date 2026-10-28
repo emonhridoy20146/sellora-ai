@@ -31,14 +31,12 @@ export function toAnthropicMessages(messages: AiMessage[]): Anthropic.MessagePar
         // Every result of a turn goes back in one user message.
         return {
           role: 'user',
-          content: m.results.map(
-            (r): Anthropic.ToolResultBlockParam => ({
-              type: 'tool_result',
-              tool_use_id: r.callId,
-              content: r.content,
-              ...(r.isError ? { is_error: true } : {}),
-            }),
-          ),
+          content: m.results.map((r): Anthropic.ToolResultBlockParam => ({
+            type: 'tool_result',
+            tool_use_id: r.callId,
+            content: r.content,
+            ...(r.isError ? { is_error: true } : {}),
+          })),
         };
     }
   });
@@ -69,7 +67,10 @@ export function toProviderError(err: unknown): AiProviderError {
     return new AiProviderError('timeout', 'The AI provider did not answer in time');
   if (err instanceof Anthropic.APIConnectionError)
     return new AiProviderError('network', 'Could not reach the AI provider');
-  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError)
+  if (
+    err instanceof Anthropic.AuthenticationError ||
+    err instanceof Anthropic.PermissionDeniedError
+  )
     return new AiProviderError('auth', 'The AI provider rejected the API key', err.status);
   if (err instanceof Anthropic.RateLimitError)
     return new AiProviderError('rate_limited', 'The AI provider is rate limiting us', err.status);
@@ -132,14 +133,12 @@ export class AnthropicProvider implements AiProvider {
           messages: toAnthropicMessages(req.messages),
           ...(req.tools.length
             ? {
-                tools: req.tools.map(
-                  (t): Anthropic.Tool => ({
-                    name: t.name,
-                    description: t.description,
-                    input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
-                    strict: true,
-                  }),
-                ),
+                tools: req.tools.map((t): Anthropic.Tool => ({
+                  name: t.name,
+                  description: t.description,
+                  input_schema: t.inputSchema as Anthropic.Tool.InputSchema,
+                  strict: true,
+                })),
               }
             : {}),
           // Caches the stable prefix (tools, instructions, earlier turns) between turns.

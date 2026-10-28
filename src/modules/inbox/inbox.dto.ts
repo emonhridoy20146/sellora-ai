@@ -114,9 +114,7 @@ export const contactPatchBody = z
     /** Replaces what the AI remembered (staff remove wrong or private facts). */
     memory: z
       .object({
-        facts: z
-          .array(z.string().trim().min(1).max(MEMORY_LIMITS.fact))
-          .max(MEMORY_LIMITS.facts),
+        facts: z.array(z.string().trim().min(1).max(MEMORY_LIMITS.fact)).max(MEMORY_LIMITS.facts),
         address: z.string().trim().max(MEMORY_LIMITS.address).nullable(),
       })
       .strict()

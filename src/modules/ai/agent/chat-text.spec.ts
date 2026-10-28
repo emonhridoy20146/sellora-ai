@@ -51,7 +51,9 @@ describe('chat text', () => {
   });
 
   it('tells the customer about a handover in their script, unless the business wrote its own', () => {
-    expect(handoverNotice('', 'দাম কত?')).toBe('ধন্যবাদ! আমাদের টিমের একজন শীঘ্রই আপনাকে উত্তর দেবেন।');
+    expect(handoverNotice('', 'দাম কত?')).toBe(
+      'ধন্যবাদ! আমাদের টিমের একজন শীঘ্রই আপনাকে উত্তর দেবেন।',
+    );
     expect(handoverNotice('', 'dam koto?')).toMatch(/^Thanks for your message!/);
     expect(handoverNotice('  Ekhuni call korchi.  ', 'দাম কত?')).toBe('Ekhuni call korchi.');
     expect(hasBengaliScript('price ৳3,000')).toBe(true); // the taka sign is Bengali script

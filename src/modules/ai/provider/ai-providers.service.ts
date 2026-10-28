@@ -1,5 +1,10 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { AI_PROVIDERS, AiProviderError, type AiProvider, type AiProviderName } from './ai-provider.js';
+import {
+  AI_PROVIDERS,
+  AiProviderError,
+  type AiProvider,
+  type AiProviderName,
+} from './ai-provider.js';
 
 /** The providers this deployment can call, looked up by the catalogue's provider name. */
 @Injectable()

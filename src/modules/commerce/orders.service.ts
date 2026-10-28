@@ -620,7 +620,9 @@ export class OrdersService {
         internalNote: input.internalNote ?? '',
         history: [{ status, at: now, actor }],
         ...(actor.type === 'user' ? { createdBy: new Types.ObjectId(actor.id) } : {}),
-        ...(input.conversationId ? { conversationId: new Types.ObjectId(input.conversationId) } : {}),
+        ...(input.conversationId
+          ? { conversationId: new Types.ObjectId(input.conversationId) }
+          : {}),
         placedAt: now,
       });
       if (status === 'confirmed') {
