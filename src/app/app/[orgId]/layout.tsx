@@ -51,7 +51,9 @@ function nav(orgId: string, can: (p: string) => boolean): NavSection[] {
       ...(can('inbox.view') || can('inbox.view_assigned')
         ? [{ href: `${base}/inbox`, label: 'Inbox', icon: Inbox }]
         : []),
-      { href: `${base}/ai-agent`, label: 'AI sales agent', icon: Bot, soon: true },
+      ...(can('ai.settings.manage') || can('ai.knowledge.manage')
+        ? [{ href: `${base}/ai-agent`, label: 'AI sales agent', icon: Bot }]
+        : []),
       ...(can('orders.view')
         ? [{ href: `${base}/orders`, label: 'Orders', icon: ShoppingBag }]
         : []),

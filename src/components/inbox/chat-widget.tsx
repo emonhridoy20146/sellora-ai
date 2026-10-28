@@ -66,7 +66,8 @@ export function ChatWidget({ publicKey, preview }: { publicKey: string; preview:
   const [messages, setMessages] = useState<Pending[]>([]);
   const [text, setText] = useState('');
   const [unread, setUnread] = useState(0);
-  const [typing, setTyping] = useState(false);
+  /** When the business (a person or the AI) last signalled typing; null when not typing. */
+  const [typing, setTyping] = useState<number | null>(null);
   const [form, setForm] = useState({ name: '', phone: '' });
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -137,12 +138,13 @@ export function ChatWidget({ publicKey, preview }: { publicKey: string; preview:
     socket.on('message', (m: VisitorMessage) => {
       add(m);
       if (m.from === 'business') {
-        setTyping(false);
+        setTyping(null);
         if (!openRef.current) setUnread((n) => n + 1);
       }
     });
-    socket.on('typing', () => {
-      setTyping(true);
+    socket.on('typing', (d?: { typing?: boolean }) => {
+      // Each signal restarts the fade-out, so a long AI reply keeps showing "typing…".
+      setTyping(d?.typing === false ? null : Date.now());
     });
     socket.on('connect', () => {
       // Catch up on anything sent while disconnected.
@@ -158,8 +160,8 @@ export function ChatWidget({ publicKey, preview }: { publicKey: string; preview:
   }, [token, publicKey, add]);
 
   useEffect(() => {
-    if (!typing) return;
-    const t = setTimeout(() => setTyping(false), 4_000);
+    if (typing === null) return;
+    const t = setTimeout(() => setTyping(null), 5_000);
     return () => clearTimeout(t);
   }, [typing]);
 
@@ -325,7 +327,7 @@ export function ChatWidget({ publicKey, preview }: { publicKey: string; preview:
             )}
           </div>
         ))}
-        {typing && (
+        {typing !== null && (
           <div className="w-fit rounded-2xl rounded-bl-md bg-white px-3.5 py-2 text-sm text-neutral-500 shadow-xs">
             typing…
           </div>

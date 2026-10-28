@@ -527,6 +527,7 @@ export interface ProfitRow {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
+  cacheWriteInputTokens: number;
   profitMinor: number;
   marginPct: number | null;
 }
@@ -549,7 +550,7 @@ export interface PlatformUsage {
   status: string;
   provider: string;
   model: string | null;
-  tokens: { input: number; cachedInput: number; output: number };
+  tokens: { input: number; cachedInput: number; cacheWrite: number; output: number };
   credits: number;
   currency: string;
   billedMinor: number;
@@ -570,6 +571,8 @@ export interface AiModel {
   inputUsdPerMTok: number;
   outputUsdPerMTok: number;
   cachedInputUsdPerMTok: number;
+  /** null: 1.25 × the input price. */
+  cacheWriteUsdPerMTok: number | null;
   longContext: {
     thresholdTokens: number;
     inputUsdPerMTok: number;
@@ -769,6 +772,8 @@ export interface Order {
   }[];
   allowedTransitions: OrderStatus[];
   editable: boolean;
+  /** The inbox conversation the order was placed in (by the AI sales agent or staff). */
+  conversationId: string | null;
   placedAt: IsoDate;
   createdAt: IsoDate;
   updatedAt: IsoDate;
@@ -847,6 +852,8 @@ export interface Contact {
   email: string | null;
   avatarUrl: string | null;
   customerId: string | null;
+  /** What the AI sales agent remembers about the person; staff can correct it. */
+  memory: { facts: string[]; address: string | null };
   lastSeenAt: string | null;
   createdAt: string;
 }
@@ -923,4 +930,73 @@ export interface VisitorContact {
   name: string | null;
   phone: string | null;
   email: string | null;
+}
+
+// ------------------------------------------------------------------- AI sales agent
+
+export type AiTone = 'friendly' | 'professional' | 'casual';
+export type AiLanguage = 'auto' | 'bn' | 'banglish' | 'en';
+
+export interface AiAgentSettings {
+  enabled: boolean;
+  assistantName: string;
+  tone: AiTone;
+  language: AiLanguage;
+  tier: ModelTier;
+  businessInfo: string;
+  instructions: string;
+  faqs: { question: string; answer: string }[];
+  takeOrders: boolean;
+  confirmOrders: boolean;
+  handoverKeywords: string[];
+  handoverMessage: string;
+  replyDelaySeconds: number;
+  maxRepliesPerDay: number;
+  updatedAt: string;
+}
+
+/** GET/PATCH /orgs/:orgId/ai-agent */
+export interface AiAgentView {
+  settings: AiAgentSettings;
+  status: {
+    /** The AI service can answer (a provider is set up for the tier's model). */
+    serviceReady: boolean;
+    /** What a typical reply costs at the chosen tier; null when no price is set. */
+    perReply: { credits: number; amountMinor: number; currency: string } | null;
+    /** Every quality level: what a typical reply costs and whether it can answer now. */
+    tiers: {
+      tier: ModelTier;
+      available: boolean;
+      perReply: { credits: number; amountMinor: number; currency: string } | null;
+    }[];
+    wallet: { availableMinor: number; currency: string };
+    channels: {
+      id: string;
+      name: string;
+      type: ChannelType;
+      status: Channel['status'];
+      aiEnabled: boolean;
+      /** Replies can go out on this channel now. */
+      aiCanReply: boolean;
+    }[];
+  };
+}
+
+export type AiHandoverReason =
+  | 'customer_request'
+  | 'complaint'
+  | 'order_problem'
+  | 'discount_request'
+  | 'cannot_answer'
+  | 'other';
+
+/** POST /orgs/:orgId/ai-agent/preview */
+export interface AiPreviewResult {
+  reply: string;
+  outcome: 'reply' | 'refusal' | 'incomplete';
+  handover: { reason: AiHandoverReason; summary: string } | null;
+  /** A test order number (TEST-ORDER): nothing is saved. */
+  order: { number: string } | null;
+  toolCalls: { name: string; ok: boolean }[];
+  credits: number;
 }

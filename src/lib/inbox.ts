@@ -87,6 +87,30 @@ export const CHANNEL_LABEL: Record<ChannelType, string> = {
   whatsapp: 'WhatsApp',
 };
 
+const AI_PAUSE_REASONS: Record<string, string> = {
+  manual: 'Paused by a team member',
+  dot_command: 'Paused with “.”',
+  human_reply: 'A team member replied',
+  ai_handover: 'The AI handed this chat to the team',
+  keyword: 'The customer asked for a person',
+  reply_limit: 'Daily AI reply limit reached for this chat',
+  no_credits: 'AI credits ran out',
+  ai_unavailable: 'The AI service was unavailable',
+  ai_error: 'The AI could not reply',
+  ai_refused: 'The AI could not answer a message',
+  ai_incomplete: 'The AI could not finish an answer',
+};
+
+/** Why the AI is paused in a conversation, in words for the team. */
+export function aiPauseReason(reason: string | null): string {
+  return (reason && AI_PAUSE_REASONS[reason]) || 'AI paused';
+}
+
+/** Whether the AI paused on its own and the customer is waiting for a person. */
+export function isAiHandover(reason: string | null): boolean {
+  return reason !== null && !['manual', 'dot_command', 'human_reply'].includes(reason);
+}
+
 /** A message of only "." pauses or resumes the AI instead of being sent. */
 export function isDotCommand(text: string): boolean {
   return text.trim() === '.';

@@ -1,24 +1,179 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bot, Pencil } from 'lucide-react';
+import { Bot, Brain, Pencil } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
+import { Input, Textarea } from '@/components/ui/input';
 import { api } from '@/lib/api/client';
-import { ApiError } from '@/lib/api/errors';
+import { ApiError, errorMessage } from '@/lib/api/errors';
 import type { Conversation } from '@/lib/api/types';
 import { formatDateTime, formatRelative } from '@/lib/format';
-import { CHANNEL_LABEL, contactLabel } from '@/lib/inbox';
+import { CHANNEL_LABEL, aiPauseReason, contactLabel } from '@/lib/inbox';
 import { Avatar } from './conversation-list';
 import { applyConversation, inboxKeys, useChannels, useTeam } from './data';
 
-const AI_REASON: Record<string, string> = {
-  human_reply: 'paused because a team member replied',
-  dot_command: 'switched with the “.” command',
-  manual: 'switched by hand',
-};
+const MEMORY_FACTS = 20;
+const MEMORY_FACT = 200;
+const MEMORY_ADDRESS = 300;
+
+/** One remembered fact per line; blank lines dropped, repeats folded. */
+function parseFacts(text: string): string[] {
+  return [
+    ...new Set(
+      text
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+/** What the AI sales agent remembers about the person, and a way to correct it. */
+function AiMemory({
+  orgId,
+  meId,
+  conversation,
+  canEdit,
+}: {
+  orgId: string;
+  meId: string;
+  conversation: Conversation;
+  canEdit: boolean;
+}) {
+  const qc = useQueryClient();
+  const memory = conversation.contact?.memory ?? { facts: [], address: null };
+  const [editing, setEditing] = useState(false);
+  const [facts, setFacts] = useState('');
+  const [address, setAddress] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const parsed = parseFacts(facts);
+  const problem =
+    parsed.length > MEMORY_FACTS
+      ? `Keep it to ${MEMORY_FACTS} lines.`
+      : parsed.some((f) => f.length > MEMORY_FACT)
+        ? `Each line can be up to ${MEMORY_FACT} characters.`
+        : null;
+
+  const save = useMutation({
+    meta: { silent: true },
+    mutationFn: (next: { facts: string[]; address: string | null }) =>
+      api<Conversation>(`/orgs/${orgId}/conversations/${conversation.id}/contact`, {
+        method: 'PATCH',
+        body: { memory: next },
+      }),
+    onSuccess: (next) => {
+      applyConversation(qc, orgId, meId, next);
+      setEditing(false);
+    },
+    onError: (err) => setError(errorMessage(err)),
+  });
+
+  const empty = memory.facts.length === 0 && !memory.address;
+  return (
+    <section aria-labelledby="ai-memory" className="space-y-2 border-t pt-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 id="ai-memory" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Brain className="size-3.5" aria-hidden /> What the AI remembers
+        </h3>
+        {canEdit && !conversation.locked && !editing && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7"
+            onClick={() => {
+              setFacts(memory.facts.join('\n'));
+              setAddress(memory.address ?? '');
+              setError(null);
+              setEditing(true);
+            }}
+          >
+            <Pencil /> Edit
+          </Button>
+        )}
+      </div>
+      {editing ? (
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (problem) return;
+            setError(null);
+            save.mutate({ facts: parsed, address: address.trim() || null });
+          }}
+        >
+          <Field
+            label="Things to remember"
+            htmlFor="mem-facts"
+            hint="One per line, for example “wears size M”."
+            error={problem ?? undefined}
+          >
+            <Textarea
+              id="mem-facts"
+              rows={4}
+              value={facts}
+              onChange={(e) => setFacts(e.target.value)}
+            />
+          </Field>
+          <Field label="Delivery address" htmlFor="mem-address" optional>
+            <Input
+              id="mem-address"
+              value={address}
+              maxLength={MEMORY_ADDRESS}
+              onChange={(e) => setAddress(e.target.value)}
+            />
+          </Field>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="sm" loading={save.isPending} disabled={Boolean(problem)}>
+              Save
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+            {!empty && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="ml-auto text-destructive"
+                disabled={save.isPending}
+                onClick={() => save.mutate({ facts: [], address: null })}
+              >
+                Forget all
+              </Button>
+            )}
+          </div>
+        </form>
+      ) : empty ? (
+        <p className="text-sm text-muted-foreground">
+          Nothing yet. The AI saves sizes, preferences and addresses customers mention.
+        </p>
+      ) : (
+        <div className="space-y-2 text-sm">
+          {memory.facts.length > 0 && (
+            <ul className="list-disc space-y-0.5 pl-5">
+              {memory.facts.map((f) => (
+                <li key={f} className="break-words">
+                  {f}
+                </li>
+              ))}
+            </ul>
+          )}
+          {memory.address && (
+            <p className="break-words">
+              <span className="text-muted-foreground">Address: </span>
+              {memory.address}
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -135,6 +290,16 @@ export function ContactPanel({
         <dl className="space-y-3">
           <Row label="Phone">{contact?.phone ?? '—'}</Row>
           <Row label="Email">{contact?.email ?? '—'}</Row>
+          {contact?.customerId && (
+            <Row label="Customer">
+              <Link
+                href={`/app/${orgId}/customers/${contact.customerId}`}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Orders and history
+              </Link>
+            </Row>
+          )}
           {canEdit && !c.locked && (
             <Button
               variant="outline"
@@ -181,14 +346,24 @@ export function ContactPanel({
             </span>
             {c.ai.changedAt && (
               <span className="block text-xs text-muted-foreground">
-                {c.ai.changedBy?.name ? `${c.ai.changedBy.name}, ` : ''}
-                {AI_REASON[c.ai.reason ?? ''] ?? 'changed'} · {formatRelative(c.ai.changedAt)}
+                {c.ai.mode === 'paused'
+                  ? aiPauseReason(c.ai.reason)
+                  : `Turned back on${c.ai.changedBy?.name ? ` by ${c.ai.changedBy.name}` : ''}`}
+                {c.ai.mode === 'paused' && c.ai.changedBy?.type === 'user' && c.ai.changedBy.name
+                  ? ` (${c.ai.changedBy.name})`
+                  : ''}
+                {' · '}
+                {formatRelative(c.ai.changedAt)}
               </span>
             )}
           </Row>
         )}
         <Row label="First message">{formatDateTime(c.createdAt)}</Row>
       </dl>
+
+      {aiInPlan && contact && (
+        <AiMemory orgId={orgId} meId={meId} conversation={c} canEdit={canEdit} />
+      )}
     </div>
   );
 }

@@ -20,6 +20,7 @@ function model(over: Partial<AiModel>): AiModel {
     inputUsdPerMTok: 3,
     outputUsdPerMTok: 15,
     cachedInputUsdPerMTok: 0.3,
+    cacheWriteUsdPerMTok: null,
     longContext: null,
     contextWindow: 200_000,
     enabled: true,

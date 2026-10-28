@@ -84,6 +84,26 @@ SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
 node scripts/inbox-flow.mjs
 ```
 
+### AI sales agent browser flow
+
+`scripts/ai-agent-flow.mjs` fills in the AI agent's settings, chats with it in the "Try it"
+panel, turns it on, has a visitor ask about a product on a stand-in merchant site and checks
+the agent's live answer in the chat and the inbox, that a complaint is handed to the team
+(the AI pauses with a reason), that staff can correct what the AI remembers, and that the
+replies were paid from the AI credit wallet. The API and worker need an AI provider. Without
+a real key, use the scripted stand-in in `sellora-api/scripts/claude-stand-in.mjs` (the
+expected replies in the flow are the stand-in's; it is not an AI):
+
+```bash
+# in sellora-api
+node scripts/claude-stand-in.mjs &
+AI_ANTHROPIC_API_KEY=sk-ant-stand-in AI_ANTHROPIC_BASE_URL=http://127.0.0.1:4010 npm run dev &
+AI_ANTHROPIC_API_KEY=sk-ant-stand-in AI_ANTHROPIC_BASE_URL=http://127.0.0.1:4010 npm run dev:worker &
+# in sellora-web
+SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
+node scripts/ai-agent-flow.mjs
+```
+
 ## Layout
 
 ```

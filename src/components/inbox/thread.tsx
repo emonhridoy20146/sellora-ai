@@ -34,8 +34,16 @@ import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api/client';
 import { ApiError, errorMessage } from '@/lib/api/errors';
 import type { Conversation, InboxMessage, Page, TeamMember } from '@/lib/api/types';
-import { formatDateTime } from '@/lib/format';
-import { CHANNEL_LABEL, addMessage, contactLabel, isDotCommand, newClientId } from '@/lib/inbox';
+import { formatCredits, formatDateTime, formatRelative } from '@/lib/format';
+import {
+  CHANNEL_LABEL,
+  addMessage,
+  aiPauseReason,
+  contactLabel,
+  isAiHandover,
+  isDotCommand,
+  newClientId,
+} from '@/lib/inbox';
 import { cn } from '@/lib/utils';
 import { Avatar, ChannelIcon } from './conversation-list';
 import {
@@ -117,6 +125,7 @@ function MessageRow({
       <span className="mt-0.5 flex items-center gap-1 px-1 text-[11px] text-muted-foreground">
         {mine && m.sender.type === 'ai' && <Bot className="size-3" aria-hidden />}
         {mine && (m.sender.type === 'ai' ? 'AI' : (m.sender.name ?? 'You'))}
+        {mine && m.sender.type === 'ai' && m.ai && ` · ${formatCredits(m.ai.credits)}`}
         {mine && ' · '}
         {pending ? 'Sending…' : timeOf(m.createdAt)}
       </span>
@@ -349,7 +358,8 @@ export function Thread({
   const assignee = team.data?.find((m) => m.userId === c.assigneeId);
   const lockedError =
     messages.error instanceof ApiError && messages.error.status === 402 ? messages.error : null;
-  const typing = Boolean(live.typing[c.id]);
+  const typing = live.typing[c.id]?.who ?? null;
+  const showPaused = perms.aiInPlan && c.ai.mode === 'paused' && !c.locked;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -368,7 +378,12 @@ export function Thread({
           <h2 className="truncate text-sm font-semibold">{label}</h2>
           <p className="flex items-center gap-1 truncate text-xs text-muted-foreground">
             <ChannelIcon type={c.channelType} /> {CHANNEL_LABEL[c.channelType]}
-            {typing && <span className="text-primary italic"> · typing…</span>}
+            {typing && (
+              <span className="text-primary italic">
+                {' · '}
+                {typing === 'ai' ? 'AI is replying…' : 'typing…'}
+              </span>
+            )}
           </p>
         </div>
 
@@ -467,6 +482,36 @@ export function Thread({
             </Button>
           ))}
       </header>
+
+      {showPaused && (
+        <div
+          className={cn(
+            'flex items-center gap-2 border-b px-4 py-1.5 text-[13px]',
+            isAiHandover(c.ai.reason) ? 'bg-warning-soft' : 'bg-muted/60',
+          )}
+        >
+          <Bot className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate">
+            <span className="font-medium">AI paused</span>
+            {' · '}
+            {aiPauseReason(c.ai.reason)}
+            {c.ai.changedAt && (
+              <span className="text-muted-foreground"> · {formatRelative(c.ai.changedAt)}</span>
+            )}
+          </span>
+          {perms.aiControl && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7"
+              loading={setAi.isPending}
+              onClick={() => setAi.mutate('auto')}
+            >
+              Turn AI back on
+            </Button>
+          )}
+        </div>
+      )}
 
       <div
         ref={scroller}

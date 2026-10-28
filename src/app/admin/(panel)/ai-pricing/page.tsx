@@ -255,7 +255,12 @@ export default function AiPricingPage() {
                     </TD>
                     <TD>{TIER_LABEL[m.tier].name}</TD>
                     <TD className="tabular text-right">{usd(m.inputUsdPerMTok)}</TD>
-                    <TD className="tabular text-right">{usd(m.cachedInputUsdPerMTok)}</TD>
+                    <TD className="tabular text-right">
+                      {usd(m.cachedInputUsdPerMTok)}
+                      <span className="block text-xs text-muted-foreground">
+                        write {usd(m.cacheWriteUsdPerMTok ?? m.inputUsdPerMTok * 1.25)}
+                      </span>
+                    </TD>
                     <TD className="tabular text-right">{usd(m.outputUsdPerMTok)}</TD>
                     <TD className="tabular text-right">
                       {formatNumber(m.contextWindow, { compact: true })}
@@ -685,6 +690,11 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
   const [tier, setTier] = useState<ModelTier>(model?.tier ?? 'standard');
   const [input, setInput] = useState(String(model?.inputUsdPerMTok ?? ''));
   const [cached, setCached] = useState(String(model?.cachedInputUsdPerMTok ?? 0));
+  const [cacheWrite, setCacheWrite] = useState(
+    model?.cacheWriteUsdPerMTok === null || model?.cacheWriteUsdPerMTok === undefined
+      ? ''
+      : String(model.cacheWriteUsdPerMTok),
+  );
   const [output, setOutput] = useState(String(model?.outputUsdPerMTok ?? ''));
   const [contextWindow, setContextWindow] = useState(String(model?.contextWindow ?? 200_000));
   const [long, setLong] = useState(Boolean(model?.longContext));
@@ -704,6 +714,7 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
     num(input) !== null &&
     num(output) !== null &&
     num(cached) !== null &&
+    (cacheWrite.trim() === '' || num(cacheWrite) !== null) &&
     Number.isInteger(num(contextWindow)) &&
     (!long ||
       (Number.isInteger(num(longThreshold)) && num(longIn) !== null && num(longOut) !== null));
@@ -717,6 +728,7 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
         inputUsdPerMTok: num(input),
         outputUsdPerMTok: num(output),
         cachedInputUsdPerMTok: num(cached),
+        cacheWriteUsdPerMTok: cacheWrite.trim() === '' ? null : num(cacheWrite),
         contextWindow: num(contextWindow),
         longContext: long
           ? {
@@ -810,7 +822,7 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
               </NativeSelect>
             </Field>
           </div>
-          <div className="grid gap-4 sm:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Input $ / M tokens" htmlFor="m-in" error={errs.inputUsdPerMTok}>
               <Input
                 id="m-in"
@@ -826,6 +838,20 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
                 inputMode="decimal"
                 value={cached}
                 onChange={(e) => setCached(e.target.value)}
+              />
+            </Field>
+            <Field
+              label="Cache write $ / M"
+              htmlFor="m-cache-write"
+              error={errs.cacheWriteUsdPerMTok}
+              hint="Empty: 1.25 × input"
+            >
+              <Input
+                id="m-cache-write"
+                inputMode="decimal"
+                value={cacheWrite}
+                placeholder={num(input) !== null ? String(num(input)! * 1.25) : ''}
+                onChange={(e) => setCacheWrite(e.target.value)}
               />
             </Field>
             <Field label="Output $ / M tokens" htmlFor="m-out" error={errs.outputUsdPerMTok}>

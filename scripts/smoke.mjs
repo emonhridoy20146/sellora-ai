@@ -134,6 +134,7 @@ try {
       ['/settings/selling', 'settings-selling'],
       ['/settings/channels', 'settings-channels'],
       ['/inbox', 'inbox'],
+      ['/ai-agent', 'ai-agent'],
       ['/orders', 'orders'],
       ['/orders/new', 'orders-new'],
       ['/products', 'products'],

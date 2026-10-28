@@ -88,10 +88,16 @@ export function applyMessage(qc: QueryClient, orgId: string, m: InboxMessage) {
 
 export type LiveStatus = 'connecting' | 'live' | 'offline' | 'denied';
 
+/** Who is typing in a conversation, and when the last signal came. */
+export interface TypingSignal {
+  who: 'contact' | 'ai';
+  at: number;
+}
+
 interface InboxLive {
   status: LiveStatus;
-  /** conversationId → time the customer last typed. */
-  typing: Record<string, number>;
+  /** conversationId → the customer or the AI agent typing there. */
+  typing: Record<string, TypingSignal>;
   sendTyping: (conversationId: string) => void;
 }
 
@@ -111,7 +117,7 @@ export const useInboxLive = () => useContext(LiveContext);
 export function useInboxConnection(orgId: string, meId: string): InboxLive {
   const qc = useQueryClient();
   const [status, setStatus] = useState<LiveStatus>('connecting');
-  const [typing, setTyping] = useState<Record<string, number>>({});
+  const [typing, setTyping] = useState<Record<string, TypingSignal>>({});
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -160,16 +166,19 @@ export function useInboxConnection(orgId: string, meId: string): InboxLive {
     socket.on('conversation.updated', (c: Conversation) => applyConversation(qc, orgId, meId, c));
     socket.on('message.created', (m: InboxMessage) => {
       applyMessage(qc, orgId, m);
-      if (m.direction === 'in')
+      // The customer's message ends their typing; the AI's reply (or handover) ends the AI's.
+      const ends = m.direction === 'in' ? 'contact' : m.sender.type === 'ai' ? 'ai' : null;
+      if (ends)
         setTyping((t) => {
-          if (!(m.conversationId in t)) return t;
+          if (t[m.conversationId]?.who !== ends) return t;
           const { [m.conversationId]: _, ...rest } = t;
           return rest;
         });
     });
     socket.on('message.updated', (m: InboxMessage) => applyMessage(qc, orgId, m));
     socket.on('typing', (d: { conversationId: string; who: string }) => {
-      if (d.who === 'contact') setTyping((t) => ({ ...t, [d.conversationId]: Date.now() }));
+      const who = d.who === 'contact' || d.who === 'ai' ? d.who : null;
+      if (who) setTyping((t) => ({ ...t, [d.conversationId]: { who, at: Date.now() } }));
     });
 
     return () => {
@@ -186,7 +195,9 @@ export function useInboxConnection(orgId: string, meId: string): InboxLive {
     const timer = setInterval(() => {
       setTyping((t) => {
         const now = Date.now();
-        const kept = Object.fromEntries(Object.entries(t).filter(([, at]) => now - at < 5_000));
+        const kept = Object.fromEntries(
+          Object.entries(t).filter(([, signal]) => now - signal.at < 5_000),
+        );
         return Object.keys(kept).length === Object.keys(t).length ? t : kept;
       });
     }, 1_000);

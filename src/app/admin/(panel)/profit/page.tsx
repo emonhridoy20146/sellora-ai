@@ -212,8 +212,13 @@ function BreakdownTable({ rows, groupBy }: { rows: ProfitRow[]; groupBy: GroupBy
               <TD>{rowLabel(r, groupBy)}</TD>
               <TD className="tabular text-right">{formatNumber(r.requests)}</TD>
               <TD className="tabular text-right whitespace-nowrap">
-                {formatNumber(r.inputTokens + r.cachedInputTokens, { compact: true })} /{' '}
-                {formatNumber(r.outputTokens, { compact: true })}
+                {formatNumber(
+                  r.inputTokens + r.cachedInputTokens + (r.cacheWriteInputTokens ?? 0),
+                  {
+                    compact: true,
+                  },
+                )}{' '}
+                / {formatNumber(r.outputTokens, { compact: true })}
               </TD>
               <TD className="tabular text-right">{formatNumber(r.credits)}</TD>
               <TD className="tabular text-right">{formatMoney(r.collectedMinor, r.currency)}</TD>

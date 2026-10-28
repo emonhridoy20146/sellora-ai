@@ -144,7 +144,8 @@ export function ConversationList({
           <ul aria-label="Conversations">
             {items.map((c) => {
               const label = contactLabel(c.contact);
-              const isTyping = Boolean(typing[c.id]);
+              const typingWho = typing[c.id]?.who;
+              const isTyping = Boolean(typingWho);
               return (
                 <li key={c.id}>
                   <button
@@ -184,7 +185,11 @@ export function ConversationList({
                             isTyping && 'text-primary italic',
                           )}
                         >
-                          {isTyping ? 'typing…' : preview(c)}
+                          {isTyping
+                            ? typingWho === 'ai'
+                              ? 'AI is replying…'
+                              : 'typing…'
+                            : preview(c)}
                         </span>
                         {c.ai.mode === 'paused' && (
                           <Bot className="size-3.5 shrink-0" aria-label="AI paused" />

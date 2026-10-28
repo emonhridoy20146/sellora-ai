@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { Conversation, InboxMessage } from '@/lib/api/types';
 import {
   addMessage,
+  aiPauseReason,
   contactLabel,
   embedSnippet,
   inView,
   initials,
+  isAiHandover,
   isDotCommand,
   placeConversation,
   shortTime,
@@ -82,6 +84,7 @@ describe('inbox helpers', () => {
         email: null,
         avatarUrl: null,
         customerId: null,
+        memory: { facts: [], address: null },
         lastSeenAt: null,
         createdAt: '',
       }),
@@ -89,6 +92,18 @@ describe('inbox helpers', () => {
     expect(initials('Nusrat Jahan')).toBe('NJ');
     expect(initials('রহিম উদ্দিন')).toBe('রউ');
     expect(initials('+880')).toBe('8');
+  });
+
+  it('explains why the AI is paused', () => {
+    expect(aiPauseReason('keyword')).toBe('The customer asked for a person');
+    expect(aiPauseReason('no_credits')).toBe('AI credits ran out');
+    expect(aiPauseReason('something_new')).toBe('AI paused');
+    expect(aiPauseReason(null)).toBe('AI paused');
+    expect(isAiHandover('ai_handover')).toBe(true);
+    expect(isAiHandover('no_credits')).toBe(true);
+    expect(isAiHandover('human_reply')).toBe(false);
+    expect(isAiHandover('dot_command')).toBe(false);
+    expect(isAiHandover(null)).toBe(false);
   });
 
   it('spots the dot command', () => {
