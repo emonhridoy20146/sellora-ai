@@ -45,6 +45,8 @@ export class RateLimitService {
       'checkout:ip': { points: 10, durationSec: 600 },
       'checkout:phone': { points: 5, durationSec: 3600 },
       'track:ip': { points: 30, durationSec: 600 },
+      // "Check now" on a custom domain (each check asks DNS servers four questions).
+      'domain-check:domain': { points: 6, durationSec: 60 },
     };
     const multiplier = config.get('RATE_LIMIT_IP_MULTIPLIER');
     for (const [name, spec] of Object.entries(this.specs)) {

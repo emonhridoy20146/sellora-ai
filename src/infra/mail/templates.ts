@@ -257,4 +257,47 @@ export const mailTemplates = {
           url: p.dashboardUrl,
         });
   },
+
+  domainConnected(
+    locale: Locale,
+    p: { storeName: string; domain: string; storeUrl: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.domain} এখন ${p.storeName}-এ যুক্ত`,
+          [
+            `আপনার ডোমেইন ${p.domain} অনুমোদিত হয়েছে। ক্রেতারা এখন এই ঠিকানায় আপনার স্টোর দেখতে পাবেন।`,
+            'প্রথমবার খুলতে এক মিনিট লাগতে পারে, কারণ নিরাপদ সংযোগের (HTTPS) সার্টিফিকেট তৈরি হয়।',
+          ],
+          { label: 'স্টোর দেখুন', url: p.storeUrl },
+        )
+      : render(
+          `${p.domain} is connected to ${p.storeName}`,
+          [
+            `Your domain ${p.domain} was approved. Shoppers can now reach your store there.`,
+            'The first visit may take a minute while the secure (HTTPS) certificate is issued.',
+          ],
+          { label: 'Open your store', url: p.storeUrl },
+        );
+  },
+
+  domainRejected(
+    locale: Locale,
+    p: { storeName: string; domain: string; reason: string; dashboardUrl: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.domain} যুক্ত করা যায়নি`,
+          [`${p.storeName}-এর জন্য ${p.domain} ডোমেইনটি অনুমোদন পায়নি। কারণ:`, p.reason],
+          { label: 'ড্যাশবোর্ড খুলুন', url: p.dashboardUrl },
+        )
+      : render(
+          `${p.domain} was not connected`,
+          [
+            `The domain ${p.domain} for ${p.storeName} was not approved. The reviewer said:`,
+            p.reason,
+          ],
+          { label: 'Open dashboard', url: p.dashboardUrl },
+        );
+  },
 };

@@ -90,6 +90,20 @@ Secrets never go in code or in git:
   stores can still be built and approved, but previews answer 503 and no store opens to
   shoppers. The super-admin reviews stores in Admin › Online stores; Admin › Settings can let
   stores open without review when the automatic check finds nothing.
+- Custom domains for stores (ADR 0015): set `STOREFRONT_DOMAIN_TARGET` to a host name of the
+  storefront server that businesses point a CNAME at (without it, custom domains are off and
+  the dashboard says so), and `STOREFRONT_DOMAIN_IPS` to its public addresses to allow bare
+  domains (`yourshop.com`) with A/AAAA records. A business proves the domain with a TXT record;
+  the worker re-checks waiting domains on a back-off for three days and connected ones daily.
+  Proven domains wait for the super-admin in Admin › Online stores › Custom domains unless
+  Admin › Settings approves them automatically. `DNS_SERVERS` overrides the system resolvers
+  (comma-separated, `host:port` allowed). The plan limit `customDomains` caps domains per
+  business (plans saved before this limit existed count as unlimited until edited). Caddy's
+  on-demand TLS asks `GET /v1/public/store-domains/check?domain=` before each certificate; the
+  storefront README has the configuration. To try it locally, run `node
+scripts/dns-stand-in.mjs` (a DNS server for made-up domains whose records you set over HTTP;
+  not a DNS provider) and start the API with `DNS_SERVERS=127.0.0.1:5300
+STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -111,6 +125,7 @@ Secrets never go in code or in git:
 | `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI; cannot see photos, says how many it got).                                                |
 | `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).                                                                                            |
 | `node scripts/courier-stand-in.mjs`                           | Stand-in for the Steadfast, Pathao and RedX APIs for local demos without courier accounts (not a courier).                                                              |
+| `node scripts/dns-stand-in.mjs`                               | DNS server on 127.0.0.1:5300 for trying custom domains with made-up names; records are set over HTTP on :4050 (not a DNS provider or resolver).                         |
 
 ## Tests
 

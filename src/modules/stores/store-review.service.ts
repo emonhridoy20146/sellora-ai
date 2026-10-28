@@ -1,19 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Types, type Model } from 'mongoose';
 import { RequestContext } from '../../common/context/request-context.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { escapeRegex } from '../commerce/text.js';
-import { AppConfig } from '../../config/app-config.js';
 import { CROSS_TENANT } from '../../infra/database/tenant-guard.plugin.js';
-import { MailService } from '../../infra/mail/mail.service.js';
-import { mailTemplates, type RenderedMail } from '../../infra/mail/templates.js';
+import { mailTemplates } from '../../infra/mail/templates.js';
 import { AuditService } from '../audit/audit.service.js';
 import { OrgsService, type OrganizationDoc } from '../orgs/orgs.service.js';
-import { UsersService } from '../users/users.service.js';
 import type { Store, StoreStatus } from './schemas.js';
 import { StoreRepository } from './repositories.js';
+import { StoreDomainsService } from './store-domains.service.js';
 import { StoreLinksService } from './store-links.service.js';
+import { StoreNotifier } from './store-notifier.service.js';
 import { StoresService, type StoreDoc } from './stores.service.js';
 
 /**
@@ -24,18 +23,15 @@ import { StoresService, type StoreDoc } from './stores.service.js';
  */
 @Injectable()
 export class StoreReviewService {
-  private readonly logger = new Logger(StoreReviewService.name);
-
   constructor(
     @InjectModel('Store') private readonly storeModel: Model<Store>,
     private readonly stores: StoreRepository,
     private readonly merchant: StoresService,
     private readonly orgs: OrgsService,
-    private readonly users: UsersService,
     private readonly links: StoreLinksService,
-    private readonly mail: MailService,
+    private readonly notifier: StoreNotifier,
+    private readonly domains: StoreDomainsService,
     private readonly audit: AuditService,
-    private readonly config: AppConfig,
   ) {}
 
   private actor() {
@@ -105,7 +101,7 @@ export class StoreReviewService {
         id: s._id.toHexString(),
         name: s.name,
         handle: s.handle,
-        url: this.links.url(s.handle),
+        url: this.links.url(s),
         status: s.status,
         category: s.category,
         themeKey: s.themeKey,
@@ -132,6 +128,7 @@ export class StoreReviewService {
         org: this.orgSummary(org),
         flags: store.review.flags,
         statusBeforeSuspension: store.statusBeforeSuspension ?? null,
+        domains: await this.domains.forStore(store),
         preview: this.links.enabled
           ? this.links.previewUrl(store._id.toHexString(), store.handle)
           : null,
@@ -194,10 +191,10 @@ export class StoreReviewService {
       'Only a store waiting for review can be approved.',
       note ? { note } : {},
     );
-    await this.notifyOwner(store, 'store.approved', (locale) =>
+    await this.notifier.notifyOwner(store, 'store.approved', (locale) =>
       mailTemplates.storeApproved(locale, {
         storeName: store.name,
-        storeUrl: this.links.url(store.handle),
+        storeUrl: this.links.url(store),
       }),
     );
     return store;
@@ -220,11 +217,11 @@ export class StoreReviewService {
       'Only a store waiting for review can be rejected.',
       { reason },
     );
-    await this.notifyOwner(store, 'store.rejected', (locale) =>
+    await this.notifier.notifyOwner(store, 'store.rejected', (locale) =>
       mailTemplates.storeRejected(locale, {
         storeName: store.name,
         reason,
-        dashboardUrl: this.dashboardUrl(store),
+        dashboardUrl: this.notifier.dashboardUrl(store),
       }),
     );
     return store;
@@ -248,11 +245,11 @@ export class StoreReviewService {
       'This store is already suspended.',
       { reason },
     );
-    await this.notifyOwner(store, 'store.suspended', (locale) =>
+    await this.notifier.notifyOwner(store, 'store.suspended', (locale) =>
       mailTemplates.storeSuspended(locale, {
         storeName: store.name,
         reason,
-        dashboardUrl: this.dashboardUrl(store),
+        dashboardUrl: this.notifier.dashboardUrl(store),
       }),
     );
     return store;
@@ -275,36 +272,12 @@ export class StoreReviewService {
       'platform.store.reinstated',
       'Only a suspended store can be reinstated.',
     );
-    await this.notifyOwner(store, 'store.reinstated', (locale) =>
+    await this.notifier.notifyOwner(store, 'store.reinstated', (locale) =>
       mailTemplates.storeReinstated(locale, {
         storeName: store.name,
-        dashboardUrl: this.dashboardUrl(store),
+        dashboardUrl: this.notifier.dashboardUrl(store),
       }),
     );
     return store;
-  }
-
-  private dashboardUrl(store: StoreDoc): string {
-    const web = this.config.get('WEB_APP_URL').replace(/\/$/, '');
-    return `${web}/app/${store.orgId.toHexString()}/store/${store._id.toHexString()}`;
-  }
-
-  /** Emails the business owner. A mail failure never undoes the decision. */
-  private async notifyOwner(
-    store: StoreDoc,
-    category: string,
-    render: (locale: 'en' | 'bn') => RenderedMail,
-  ): Promise<void> {
-    try {
-      const org = await this.orgs.get(store.orgId.toHexString());
-      const [owner] = await this.users.findByIds([org.ownerUserId]);
-      if (!owner) return;
-      await this.mail.send({ to: owner.email, category, ...render(owner.locale) });
-    } catch (err) {
-      this.logger.error(
-        { err, storeId: store._id.toHexString() },
-        'Could not email the store owner',
-      );
-    }
   }
 }

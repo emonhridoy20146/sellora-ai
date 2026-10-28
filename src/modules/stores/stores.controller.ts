@@ -23,6 +23,7 @@ import {
   RequirePlatformPermissions,
 } from '../auth/decorators.js';
 import { STORE_PAGE_KEYS } from './schemas.js';
+import { StoreDomainsService } from './store-domains.service.js';
 import { StoreReviewService } from './store-review.service.js';
 import { StorefrontKeyGuard } from './storefront-key.guard.js';
 import { StorefrontService, type ResolvedStore } from './storefront.service.js';
@@ -145,7 +146,106 @@ export class StoresController {
   }
 }
 
+@ApiTags('stores')
+@OrgScoped()
+@RequireModule('storefront')
+@Controller({ path: 'orgs/:orgId/stores/:storeId/domains', version: '1' })
+export class StoreDomainsMerchantController {
+  constructor(private readonly domains: StoreDomainsService) {}
+
+  @Get()
+  @RequirePermissions('stores.view')
+  @ApiOperation({ summary: "The store's custom domains, with the DNS records each needs" })
+  list(@ZodParam('storeId', dto.storeIdParam) storeId: string) {
+    return this.domains.list(storeId);
+  }
+
+  @Post()
+  @RequirePermissions('stores.manage')
+  @ApiOperation({ summary: 'Add a custom domain (checked against DNS straight away)' })
+  add(
+    @ZodParam('storeId', dto.storeIdParam) storeId: string,
+    @ZodBody(dto.addDomainBody) body: z.infer<typeof dto.addDomainBody>,
+  ) {
+    return this.domains.add(storeId, body.domain);
+  }
+
+  @Post(':domainId/check')
+  @HttpCode(200)
+  @RequirePermissions('stores.manage')
+  @ApiOperation({ summary: "Look up the domain's DNS records now" })
+  check(
+    @ZodParam('storeId', dto.storeIdParam) storeId: string,
+    @ZodParam('domainId', dto.domainIdParam) domainId: string,
+  ) {
+    return this.domains.check(storeId, domainId);
+  }
+
+  @Delete(':domainId')
+  @HttpCode(204)
+  @RequirePermissions('stores.manage')
+  async remove(
+    @ZodParam('storeId', dto.storeIdParam) storeId: string,
+    @ZodParam('domainId', dto.domainIdParam) domainId: string,
+  ): Promise<void> {
+    await this.domains.remove(storeId, domainId);
+  }
+}
+
+@ApiTags('stores')
+@OrgScoped()
+@RequireModule('storefront')
+@Controller({ path: 'orgs/:orgId/stores/:storeId/primary-domain', version: '1' })
+export class StorePrimaryDomainController {
+  constructor(
+    private readonly domains: StoreDomainsService,
+    private readonly stores: StoresService,
+  ) {}
+
+  @Put()
+  @RequirePermissions('stores.manage')
+  @ApiOperation({ summary: 'Choose the address shoppers are sent to' })
+  async set(
+    @ZodParam('storeId', dto.storeIdParam) storeId: string,
+    @ZodBody(dto.primaryDomainBody) body: z.infer<typeof dto.primaryDomainBody>,
+  ) {
+    const store = await this.domains.setPrimary(storeId, body.domainId);
+    return this.stores.toDto(store, await this.stores.readiness(store));
+  }
+}
+
 // ---------------------------------------------------------------- super-admin
+
+@PlatformApi('stores')
+@Controller({ path: 'platform/store-domains', version: '1' })
+export class PlatformStoreDomainsController {
+  constructor(private readonly domains: StoreDomainsService) {}
+
+  @Get()
+  @RequirePlatformPermissions('platform.stores.approve')
+  @ApiOperation({ summary: 'Custom domains: the review queue first come, first served' })
+  list(@ZodQuery(dto.platformDomainsQuery) q: z.infer<typeof dto.platformDomainsQuery>) {
+    return this.domains.platformList(q);
+  }
+
+  @Post(':domainId/approve')
+  @HttpCode(200)
+  @RequirePlatformPermissions('platform.stores.approve')
+  async approve(@ZodParam('domainId', dto.domainIdParam) id: string) {
+    return this.domains.platformDetail(await this.domains.approve(id));
+  }
+
+  @Post(':domainId/reject')
+  @HttpCode(200)
+  @RequirePlatformPermissions('platform.stores.approve')
+  @ApiOperation({ summary: 'Refuse a domain in review, or disconnect a connected one' })
+  async reject(
+    @ZodParam('domainId', dto.domainIdParam) id: string,
+    @ZodBody(dto.reasonBody) body: z.infer<typeof dto.reasonBody>,
+  ) {
+    return this.domains.platformDetail(await this.domains.reject(id, body.reason));
+  }
+}
 
 @PlatformApi('stores')
 @Controller({ path: 'platform/stores', version: '1' })

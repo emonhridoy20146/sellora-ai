@@ -40,6 +40,13 @@ normal pending order with source `store` through the order service, behind an id
 a honeypot and per-address and per-phone rate limits. The super-admin approves stores before
 they open. See [ADR 0014](adr/0014-online-stores.md).
 
+A store can also be reached at a business's own domain. Domains live in their own
+`store_domains` collection: a TXT record proves ownership, a CNAME (or A records for a bare
+domain) proves it points at the storefront, and only then is the name claimed, through a
+unique index, and sent to the super-admin. The storefront resolves any host outside the store
+domain among active domains and redirects shoppers to the store's main address; Caddy asks
+the API before issuing a certificate. See [ADR 0015](adr/0015-store-custom-domains.md).
+
 ## Request lifecycle
 
 1. **Bootstrap** (`src/bootstrap/configure-app.ts`): Helmet, CORS from `CORS_ORIGINS`, cookie

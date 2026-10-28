@@ -68,7 +68,9 @@ export type ParsedHost = { kind: 'handle'; handle: string } | { kind: 'custom'; 
 
 /**
  * What a request's Host header points at: one of our store subdomains, or a domain of its
- * own. The bare base domain, nested subdomains and malformed hosts point at nothing.
+ * own. The bare base domain, nested subdomains and malformed hosts point at nothing. When
+ * the base domain carries a port (development), custom domains must use the same port and
+ * come back without it; otherwise a host with a port points at nothing.
  */
 export function parseStoreHost(rawHost: string, baseDomain: string): ParsedHost | null {
   const host = rawHost.trim().toLowerCase().replace(/\.$/, '');
@@ -80,5 +82,8 @@ export function parseStoreHost(rawHost: string, baseDomain: string): ParsedHost 
     const label = host.slice(0, -suffix.length);
     return HANDLE_RE.test(label) && !label.includes('.') ? { kind: 'handle', handle: label } : null;
   }
-  return { kind: 'custom', host };
+  const port = /:\d+$/.exec(base)?.[0] ?? '';
+  const name = port && host.endsWith(port) ? host.slice(0, -port.length) : host;
+  if (name.includes(':') || !name.includes('.')) return null;
+  return { kind: 'custom', host: name };
 }

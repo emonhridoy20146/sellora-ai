@@ -9,6 +9,12 @@ export const PREVIEW_TTL_S = 3600;
 /** An order receipt link keeps working for 90 days. */
 export const RECEIPT_TTL_S = 90 * 86_400;
 
+/** What a store's address depends on. */
+export interface StoreAddress {
+  handle: string;
+  primaryDomain?: string | null;
+}
+
 interface PreviewClaims {
   t: 'preview';
   s: string;
@@ -47,12 +53,31 @@ export class StoreLinksService {
     return this.config.get('STOREFRONT_BASE_DOMAIN');
   }
 
+  /** The port store addresses carry in development (":3100"), or "". */
+  devPort(): string {
+    return /:\d+$/.exec(this.baseDomain())?.[0] ?? '';
+  }
+
+  /** The store's Sellora address (its subdomain). */
   host(handle: string): string {
     return storeHost(handle, this.baseDomain());
   }
 
-  url(handle: string): string {
+  /** A custom domain as shoppers' browsers send it (with the development port, if any). */
+  domainHost(domain: string): string {
+    return `${domain}${this.devPort()}`;
+  }
+
+  /** The Sellora address as a URL; previews always use it. */
+  subdomainUrl(handle: string): string {
     return storeUrl(handle, this.baseDomain(), this.config.get('STOREFRONT_URL_SCHEME'));
+  }
+
+  /** Where the store lives for shoppers: its main custom domain, or its Sellora address. */
+  url(store: StoreAddress): string {
+    return store.primaryDomain
+      ? `${this.config.get('STOREFRONT_URL_SCHEME')}://${this.domainHost(store.primaryDomain)}`
+      : this.subdomainUrl(store.handle);
   }
 
   previewUrl(
@@ -64,7 +89,7 @@ export class StoreLinksService {
     const exp = Math.floor(now / 1000) + PREVIEW_TTL_S;
     const token = this.preview.sign({ t: 'preview', s: storeId, exp });
     return {
-      url: `${this.url(handle)}/__preview?token=${encodeURIComponent(token)}`,
+      url: `${this.subdomainUrl(handle)}/__preview?token=${encodeURIComponent(token)}`,
       expiresAt: new Date(exp * 1000).toISOString(),
     };
   }

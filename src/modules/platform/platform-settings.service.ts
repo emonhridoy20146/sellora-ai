@@ -67,7 +67,10 @@ export class PlatformSettingsService {
         enabled: doc.fraudNetwork?.enabled ?? false,
         configured: Boolean(this.config.get('FRAUD_NETWORK_SECRET')),
       },
-      stores: { autoApprove: doc.stores?.autoApprove ?? false },
+      stores: {
+        autoApprove: doc.stores?.autoApprove ?? false,
+        autoApproveDomains: doc.stores?.autoApproveDomains ?? false,
+      },
       updatedAt: (doc as unknown as { updatedAt?: Date }).updatedAt?.toISOString() ?? null,
     };
     this.cache = { at: Date.now(), value };

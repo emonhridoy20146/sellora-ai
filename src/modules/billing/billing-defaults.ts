@@ -21,6 +21,7 @@ export const DEFAULT_PLANS: SeedPlan[] = [
     limits: limits({
       seats: 1,
       stores: 0,
+      customDomains: 0,
       products: 25,
       channels: 1,
       ordersPerMonth: 50,
@@ -41,7 +42,14 @@ export const DEFAULT_PLANS: SeedPlan[] = [
     name: 'AI Inbox',
     description: 'All your chats in one inbox with an AI sales agent that replies 24/7.',
     modules: ['inbox', 'ai_agent', 'analytics'],
-    limits: limits({ seats: 3, stores: 0, channels: 4, landingPages: 0, storageMb: 2_000 }),
+    limits: limits({
+      seats: 3,
+      stores: 0,
+      customDomains: 0,
+      channels: 4,
+      landingPages: 0,
+      storageMb: 2_000,
+    }),
     prices: [
       { interval: 'month', currency: 'BDT', amountMinor: 149_900 },
       { interval: 'year', currency: 'BDT', amountMinor: 1_499_000 },
@@ -68,7 +76,7 @@ export const DEFAULT_PLANS: SeedPlan[] = [
       'landing_pages',
       'backups_drive',
     ],
-    limits: limits({ seats: 5, stores: 1, landingPages: 10, storageMb: 10_000 }),
+    limits: limits({ seats: 5, stores: 1, customDomains: 1, landingPages: 10, storageMb: 10_000 }),
     prices: [
       { interval: 'month', currency: 'BDT', amountMinor: 299_900 },
       { interval: 'year', currency: 'BDT', amountMinor: 2_999_000 },
@@ -98,7 +106,7 @@ export const DEFAULT_PLANS: SeedPlan[] = [
       'seo',
       'marketing',
     ],
-    limits: limits({ seats: 10, stores: 3, landingPages: 50, storageMb: 30_000 }),
+    limits: limits({ seats: 10, stores: 3, customDomains: 3, landingPages: 50, storageMb: 30_000 }),
     prices: [
       { interval: 'month', currency: 'BDT', amountMinor: 499_900 },
       { interval: 'year', currency: 'BDT', amountMinor: 4_999_000 },

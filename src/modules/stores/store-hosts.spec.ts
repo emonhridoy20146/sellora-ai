@@ -38,6 +38,14 @@ describe('store addresses', () => {
       kind: 'custom',
       host: 'shop.example.com',
     });
+    expect(parseStoreHost('shop.example.com:8443', 'sellora.shop')).toBeNull();
+    expect(parseStoreHost('localhost', 'sellora.shop')).toBeNull();
+    // In development custom domains use the store domain's port.
+    expect(parseStoreHost('www.nakshi.test:3100', 'sellora.localhost:3100')).toEqual({
+      kind: 'custom',
+      host: 'www.nakshi.test',
+    });
+    expect(parseStoreHost('www.nakshi.test:3000', 'sellora.localhost:3100')).toBeNull();
     expect(storeUrl('nakshi', 'Sellora.Shop', 'https')).toBe('https://nakshi.sellora.shop');
   });
 });

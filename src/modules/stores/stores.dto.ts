@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { emailSchema, moneyMinorSchema, objectIdSchema } from '../../common/validation/schemas.js';
 import { BUSINESS_CATEGORY_KEYS } from '../orgs/business-categories.js';
-import { STORE_STATUSES } from './schemas.js';
+import { DOMAIN_STATUSES, STORE_STATUSES } from './schemas.js';
 import { THEME_KEYS, themeSettingsSchema } from './themes.js';
 
 const text = (max: number) => z.string().trim().max(max);
@@ -88,6 +88,12 @@ export const handleCheckQuery = z.object({
 });
 
 export const storeIdParam = objectIdSchema;
+export const domainIdParam = objectIdSchema;
+
+/** A custom domain as typed or pasted; normalised and checked by the service. */
+export const addDomainBody = z.object({ domain: z.string().trim().min(1).max(300) }).strict();
+/** null: the Sellora address becomes the main one again. */
+export const primaryDomainBody = z.object({ domainId: objectIdSchema.nullable() }).strict();
 
 // ---------------------------------------------------------------- platform
 
@@ -99,6 +105,13 @@ export const platformStoresQuery = z.object({
 });
 
 export const reasonBody = z.object({ reason: text(500).min(5) }).strict();
+
+export const platformDomainsQuery = z.object({
+  status: z.enum(DOMAIN_STATUSES).optional(),
+  q: z.string().trim().max(80).optional(),
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+});
 export const approveBody = z.object({ note: optText(500) }).strict();
 
 // ---------------------------------------------------------------- storefront (shoppers)

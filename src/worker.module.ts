@@ -9,6 +9,7 @@ import { FraudCoreModule } from './modules/fraud/fraud.module.js';
 import { FilesCoreModule } from './modules/files/files.module.js';
 import { MetaCoreModule } from './modules/meta/meta.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
+import { StoresCoreModule } from './modules/stores/stores.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { AiProcessor } from './workers/ai.processor.js';
 import { CouriersProcessor } from './workers/couriers.processor.js';
@@ -33,6 +34,7 @@ export class WorkerModule {
         MetaCoreModule,
         CouriersCoreModule,
         FraudCoreModule,
+        StoresCoreModule,
       ],
       providers: [
         MailProcessor,

@@ -24,6 +24,7 @@ import { CourierAccountsService } from '../couriers/courier-accounts.service.js'
 import type { CourierKey } from '../couriers/courier.types.js';
 import { OrgsService, type OrganizationDoc } from '../orgs/orgs.service.js';
 import type { Store, StorePageKey } from './schemas.js';
+import { StoreDomainsService } from './store-domains.service.js';
 import { parseStoreHost } from './store-hosts.js';
 import { StoreLinksService } from './store-links.service.js';
 import type { StoreSection } from './themes.js';
@@ -92,6 +93,7 @@ export class StorefrontService {
     private readonly orgs: OrgsService,
     private readonly entitlements: EntitlementsService,
     private readonly links: StoreLinksService,
+    private readonly domains: StoreDomainsService,
     private readonly products: ProductRepository,
     private readonly categories: CategoryRepository,
     private readonly orderRepo: OrderRepository,
@@ -108,10 +110,16 @@ export class StorefrontService {
   /** The store at `host`, and what shoppers may see of it; null when there is none. */
   async resolve(host: string, previewToken?: string): Promise<ResolvedStore | null> {
     const parsed = parseStoreHost(host, this.links.baseDomain());
-    // Custom domains arrive with M6b; until then only our subdomains point at stores.
-    if (!parsed || parsed.kind !== 'handle') return null;
+    if (!parsed) return null;
+    let filter: Record<string, unknown>;
+    if (parsed.kind === 'handle') filter = { handle: parsed.handle };
+    else {
+      const storeId = await this.domains.activeStoreId(parsed.host);
+      if (!storeId) return null;
+      filter = { _id: storeId };
+    }
     const store = await this.storeModel
-      .findOne({ handle: parsed.handle })
+      .findOne(filter)
       .setOptions({ [CROSS_TENANT]: true })
       .lean<StoreDoc>()
       .exec();
@@ -161,7 +169,7 @@ export class StorefrontService {
       id: store._id.toHexString(),
       name: store.name,
       handle: store.handle,
-      url: this.links.url(store.handle),
+      url: this.links.url(store),
       language: store.language,
       state,
     };
@@ -685,7 +693,8 @@ export class StorefrontService {
    */
   async domainIsStore(domain: string): Promise<boolean> {
     const parsed = parseStoreHost(domain, this.links.baseDomain().replace(/:\d+$/, ''));
-    if (!parsed || parsed.kind !== 'handle') return false;
+    if (!parsed) return false;
+    if (parsed.kind === 'custom') return (await this.domains.activeStoreId(parsed.host)) !== null;
     const found = await this.storeModel
       .exists({ handle: parsed.handle })
       .setOptions({ [CROSS_TENANT]: true })

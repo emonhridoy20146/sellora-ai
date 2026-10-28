@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { z } from 'zod';
 
 const bool = z
@@ -51,6 +52,25 @@ export const envSchema = z
       (v) => (v === '' ? undefined : v),
       z.string().min(32).optional(),
     ),
+    /**
+     * Custom domains (ADR 0015). Businesses point a CNAME at STOREFRONT_DOMAIN_TARGET (a host
+     * that reaches the storefront); apex domains use A/AAAA records with STOREFRONT_DOMAIN_IPS.
+     * Without a target, custom domains are off. DNS_SERVERS (host or host:port, comma
+     * separated) are asked when checking a domain's records; empty means the system's.
+     */
+    STOREFRONT_DOMAIN_TARGET: z.preprocess(
+      (v) => (v === '' ? undefined : v),
+      z
+        .string()
+        .trim()
+        .toLowerCase()
+        .regex(/^(?=.{4,253}$)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63}$/, 'a host name')
+        .optional(),
+    ),
+    STOREFRONT_DOMAIN_IPS: csv
+      .default([])
+      .refine((ips) => ips.every((ip) => isIP(ip) !== 0), 'IPv4 or IPv6 addresses'),
+    DNS_SERVERS: csv.default([]),
     CORS_ORIGINS: csv.default(['http://localhost:3000']),
     COOKIE_DOMAIN: z.string().optional(),
     COOKIE_SECURE: bool.default(false),

@@ -11,6 +11,7 @@ import {
 const limitsDefinition = {
   seats: { type: Number, default: null },
   stores: { type: Number, default: null },
+  customDomains: { type: Number, default: null },
   products: { type: Number, default: null },
   channels: { type: Number, default: null },
   ordersPerMonth: { type: Number, default: null },

@@ -20,7 +20,7 @@ import type { Store, StorePageKey, StoreStatus } from './schemas.js';
 import { HANDLE_MESSAGES, handleProblem, normalizeHandle } from './store-hosts.js';
 import { StoreLinksService } from './store-links.service.js';
 import { precheckStore, type CheckedText } from './store-precheck.js';
-import { StoreRepository } from './repositories.js';
+import { StoreDomainRepository, StoreRepository } from './repositories.js';
 import {
   THEMES,
   starterSettings,
@@ -134,6 +134,7 @@ export function storeTexts(store: Pick<Store, 'name' | 'seo' | 'pages' | 'theme'
 export class StoresService {
   constructor(
     private readonly stores: StoreRepository,
+    private readonly domains: StoreDomainRepository,
     @InjectModel('Store') private readonly storeModel: Model<Store>,
     private readonly products: ProductRepository,
     private readonly categories: CategoryRepository,
@@ -167,7 +168,10 @@ export class StoresService {
       name: s.name,
       handle: s.handle,
       host: this.links.host(s.handle),
-      url: this.links.url(s.handle),
+      /** Where shoppers find it: the main custom domain, or the Sellora address. */
+      url: this.links.url(s),
+      selloraUrl: this.links.subdomainUrl(s.handle),
+      primaryDomain: s.primaryDomain ?? null,
       category: s.category,
       language: s.language,
       themeKey: s.themeKey,
@@ -648,6 +652,7 @@ export class StoresService {
     await this.tx.run(async () => {
       await this.files.detach(fileIds, this.fileRef(store._id));
       await this.stores.deleteOne({ _id: store._id, status: { $in: DELETABLE } });
+      await this.domains.deleteMany({ storeId: store._id });
     });
     await this.files.removeIfUnused(fileIds);
     await this.audit.record({

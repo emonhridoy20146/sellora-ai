@@ -55,6 +55,7 @@ export const FEATURE_MODULE_KEYS = Object.keys(FEATURE_MODULES) as [
 export const LIMIT_KEYS = [
   'seats',
   'stores',
+  'customDomains',
   'products',
   'channels',
   'ordersPerMonth',
@@ -68,6 +69,7 @@ export type PlanLimits = Record<LimitKey, number | null>;
 export const UNLIMITED: PlanLimits = {
   seats: null,
   stores: null,
+  customDomains: null,
   products: null,
   channels: null,
   ordersPerMonth: null,

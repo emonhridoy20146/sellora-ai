@@ -68,6 +68,8 @@ export interface Store {
   review: StoreReview;
   /** First time the store opened to shoppers; the handle is fixed from then on. */
   liveSince?: Date;
+  /** The active custom domain shoppers are sent to (ADR 0015); none: the Sellora address. */
+  primaryDomain?: string;
   createdBy?: Types.ObjectId;
 }
 
@@ -139,6 +141,7 @@ export const storeSchema = tenantSchema<Store>({
     default: () => ({ flags: [] }),
   },
   liveSince: Date,
+  primaryDomain: String,
   createdBy: Schema.Types.ObjectId,
 });
 // Handles are subdomains, so they are unique across every business.
@@ -146,3 +149,98 @@ storeSchema.index({ handle: 1 }, { unique: true });
 storeSchema.index({ orgId: 1, createdAt: 1 });
 // The super-admin's review queue.
 storeSchema.index({ status: 1, 'review.submittedAt': 1 });
+
+// ---------------------------------------------------------------- custom domains
+
+/**
+ * pending: waiting for the DNS records · review: DNS right, waiting for a super-admin ·
+ * active: serving shoppers · rejected: refused or disconnected by the platform, with a reason.
+ */
+export const DOMAIN_STATUSES = ['pending', 'review', 'active', 'rejected'] as const;
+export type DomainStatus = (typeof DOMAIN_STATUSES)[number];
+/** Statuses that hold the name: no other store anywhere can have it meanwhile. */
+export const CLAIMING_STATUSES: readonly DomainStatus[] = ['review', 'active'];
+
+export interface DomainDnsCheck {
+  checkedAt: Date;
+  ownership: boolean;
+  routing: boolean;
+  problems: string[];
+  found: { txt: string[]; cname: string[]; addresses: string[] };
+}
+
+/** A business's own domain connected to one of its stores (ADR 0015). */
+export interface StoreDomain {
+  orgId: Types.ObjectId;
+  storeId: Types.ObjectId;
+  /** Lower-case ASCII; international names in punycode. */
+  domain: string;
+  /** A registrable domain (example.com) rather than a subdomain (www.example.com). */
+  apex: boolean;
+  /** Goes in the TXT record that proves the business controls the domain. */
+  token: string;
+  status: DomainStatus;
+  /** True while the status claims the name (unique across the platform). */
+  claimed: boolean;
+  dns?: DomainDnsCheck;
+  /** Automatic checks made so far, for the back-off. */
+  checks: number;
+  /** When the worker checks it next; unset when automatic checks have stopped. */
+  nextCheckAt?: Date;
+  /** First time its DNS was right (when it joined the review queue). */
+  verifiedAt?: Date;
+  activatedAt?: Date;
+  review: { decidedAt?: Date; decidedBy?: { id: string; label?: string }; reason?: string };
+  createdBy?: Types.ObjectId;
+}
+
+export const storeDomainSchema = tenantSchema<StoreDomain>(
+  {
+    storeId: { type: Schema.Types.ObjectId, required: true },
+    domain: { type: String, required: true, lowercase: true },
+    apex: { type: Boolean, required: true },
+    token: { type: String, required: true },
+    status: { type: String, enum: DOMAIN_STATUSES, default: 'pending' },
+    claimed: { type: Boolean, default: false },
+    dns: {
+      type: new Schema(
+        {
+          checkedAt: Date,
+          ownership: Boolean,
+          routing: Boolean,
+          problems: [String],
+          found: {
+            type: new Schema(
+              { txt: [String], cname: [String], addresses: [String] },
+              { _id: false, strict: 'throw' },
+            ),
+          },
+        },
+        { _id: false, strict: 'throw' },
+      ),
+    },
+    checks: { type: Number, default: 0 },
+    nextCheckAt: Date,
+    verifiedAt: Date,
+    activatedAt: Date,
+    review: {
+      type: new Schema(
+        { decidedAt: Date, decidedBy: by, reason: String },
+        { _id: false, strict: 'throw' },
+      ),
+      default: () => ({}),
+    },
+    createdBy: Schema.Types.ObjectId,
+  },
+  { collection: 'store_domains' },
+);
+// One store anywhere holds a name once its DNS has been proven; unproven entries may repeat.
+storeDomainSchema.index(
+  { domain: 1 },
+  { unique: true, partialFilterExpression: { claimed: true }, name: 'domain_claimed_unique' },
+);
+storeDomainSchema.index({ domain: 1, status: 1 });
+storeDomainSchema.index({ orgId: 1, storeId: 1, createdAt: 1 });
+// The worker's due checks and the super-admin's queue.
+storeDomainSchema.index({ nextCheckAt: 1 }, { sparse: true });
+storeDomainSchema.index({ status: 1, verifiedAt: 1 });

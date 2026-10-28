@@ -5,6 +5,7 @@ import { QUEUES } from '../infra/queue/queue.constants.js';
 import { BillingJobsService } from '../modules/billing/billing-jobs.service.js';
 import { FilesService } from '../modules/files/files.service.js';
 import { OrgsService } from '../modules/orgs/orgs.service.js';
+import { StoreDomainsService } from '../modules/stores/store-domains.service.js';
 
 /**
  * Periodic housekeeping, scheduled as BullMQ repeatable jobs so exactly one worker in the
@@ -19,6 +20,7 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
     private readonly orgs: OrgsService,
     private readonly billing: BillingJobsService,
     private readonly files: FilesService,
+    private readonly domains: StoreDomainsService,
   ) {
     super();
   }
@@ -30,6 +32,7 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
       ['credit-grants', 10 * 60_000],
       ['release-ai-reservations', 15 * 60_000],
       ['storage-sweep', 15 * 60_000],
+      ['store-domains', 5 * 60_000],
     ];
     for (const [name, every] of schedules) {
       await this.queue.upsertJobScheduler(name, { every }, { name });
@@ -48,6 +51,8 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
         return this.billing.releaseStaleReservations();
       case 'storage-sweep':
         return this.files.sweep();
+      case 'store-domains':
+        return this.domains.runDueChecks();
       default:
         this.logger.warn({ name: job.name }, 'Unknown maintenance job');
         return null;
