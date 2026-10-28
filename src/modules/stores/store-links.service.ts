@@ -21,6 +21,16 @@ interface PreviewClaims {
   exp: number;
 }
 
+/** What a landing page preview shows: the business's draft or the snapshot under review. */
+export type LandingPreviewKind = 'draft' | 'submission';
+
+interface LandingPreviewClaims {
+  t: 'landing_preview';
+  p: string;
+  k: LandingPreviewKind;
+  exp: number;
+}
+
 interface ReceiptClaims {
   t: 'receipt';
   s: string;
@@ -99,6 +109,35 @@ export class StoreLinksService {
     if (!token || !this.preview) return null;
     const claims = this.preview.verify<PreviewClaims>(token);
     return claims?.t === 'preview' && typeof claims.s === 'string' ? claims.s : null;
+  }
+
+  /** A one-hour link to a landing page's draft (or its snapshot under review), on the subdomain. */
+  landingPreviewUrl(
+    page: { id: string; slug: string },
+    handle: string,
+    kind: LandingPreviewKind,
+    now = Date.now(),
+  ): { url: string; expiresAt: string } {
+    if (!this.preview) throw new Error('Landing page previews need STOREFRONT_API_KEY');
+    const exp = Math.floor(now / 1000) + PREVIEW_TTL_S;
+    const token = this.preview.sign({ t: 'landing_preview', p: page.id, k: kind, exp });
+    return {
+      url: `${this.subdomainUrl(handle)}/${page.slug}?preview=${encodeURIComponent(token)}`,
+      expiresAt: new Date(exp * 1000).toISOString(),
+    };
+  }
+
+  /** The landing page and version a preview token shows, or null. */
+  verifyLandingPreview(
+    token: string | undefined,
+  ): { pageId: string; kind: LandingPreviewKind } | null {
+    if (!token || !this.preview) return null;
+    const claims = this.preview.verify<LandingPreviewClaims>(token);
+    return claims?.t === 'landing_preview' &&
+      typeof claims.p === 'string' &&
+      (claims.k === 'draft' || claims.k === 'submission')
+      ? { pageId: claims.p, kind: claims.k }
+      : null;
   }
 
   receiptToken(storeId: string, orderId: string, now = Date.now()): string {

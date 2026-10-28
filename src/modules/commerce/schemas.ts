@@ -383,12 +383,30 @@ export interface Order {
   createdBy?: Types.ObjectId;
   /** The inbox conversation the order was taken in. */
   conversationId?: Types.ObjectId;
-  /** The online store the order was placed in. */
+  /** The online store the order was placed in (also set for its landing pages). */
   storeId?: Types.ObjectId;
+  /** The landing page the order was placed on, as it was named then (ADR 0016). */
+  landingPage?: { id: Types.ObjectId; name: string; slug: string };
+  /** Where the shopper came from, as the page saw it (ads, links). */
+  attribution?: OrderAttribution;
   /** The latest parcel booked with a courier for this order. */
   shipment?: OrderShipment;
   placedAt: Date;
 }
+
+export const ATTRIBUTION_KEYS = [
+  'utmSource',
+  'utmMedium',
+  'utmCampaign',
+  'utmContent',
+  'utmTerm',
+  'fbclid',
+  'gclid',
+  'ttclid',
+  'referrer',
+] as const;
+/** UTM tags, ad click ids and the referring site's host, each at most 200 characters. */
+export type OrderAttribution = Partial<Record<(typeof ATTRIBUTION_KEYS)[number], string>>;
 
 const orderItemSchema = new Schema<OrderItem>(
   {
@@ -458,6 +476,18 @@ export const orderSchema = tenantSchema<Order>({
   createdBy: Schema.Types.ObjectId,
   conversationId: Schema.Types.ObjectId,
   storeId: Schema.Types.ObjectId,
+  landingPage: new Schema(
+    {
+      id: { type: Schema.Types.ObjectId, required: true },
+      name: { type: String, required: true },
+      slug: { type: String, required: true },
+    },
+    { _id: false, strict: 'throw' },
+  ),
+  attribution: new Schema(Object.fromEntries(ATTRIBUTION_KEYS.map((k) => [k, String])), {
+    _id: false,
+    strict: 'throw',
+  }),
   shipment: new Schema(
     {
       parcelId: { type: Schema.Types.ObjectId, required: true },
@@ -486,6 +516,10 @@ orderSchema.index(
 orderSchema.index(
   { orgId: 1, conversationId: 1, placedAt: -1 },
   { partialFilterExpression: { conversationId: { $type: 'objectId' } } },
+);
+orderSchema.index(
+  { orgId: 1, 'landingPage.id': 1, placedAt: -1 },
+  { partialFilterExpression: { landingPage: { $type: 'object' } } },
 );
 
 // ---------------------------------------------------------------- shop settings

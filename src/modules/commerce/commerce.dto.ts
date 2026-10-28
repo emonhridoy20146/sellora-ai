@@ -205,6 +205,8 @@ export const orderListQuery = paginationQuerySchema.extend({
   source: z.enum(ORDER_SOURCES).optional(),
   /** Orders placed in one online store. */
   storeId: objectIdSchema.optional(),
+  /** Orders placed on one landing page. */
+  landingPageId: objectIdSchema.optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
 });

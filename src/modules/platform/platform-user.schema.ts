@@ -62,8 +62,10 @@ export interface PlatformSettings {
   /**
    * New online stores: wait for a super-admin (default) or open as soon as they are submitted.
    * Custom domains: wait for a super-admin (default) or connect as soon as their DNS is right.
+   * Landing pages: each published version waits (default) or goes live when the automatic
+   * check finds nothing.
    */
-  stores: { autoApprove: boolean; autoApproveDomains: boolean };
+  stores: { autoApprove: boolean; autoApproveDomains: boolean; autoApproveLandingPages: boolean };
   updatedBy?: string;
 }
 
@@ -101,6 +103,7 @@ export const platformSettingsSchema = platformSchema<PlatformSettings>(
     stores: {
       autoApprove: { type: Boolean, default: false },
       autoApproveDomains: { type: Boolean, default: false },
+      autoApproveLandingPages: { type: Boolean, default: false },
     },
     updatedBy: String,
   },

@@ -70,6 +70,7 @@ export class PlatformSettingsService {
       stores: {
         autoApprove: doc.stores?.autoApprove ?? false,
         autoApproveDomains: doc.stores?.autoApproveDomains ?? false,
+        autoApproveLandingPages: doc.stores?.autoApproveLandingPages ?? false,
       },
       updatedAt: (doc as unknown as { updatedAt?: Date }).updatedAt?.toISOString() ?? null,
     };

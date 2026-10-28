@@ -300,4 +300,109 @@ export const mailTemplates = {
           { label: 'Open dashboard', url: p.dashboardUrl },
         );
   },
+
+  landingApproved(locale: Locale, p: { pageName: string; pageUrl: string }): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.pageName} এখন চালু`,
+          [
+            `আপনার ল্যান্ডিং পেজ "${p.pageName}" অনুমোদিত হয়েছে। ক্রেতারা এখন এটি দেখে অর্ডার করতে পারবেন।`,
+            'বিজ্ঞাপনে এই লিংকটি ব্যবহার করুন। অর্ডারগুলো Sellora-র অর্ডার তালিকায় আসবে।',
+          ],
+          { label: 'পেজ দেখুন', url: p.pageUrl },
+        )
+      : render(
+          `${p.pageName} is live`,
+          [
+            `Your landing page "${p.pageName}" was approved. Shoppers can see it and order now.`,
+            'Use this link in your ads. Orders arrive in your Sellora order list.',
+          ],
+          { label: 'Open the page', url: p.pageUrl },
+        );
+  },
+
+  landingRejected(
+    locale: Locale,
+    p: { pageName: string; reason: string; live: boolean; dashboardUrl: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.pageName}: পরিবর্তন অনুমোদন পায়নি`,
+          [
+            `আপনার ল্যান্ডিং পেজ "${p.pageName}"-এর পরিবর্তনগুলো অনুমোদন পায়নি। কারণ:`,
+            p.reason,
+            p.live
+              ? 'আগের অনুমোদিত সংস্করণটি চালু থাকবে। ঠিক করে আবার পাঠান।'
+              : 'ঠিক করে আবার পাঠান।',
+          ],
+          { label: 'ড্যাশবোর্ড খুলুন', url: p.dashboardUrl },
+        )
+      : render(
+          `${p.pageName}: changes not approved`,
+          [
+            `The changes to your landing page "${p.pageName}" were not approved. The reviewer said:`,
+            p.reason,
+            p.live
+              ? 'The version approved before stays live. Fix the page and send it again.'
+              : 'Fix the page and send it again.',
+          ],
+          { label: 'Open dashboard', url: p.dashboardUrl },
+        );
+  },
+
+  landingTakenDown(
+    locale: Locale,
+    p: { pageName: string; reason: string; dashboardUrl: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.pageName} বন্ধ করা হয়েছে`,
+          [
+            `Sellora আপনার ল্যান্ডিং পেজ "${p.pageName}" বন্ধ করেছে। কারণ:`,
+            p.reason,
+            'পেজটি ঠিক করে আবার পাঠালে অনুমোদনের পর আবার চালু হবে।',
+          ],
+          { label: 'ড্যাশবোর্ড খুলুন', url: p.dashboardUrl },
+        )
+      : render(
+          `${p.pageName} was taken down`,
+          [
+            `Sellora took down your landing page "${p.pageName}". The reviewer said:`,
+            p.reason,
+            'Fix the page and publish it again; it goes back up once approved.',
+          ],
+          { label: 'Open dashboard', url: p.dashboardUrl },
+        );
+  },
+
+  landingReinstated(
+    locale: Locale,
+    p: { pageName: string; live: boolean; pageUrl: string; dashboardUrl: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.pageName} আবার চালু`,
+          [
+            `Sellora আপনার ল্যান্ডিং পেজ "${p.pageName}"-এর বন্ধ থাকা তুলে নিয়েছে।`,
+            p.live
+              ? 'শেষ অনুমোদিত সংস্করণটি আবার ক্রেতারা দেখতে পাচ্ছেন।'
+              : 'পেজটি প্রকাশ করতে আবার পাঠান।',
+          ],
+          p.live
+            ? { label: 'পেজ দেখুন', url: p.pageUrl }
+            : { label: 'ড্যাশবোর্ড খুলুন', url: p.dashboardUrl },
+        )
+      : render(
+          `${p.pageName} is back`,
+          [
+            `Sellora lifted the takedown on your landing page "${p.pageName}".`,
+            p.live
+              ? 'Shoppers see the last approved version again.'
+              : 'Send the page for review to publish it.',
+          ],
+          p.live
+            ? { label: 'Open the page', url: p.pageUrl }
+            : { label: 'Open dashboard', url: p.dashboardUrl },
+        );
+  },
 };

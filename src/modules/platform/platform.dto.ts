@@ -113,6 +113,7 @@ export const settingsBody = z
       .object({
         autoApprove: z.boolean().optional(),
         autoApproveDomains: z.boolean().optional(),
+        autoApproveLandingPages: z.boolean().optional(),
       })
       .strict()
       .optional(),

@@ -55,7 +55,9 @@ import { StoresService } from './stores.service.js';
     StorefrontService,
   ],
   exports: [
+    StoreRepository,
     StoreLinksService,
+    StoreNotifier,
     StoresService,
     StoreDomainsService,
     StoreReviewService,

@@ -27,6 +27,7 @@ import {
   type PaymentMethod,
   type ShipmentStatus,
   type ShopSettings,
+  type OrderAttribution,
 } from './schemas.js';
 import { ShopSettingsService } from './shop-settings.service.js';
 import { escapeRegex } from './text.js';
@@ -107,6 +108,9 @@ export interface CreateOrderInput {
   conversationId?: string;
   /** The online store the order was placed in. */
   storeId?: string;
+  /** The landing page the order was placed on. */
+  landingPage?: { id: string; name: string; slug: string };
+  attribution?: OrderAttribution;
 }
 
 /** Allowed moves between statuses. Cancelling and returning are terminal. */
@@ -184,6 +188,10 @@ export function toOrderDto(o: OrderDoc) {
     stockCommitted: o.stockCommitted,
     conversationId: o.conversationId?.toHexString() ?? null,
     storeId: o.storeId?.toHexString() ?? null,
+    landingPage: o.landingPage
+      ? { id: o.landingPage.id.toHexString(), name: o.landingPage.name, slug: o.landingPage.slug }
+      : null,
+    attribution: o.attribution ?? null,
     shipment: o.shipment
       ? {
           parcelId: o.shipment.parcelId.toHexString(),
@@ -290,6 +298,7 @@ export class OrdersService {
     shipment?: ShipmentFilter;
     source?: OrderSource;
     storeId?: string;
+    landingPageId?: string;
     from?: Date;
     to?: Date;
     limit: number;
@@ -299,6 +308,7 @@ export class OrdersService {
     if (query.status) filter.status = query.status;
     if (query.source) filter.source = query.source;
     if (query.storeId) filter.storeId = new Types.ObjectId(query.storeId);
+    if (query.landingPageId) filter['landingPage.id'] = new Types.ObjectId(query.landingPageId);
     if (query.shipment === 'none' || query.shipment === 'ready')
       filter['shipment.status'] = { $nin: SHIPMENT_STATUSES_BOOKED };
     if (query.shipment === 'ready')
@@ -786,6 +796,18 @@ export class OrdersService {
           ? { conversationId: new Types.ObjectId(input.conversationId) }
           : {}),
         ...(input.storeId ? { storeId: new Types.ObjectId(input.storeId) } : {}),
+        ...(input.landingPage
+          ? {
+              landingPage: {
+                id: new Types.ObjectId(input.landingPage.id),
+                name: input.landingPage.name,
+                slug: input.landingPage.slug,
+              },
+            }
+          : {}),
+        ...(input.attribution && Object.keys(input.attribution).length
+          ? { attribution: input.attribution }
+          : {}),
         placedAt: now,
       });
       if (status === 'confirmed') {

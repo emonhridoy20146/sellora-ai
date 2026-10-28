@@ -24,6 +24,7 @@ import { CourierAccountsService } from '../couriers/courier-accounts.service.js'
 import type { CourierKey } from '../couriers/courier.types.js';
 import { OrgsService, type OrganizationDoc } from '../orgs/orgs.service.js';
 import type { Store, StorePageKey } from './schemas.js';
+import { runIdempotent } from './idempotency.js';
 import { StoreDomainsService } from './store-domains.service.js';
 import { parseStoreHost } from './store-hosts.js';
 import { StoreLinksService } from './store-links.service.js';
@@ -65,10 +66,6 @@ export interface CheckoutInput {
 const SECTION_LIMIT_MAX = 12;
 /** "Only N left" is shown at or below this stock. */
 const LOW_STOCK_SHOWN = 5;
-/** How long a checkout's answer is kept for retries with the same Idempotency-Key. */
-const IDEMPOTENCY_TTL_S = 86_400;
-/** How long a checkout may run before a retry with the same key may start it again. */
-const IDEMPOTENCY_LOCK_S = 60;
 const SITEMAP_MAX = 5000;
 
 const PAGE_KEYS: StorePageKey[] = ['about', 'shipping', 'returns', 'privacy', 'terms'];
@@ -440,62 +437,29 @@ export class StorefrontService {
     };
   }
 
-  private idemKeys(storeId: string, key: string) {
-    return { result: `sf:idem:${storeId}:${key}`, lock: `sf:idem:${storeId}:${key}:lock` };
-  }
-
   /**
    * Places an order from the store. Safe to retry with the same Idempotency-Key: the first
    * answer is kept for a day and returned again; the same key with a different cart is
    * refused. The order starts as pending for the business to confirm (stock is taken then).
    */
-  async checkout(r: ResolvedStore, input: CheckoutInput, idempotencyKey: string) {
-    const storeId = r.store._id.toHexString();
-    const fingerprint = sha256(canonicalJson({ ...input, website: undefined }));
-    const keys = this.idemKeys(storeId, idempotencyKey);
-    const saved = await this.redis.get(keys.result);
-    if (saved) return this.replay(saved, fingerprint);
-
-    const ip = RequestContext.current()?.ip;
-    if (ip) await this.limits.consume('checkout:ip', ip);
-    // Bots fill every field; people never see this one. Refused without saying why.
-    if (input.website?.trim())
-      throw AppError.unprocessable(
-        'order_not_accepted',
-        'We could not take this order online. Please call the shop.',
-      );
-
-    const locked = await this.redis.set(keys.lock, fingerprint, 'EX', IDEMPOTENCY_LOCK_S, 'NX');
-    if (locked !== 'OK') {
-      const again = await this.redis.get(keys.result);
-      if (again) return this.replay(again, fingerprint);
-      throw AppError.conflict(
-        'checkout_in_progress',
-        'This order is still being placed. Wait a moment.',
-      );
-    }
-    try {
-      const result = await this.placeOrder(r, input);
-      await this.redis.set(
-        keys.result,
-        JSON.stringify({ fingerprint, result }),
-        'EX',
-        IDEMPOTENCY_TTL_S,
-      );
-      return result;
-    } finally {
-      await this.redis.del(keys.lock);
-    }
-  }
-
-  private replay(saved: string, fingerprint: string) {
-    const parsed = JSON.parse(saved) as { fingerprint: string; result: unknown };
-    if (parsed.fingerprint !== fingerprint)
-      throw AppError.unprocessable(
-        'idempotency_key_reused',
-        'This Idempotency-Key was used for a different order.',
-      );
-    return parsed.result as Awaited<ReturnType<StorefrontService['placeOrder']>>;
+  checkout(r: ResolvedStore, input: CheckoutInput, idempotencyKey: string) {
+    return runIdempotent({
+      redis: this.redis,
+      scope: `sf:idem:${r.store._id.toHexString()}`,
+      key: idempotencyKey,
+      fingerprint: sha256(canonicalJson({ ...input, website: undefined })),
+      before: async () => {
+        const ip = RequestContext.current()?.ip;
+        if (ip) await this.limits.consume('checkout:ip', ip);
+        // Bots fill every field; people never see this one. Refused without saying why.
+        if (input.website?.trim())
+          throw AppError.unprocessable(
+            'order_not_accepted',
+            'We could not take this order online. Please call the shop.',
+          );
+      },
+      run: () => this.placeOrder(r, input),
+    });
   }
 
   private async placeOrder(r: ResolvedStore, input: CheckoutInput) {
