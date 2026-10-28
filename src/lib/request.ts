@@ -26,3 +26,6 @@ export function sameOrigin(origin: string | null, host: string | null): boolean 
     return false;
   }
 }
+
+/** The request header the proxy fills with a landing page's ?preview= token (src/proxy.ts). */
+export const LANDING_PREVIEW_HEADER = 'x-sl-landing-preview';
