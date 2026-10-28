@@ -122,3 +122,12 @@ export function orderTotals(lines: CartLine[], discountMinor: number, deliveryMi
     discountTooLarge: discountMinor > subtotalMinor,
   };
 }
+
+/** Where an order came from, for people. */
+export const ORDER_SOURCE_LABEL: Record<string, string> = {
+  manual: 'Manual order',
+  inbox: 'From the inbox',
+  store: 'Online store',
+  landing_page: 'Landing page',
+  api: 'API',
+};

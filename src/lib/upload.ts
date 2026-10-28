@@ -107,7 +107,7 @@ function put(
 export async function uploadFile(
   orgId: string,
   input: { blob: Blob; type: string; name: string },
-  purpose: 'product_image',
+  purpose: 'product_image' | 'store_asset',
   opts: { onProgress?: (fraction: number) => void; signal?: AbortSignal } = {},
 ): Promise<StoredFile> {
   const start = await api<UploadStart>(`/orgs/${orgId}/files/uploads`, {

@@ -64,7 +64,9 @@ function nav(orgId: string, can: (p: string) => boolean): NavSection[] {
         ? [{ href: `${base}/customers`, label: 'Customers', icon: UserRound }]
         : []),
       ...(can('orders.view') ? [{ href: `${base}/couriers`, label: 'Couriers', icon: Truck }] : []),
-      { href: `${base}/store`, label: 'Online store', icon: Store, soon: true },
+      ...(can('stores.view')
+        ? [{ href: `${base}/store`, label: 'Online store', icon: Store }]
+        : []),
       { href: `${base}/marketing`, label: 'Marketing', icon: Megaphone, soon: true },
       { href: `${base}/analytics`, label: 'Analytics', icon: BarChart3, soon: true },
     ],

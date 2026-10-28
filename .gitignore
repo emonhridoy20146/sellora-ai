@@ -10,3 +10,6 @@ next-env.d.ts
 .DS_Store
 screenshots/tmp/
 smoke-output/
+
+# Redis snapshots from local development
+dump.rdb

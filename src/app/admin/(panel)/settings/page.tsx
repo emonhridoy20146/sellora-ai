@@ -154,6 +154,7 @@ function SettingsForm({
             maxTopupMinor: maxMinor,
           },
           fraudNetwork: { enabled: s.fraudNetwork.enabled },
+          stores: { autoApprove: s.stores.autoApprove },
         },
       }),
     onSuccess: async (next) => {
@@ -366,6 +367,25 @@ function SettingsForm({
             Have the privacy policy and terms reviewed for sharing between businesses before you
             switch this on.
           </Alert>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Online stores</CardTitle>
+          <CardDescription>
+            How a business&apos;s store opens after it is sent for review.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <Toggle
+            id="st-store-auto"
+            label="Open stores without a person reviewing them"
+            hint="Only when the automatic check finds no warning words in the store or its products. Stores with warnings still wait in Online stores. You can suspend any store later."
+            checked={s.stores.autoApprove}
+            onChange={(v) => set('stores', { autoApprove: v })}
+            disabled={ro}
+          />
         </CardContent>
       </Card>
 

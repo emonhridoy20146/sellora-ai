@@ -482,6 +482,8 @@ export interface PlatformSettings {
    * `configured` is read-only: the server has the secret the hashes need.
    */
   fraudNetwork: { enabled: boolean; configured: boolean };
+  /** Open a submitted store without a person reviewing it, when the automatic check finds nothing. */
+  stores: { autoApprove: boolean };
   updatedAt?: IsoDate;
 }
 
@@ -748,6 +750,8 @@ export interface Order {
   number: string;
   status: OrderStatus;
   source: string;
+  /** The online store it was placed in, for store orders. */
+  storeId?: string | null;
   customerId: string;
   customer: { name: string; phone: string | null; email: string | null };
   shippingAddress: Address;
@@ -1276,4 +1280,199 @@ export interface AiPreviewResult {
   order: { number: string } | null;
   toolCalls: { name: string; ok: boolean }[];
   credits: number;
+}
+
+// ------------------------------------------------------------------ online stores
+
+export type StoreStatus = 'draft' | 'pending' | 'live' | 'rejected' | 'paused' | 'suspended';
+export type StoreLanguage = 'en' | 'bn';
+export type StorePageKey = 'about' | 'shipping' | 'returns' | 'privacy' | 'terms';
+export type FontChoice = 'sans' | 'serif' | 'rounded';
+export type RadiusChoice = 'none' | 'small' | 'large';
+export type HeaderStyle = 'left' | 'centered' | 'bold';
+export type CardStyle = 'plain' | 'bordered' | 'soft';
+export type FeatureIcon = 'truck' | 'cash' | 'return' | 'support' | 'shield' | 'gift';
+export type ProductSource = 'newest' | 'bestsellers' | 'category';
+
+/** An uploaded store image; the API fills in the URL from the file id. */
+export interface StoreImage {
+  fileId: string;
+  url: string;
+}
+
+interface SectionBase {
+  id: string;
+  enabled: boolean;
+}
+
+export type StoreSection =
+  | (SectionBase & {
+      type: 'hero';
+      heading: string;
+      subheading: string;
+      buttonLabel: string;
+      image: StoreImage | null;
+    })
+  | (SectionBase & { type: 'categories'; title: string })
+  | (SectionBase & {
+      type: 'products';
+      title: string;
+      source: ProductSource;
+      categoryId: string | null;
+      limit: 4 | 8 | 12;
+    })
+  | (SectionBase & {
+      type: 'features';
+      items: { icon: FeatureIcon; title: string; text: string }[];
+    })
+  | (SectionBase & {
+      type: 'banner';
+      heading: string;
+      text: string;
+      buttonLabel: string;
+      image: StoreImage | null;
+    })
+  | (SectionBase & { type: 'text'; heading: string; body: string });
+
+export type SectionType = StoreSection['type'];
+
+export interface StoreTheme {
+  palette: { primary: string; accent: string };
+  font: FontChoice;
+  radius: RadiusChoice;
+  header: HeaderStyle;
+  card: CardStyle;
+  logo: StoreImage | null;
+  announcement: string;
+  sections: StoreSection[];
+}
+
+export interface StoreReadiness {
+  activeProducts: number;
+  hasContact: boolean;
+  ready: boolean;
+}
+
+/** GET /orgs/:orgId/stores/:storeId */
+export interface Store {
+  id: string;
+  name: string;
+  handle: string;
+  host: string;
+  url: string;
+  category: string;
+  language: StoreLanguage;
+  themeKey: string;
+  theme: StoreTheme;
+  contact: { phone: string; whatsapp: string; email: string; address: string };
+  social: { facebook: string; instagram: string; youtube: string; tiktok: string };
+  seo: { title: string; description: string };
+  pages: Record<StorePageKey, string>;
+  checkout: { note: string; minOrderMinor: number };
+  status: StoreStatus;
+  review: {
+    submittedAt: IsoDate | null;
+    decidedAt: IsoDate | null;
+    /** Why the store was rejected or suspended, for the business to read. */
+    reason: string | null;
+    autoApproved: boolean;
+  };
+  /** The address cannot change once the store has opened. */
+  handleLocked: boolean;
+  liveSince: IsoDate | null;
+  readiness?: StoreReadiness;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export interface StoreList {
+  items: Store[];
+  /** The plan's store limit; null for no limit. */
+  limit: number | null;
+  used: number;
+}
+
+export interface ThemePalette {
+  name: string;
+  primary: string;
+  accent: string;
+}
+
+export interface ThemeManifest {
+  key: string;
+  name: string;
+  tagline: string;
+  categories: string[];
+  palettes: ThemePalette[];
+  defaults: { font: FontChoice; radius: RadiusChoice; header: HeaderStyle; card: CardStyle };
+}
+
+/** GET /orgs/:orgId/stores/themes */
+export interface ThemeCatalog {
+  /** The theme keys that suit the business's category, best first. */
+  suggested: string[];
+  items: ThemeManifest[];
+}
+
+/** GET /orgs/:orgId/stores/handle-check */
+export interface HandleCheck {
+  handle: string;
+  /** The address the store would have, like nakshi-ghor.sellora.shop */
+  host: string;
+  available: boolean;
+  problem: 'format' | 'reserved' | 'taken' | null;
+  message: string | null;
+}
+
+export interface PreviewLink {
+  url: string;
+  expiresAt: IsoDate;
+}
+
+export interface StoreReviewFlag {
+  where: string;
+  label: string;
+  term: string;
+  reason: string;
+}
+
+interface StoreOrgSummary {
+  id: string;
+  name: string;
+  status: string;
+  category: string;
+  currency: string;
+}
+
+/** A row of GET /platform/stores */
+export interface PlatformStoreRow {
+  id: string;
+  name: string;
+  handle: string;
+  url: string;
+  status: StoreStatus;
+  category: string;
+  themeKey: string;
+  org: StoreOrgSummary | null;
+  flagCount: number;
+  submittedAt: IsoDate | null;
+  decidedAt: IsoDate | null;
+  updatedAt: IsoDate;
+}
+
+export interface PlatformStoreList {
+  items: PlatformStoreRow[];
+  total: number;
+  /** Stores waiting for review, whatever the filter. */
+  pending: number;
+  page: number;
+  pageSize: number;
+}
+
+/** GET /platform/stores/:storeId */
+export interface PlatformStoreDetail extends Store {
+  org: StoreOrgSummary | null;
+  flags: StoreReviewFlag[];
+  statusBeforeSuspension: StoreStatus | null;
+  preview: PreviewLink | null;
 }

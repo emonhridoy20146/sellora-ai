@@ -36,6 +36,7 @@ import { api } from '@/lib/api/client';
 import { ApiError, errorMessage } from '@/lib/api/errors';
 import type { Address, Order, OrderStatus, PaymentMethod } from '@/lib/api/types';
 import {
+  ORDER_SOURCE_LABEL,
   ORDER_STATUS,
   PAYMENT_METHODS,
   STATUS_ACTION,
@@ -546,7 +547,7 @@ export default function OrderPage() {
             <PaymentBadge status={o.payment.status} />
           </span>
         }
-        description={`Placed ${formatDateTime(o.placedAt, org.timezone)} · ${o.source === 'manual' ? 'Manual order' : o.source}`}
+        description={`Placed ${formatDateTime(o.placedAt, org.timezone)} · ${ORDER_SOURCE_LABEL[o.source] ?? o.source}`}
         actions={
           <>
             {can('orders.manage') &&

@@ -143,6 +143,8 @@ try {
       ['/products/categories', 'products-categories'],
       ['/customers', 'customers'],
       ['/couriers', 'couriers'],
+      ['/store', 'store'],
+      ['/store/new', 'store-new'],
       ['/activity', 'activity'],
     ])
       await check(page, orgPath + sub, `merchant-${name}`);
@@ -185,6 +187,7 @@ try {
       ['/admin/tenants', 'tenants'],
       ...(orgId ? [[`/admin/tenants/${orgId}`, 'tenant-detail']] : []),
       ['/admin/users', 'users'],
+      ['/admin/stores', 'stores'],
       ['/admin/payments', 'payments'],
       ['/admin/withdrawals', 'withdrawals'],
       ['/admin/profit', 'profit'],

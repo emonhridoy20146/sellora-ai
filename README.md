@@ -32,14 +32,14 @@ super-admin in the panel and stored encrypted by the API.
 
 ## Scripts
 
-| Command                           | What it does                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `npm run dev`                     | Development server with Turbopack.                                                                      |
-| `npm run build` / `npm start`     | Production build (standalone output) and server.                                                        |
-| `npm run typecheck`               | `tsc --noEmit` (run `npx next typegen` first on a fresh checkout for route types).                      |
-| `npm run lint` / `npm run format` | ESLint (Next.js rules) and Prettier.                                                                    |
-| `npm test`                        | Unit tests (Vitest): money and date formatting, credit estimates, chart ticks, order and inbox helpers. |
-| `npm run e2e`                     | Browser smoke test against a running app + API (see below).                                             |
+| Command                           | What it does                                                                                                   |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                     | Development server with Turbopack.                                                                             |
+| `npm run build` / `npm start`     | Production build (standalone output) and server.                                                               |
+| `npm run typecheck`               | `tsc --noEmit` (run `npx next typegen` first on a fresh checkout for route types).                             |
+| `npm run lint` / `npm run format` | ESLint (Next.js rules) and Prettier.                                                                           |
+| `npm test`                        | Unit tests (Vitest): money and date formatting, credit estimates, chart ticks, order, inbox and store helpers. |
+| `npm run e2e`                     | Browser smoke test against a running app + API (see below).                                                    |
 
 ### Browser smoke test
 
@@ -123,6 +123,8 @@ src/
                           the website chat widget
     couriers/             courier account dialog, booking and bulk booking, the order's
                           courier card (timeline, lost replies), risk badges and card
+    stores/               store status, web address field, theme picker, section editor,
+                          picture picker, preview button
   lib/
     api/                  fetch wrapper (CSRF, one refresh on 401), error type, response types
     format.ts             money in minor units, credits, dates (Intl, any currency)
@@ -132,6 +134,8 @@ src/
     plans.ts              which plan limits apply to which modules
     inbox.ts              inbox views, live list placement, dot command, embed code
     couriers.ts           courier statuses and filters, weights in kg, risk labels
+    stores.ts             store statuses and actions, readiness steps, sections, colour
+                          contrast, store pages
   config/
     site.ts               public settings from env
     marketing.ts          feature list with live/coming-soon flags
@@ -208,6 +212,28 @@ SMOKE_ADMIN_EMAIL=… SMOKE_ADMIN_PASSWORD=… SMOKE_ADMIN_TOTP_SECRET=… \
 node scripts/couriers-flow.mjs
 ```
 
+### Online stores browser flow
+
+`scripts/stores-flow.mjs` clicks through an online store's whole life: the empty store page,
+the create wizard (a reserved web address refused, the suggested theme, a colour palette), the
+draft checklist, the design editor (a hero picture uploaded, text changed, an announcement, a
+section hidden), store details (an invalid link refused), sending for review, the signed
+preview link, the "opening soon" page shoppers see before approval, the super-admin's review
+queue and approval, then shopping as a visitor on desktop and phone (home, category, product,
+cart, checkout, receipt, order tracking), the order arriving in Orders as an online-store
+order, pausing and reopening, and the store in Bangla. Screenshots go to
+`smoke-output/stores/`. It needs the storefront app (`sellora-storefront`) running on port
+3100 with the same `STOREFRONT_API_KEY` as the API, and a business with products and delivery
+zones: `npm run dev:seed` in sellora-api makes one (Nakshi Ghor, `shop@demo.sellora.test`),
+whose product pictures are generated patterns, not photos. It deletes that business's existing
+stores first and leaves one open store behind.
+
+```bash
+SMOKE_MERCHANT_EMAIL=shop@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
+SMOKE_ADMIN_EMAIL=… SMOKE_ADMIN_PASSWORD=… SMOKE_ADMIN_TOTP_SECRET=… \
+node scripts/stores-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -229,6 +255,12 @@ node scripts/couriers-flow.mjs
   sends `X-Frame-Options: DENY`; widget pages send `frame-ancestors` with the channel's
   allowed sites (cached for a minute in `proxy.ts`), so the browser itself refuses to show a
   chat on a site the merchant did not allow.
+- **Online stores.** The dashboard edits a store through the API; shoppers never touch this
+  app. The API enforces which status changes are allowed; `lib/stores.ts` mirrors those rules
+  only to decide which buttons to show, and the checklist comes from `readiness` on the store
+  response. Previews open in a new tab with a signed link from the API, valid for an hour. The
+  design editor keeps unsaved changes in one draft and compares it with the saved theme to
+  enable Save.
 - **Honesty on the public site.** `config/marketing.ts` marks each feature `live` or `soon`, and
   `LIVE_MODULES` controls the "coming soon" tag on plan modules. Only flip a flag when the
   feature works end to end.
@@ -242,8 +274,12 @@ have only run against a stand-in for Meta's API, and the AI agent only against a
 Claude. So the public site keeps labelling the inbox and the AI "coming soon" until both have
 run for real. Courier booking, tracking and the fraud check work (M5), but only against a
 stand-in for the couriers' APIs, so the public site also keeps couriers "coming soon" until a
-parcel has been booked with each real courier. Store builder, marketing and analytics appear in
-the merchant sidebar as disabled "Soon" items. They will be added milestone by milestone; see
+parcel has been booked with each real courier. Online stores work (M6 part 1: the dashboard's
+Online store pages, the super-admin's review queue, and the shops themselves in
+`sellora-storefront`), but only on development addresses (`*.sellora.localhost`) so far and
+without custom domains, so the public site keeps "Your own online store" coming soon until
+stores run on a real domain. Marketing and analytics appear in the merchant sidebar as
+disabled "Soon" items. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.
 
 Photo uploads (`lib/upload.ts`) shrink photos to 1600 px in the browser, ask the API for an

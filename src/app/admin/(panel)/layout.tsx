@@ -12,6 +12,7 @@ import {
   ScrollText,
   Settings,
   ShieldCheck,
+  Store,
   TrendingUp,
   Users,
 } from 'lucide-react';
@@ -24,9 +25,13 @@ import { PlatformProvider } from '@/components/platform-context';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { api } from '@/lib/api/client';
 import { usePlatformMe } from '@/lib/api/queries';
-import type { BillingOverview } from '@/lib/api/types';
+import type { BillingOverview, PlatformStoreList } from '@/lib/api/types';
 
-function nav(can: (p: string) => boolean, queues?: BillingOverview['queues']): NavSection[] {
+function nav(
+  can: (p: string) => boolean,
+  queues?: BillingOverview['queues'],
+  pendingStores?: number,
+): NavSection[] {
   const s: NavSection[] = [
     {
       items: [
@@ -36,6 +41,9 @@ function nav(can: (p: string) => boolean, queues?: BillingOverview['queues']): N
           : []),
         ...(can('platform.users.view')
           ? [{ href: '/admin/users', label: 'Merchant users', icon: Users }]
+          : []),
+        ...(can('platform.stores.approve')
+          ? [{ href: '/admin/stores', label: 'Online stores', icon: Store, badge: pendingStores }]
           : []),
       ],
     },
@@ -86,6 +94,14 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
     enabled: can('platform.billing.view'),
     refetchInterval: 60_000,
   });
+  // Only the count of stores waiting for review, for the badge.
+  const storeQueue = useQuery({
+    queryKey: ['platform', 'stores', 'pending-count'],
+    queryFn: () =>
+      api<PlatformStoreList>('/platform/stores', { query: { status: 'pending', pageSize: 1 } }),
+    enabled: can('platform.stores.approve'),
+    refetchInterval: 60_000,
+  });
 
   return (
     <SessionGate realm="platform" query={me}>
@@ -93,7 +109,7 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
         <PlatformProvider value={{ me: me.data, can }}>
           <AppShell
             brand={<Brand href="/admin" suffix="Platform" />}
-            sections={nav(can, overview.data?.queues)}
+            sections={nav(can, overview.data?.queues, storeQueue.data?.pending)}
             topRight={
               <>
                 <span className="mr-2 hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
