@@ -52,6 +52,7 @@ import {
 } from '@/lib/inbox';
 import { cn } from '@/lib/utils';
 import { Avatar, ChannelIcon } from './conversation-list';
+import { MessageAttachmentView } from './message-attachment';
 import {
   applyConversation,
   applyMessage,
@@ -133,18 +134,14 @@ function MessageRow({
           failed && 'ring-2 ring-destructive',
         )}
       >
+        {m.attachments.length > 0 && (
+          <div className={cn('flex flex-wrap gap-1.5', m.text && 'mb-1.5')}>
+            {m.attachments.map((a, i) => (
+              <MessageAttachmentView key={a.url ?? `${m.id}-${i}`} a={a} />
+            ))}
+          </div>
+        )}
         {m.text}
-        {m.attachments.map((a) => (
-          <a
-            key={a.url}
-            href={a.url}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1 block underline"
-          >
-            {a.name ?? 'Attachment'}
-          </a>
-        ))}
       </div>
       <span className="mt-0.5 flex items-center gap-1 px-1 text-[11px] text-muted-foreground">
         {mine && m.sender.type === 'ai' && <Bot className="size-3" aria-hidden />}

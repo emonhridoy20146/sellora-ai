@@ -206,6 +206,12 @@ try {
     await page.getByRole('button', { name: 'Publish new price' }).click();
     await page.waitForTimeout(400);
     await page.screenshot({ path: join(OUT, 'admin-publish-price.png'), fullPage: false });
+    await page.keyboard.press('Escape');
+    // The model editor, with its "Understands photos" switch.
+    await page.getByRole('button', { name: 'Edit' }).first().click();
+    await page.getByRole('switch', { name: 'Understands photos' }).waitFor();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, 'admin-model-editor.png'), fullPage: false });
     await ctx.close();
   }
 } finally {

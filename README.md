@@ -161,6 +161,21 @@ SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
 META_APP_SECRET=stand-in-app-secret-0123456789 node scripts/meta-flow.mjs
 ```
 
+### Customers' photos browser flow
+
+`scripts/photos-flow.mjs` (same set-up, after `meta-flow.mjs` has left the demo channels
+connected) sends a Messenger photo and a WhatsApp photo as webhooks and checks that each is
+copied into Sellora and shown in the open thread, opens the full-size view, checks that the
+AI agent's request carried the photo, that a photo Meta no longer has shows the reason, and
+that saved photos load only with a staff session (401 without). The photos are the Graph
+stand-in's demo images, and the Claude stand-in cannot see: it only reports how many photos it
+received. It proves Sellora's handling of photos, not Meta's or a real model's.
+
+```bash
+SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
+META_APP_SECRET=stand-in-app-secret-0123456789 node scripts/photos-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from

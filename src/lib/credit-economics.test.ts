@@ -23,6 +23,7 @@ function model(over: Partial<AiModel>): AiModel {
     cacheWriteUsdPerMTok: null,
     longContext: null,
     contextWindow: 200_000,
+    imageInput: true,
     enabled: true,
     isDefaultForTier: true,
     ...over,

@@ -276,6 +276,7 @@ export default function AiPricingPage() {
                       <span className="inline-flex flex-wrap gap-1">
                         {m.enabled ? <Badge tone="success">On</Badge> : <Badge>Off</Badge>}
                         {m.isDefaultForTier && <Badge tone="info">Default</Badge>}
+                        {m.imageInput && <Badge>Sees photos</Badge>}
                       </span>
                     </TD>
                     <TD className="text-right">
@@ -703,6 +704,7 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
   );
   const [longIn, setLongIn] = useState(String(model?.longContext?.inputUsdPerMTok ?? ''));
   const [longOut, setLongOut] = useState(String(model?.longContext?.outputUsdPerMTok ?? ''));
+  const [imageInput, setImageInput] = useState(model?.imageInput ?? false);
   const [enabled, setEnabled] = useState(model?.enabled ?? true);
   const [isDefault, setIsDefault] = useState(model?.isDefaultForTier ?? false);
 
@@ -737,6 +739,7 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
               outputUsdPerMTok: num(longOut),
             }
           : null,
+        imageInput,
         enabled,
         isDefaultForTier: isDefault,
       };
@@ -907,6 +910,18 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
                 </Field>
               </div>
             )}
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+            <span className="text-sm">
+              <label htmlFor="m-images" className="font-medium">
+                Understands photos
+              </label>
+              <span className="block text-xs text-muted-foreground">
+                The AI agent shows it the customer’s newest photos. Turn on only if the provider
+                accepts images for this model; photos are billed as input tokens.
+              </span>
+            </span>
+            <Switch id="m-images" checked={imageInput} onCheckedChange={setImageInput} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">

@@ -39,12 +39,20 @@ const PAGE = { id: '100000000000001', name: 'Sellora Demo Page' };
 const IG = { id: '17841400000000777', username: 'sellora.demo' };
 const WA = { phoneNumberId: '200000000000001', wabaId: '300000000000001' };
 
-// Customer ids unique to this run, so a second run starts new conversations.
-const run = String(Date.now()).slice(-7);
-const PSID = `71${run}01`;
-const PSID_OLD = `71${run}02`;
-const IGSID = `72${run}01`;
-const WA_FROM = `88017${run}`;
+// Customer ids unique to this run, so a second run starts new conversations. Customers are
+// named after the last 4 digits of their id, kept distinct so an older chat is never opened.
+const run = String(Date.now()).slice(-6);
+const tails = new Set();
+const uniqueTail = () => {
+  for (;;) {
+    const t = String(1000 + Math.floor(Math.random() * 9000));
+    if (!tails.has(t)) return tails.add(t) && t;
+  }
+};
+const PSID = `7101${run}${uniqueTail()}`;
+const PSID_OLD = `7102${run}${uniqueTail()}`;
+const IGSID = `7201${run}${uniqueTail()}`;
+const WA_FROM = `8801${run}${uniqueTail()}`;
 const tail = (id) => id.slice(-4);
 const WA_NAME = `Karim Uddin ${tail(WA_FROM)}`;
 
@@ -389,9 +397,12 @@ try {
     const dayAgo = Date.now() - 25 * 3600_000;
     await deliver(hooks.message('page', PAGE.id, PSID_OLD, 'Gotokal message dilam', dayAgo));
     const name = `Demo Customer ${tail(PSID_OLD)}`;
+    // Its last message is a day old, so it sorts below today's chats: find it by name.
+    await staff.fill('#inbox-search', name);
     await list.getByText(name).waitFor({ timeout: 10_000 });
     await open(name);
     await staff.getByText('More than 24 hours have passed since').waitFor();
+    await staff.fill('#inbox-search', '');
     if ((await staff.getByRole('radio', { name: 'Reply' }).count()) > 0)
       throw new Error('Reply still offered outside the 24-hour window');
     await staff.getByRole('radio', { name: 'Note' }).waitFor();

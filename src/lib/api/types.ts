@@ -579,6 +579,8 @@ export interface AiModel {
     outputUsdPerMTok: number;
   } | null;
   contextWindow: number;
+  /** The model can look at photos customers send. */
+  imageInput: boolean;
   enabled: boolean;
   isDefaultForTier: boolean;
 }
@@ -924,12 +926,7 @@ export interface InboxMessage {
   type: 'text' | 'image' | 'file' | 'note' | 'system';
   sender: { type: 'contact' | 'user' | 'ai' | 'system'; id: string | null; name: string | null };
   text: string;
-  attachments: {
-    url: string;
-    contentType: string | null;
-    name: string | null;
-    size: number | null;
-  }[];
+  attachments: MessageAttachment[];
   clientId: string | null;
   delivery: { status: DeliveryStatus; error: string | null };
   ai: { credits: number } | null;
@@ -937,6 +934,20 @@ export interface InboxMessage {
 }
 
 export type DeliveryStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+/** A customer's photo is `pending` while Sellora copies it from Meta, then `ready` or `failed`. */
+export type AttachmentStatus = 'pending' | 'ready' | 'failed';
+
+export interface MessageAttachment {
+  /** Saved photos: a private inbox link (signed-in staff only). Null while saving or after a failure. */
+  url: string | null;
+  contentType: string | null;
+  name: string | null;
+  size: number | null;
+  status: AttachmentStatus;
+  /** Why it could not be saved, in plain words. */
+  error: string | null;
+}
 
 export interface TeamMember {
   userId: string;
