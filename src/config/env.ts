@@ -178,6 +178,19 @@ export const envSchema = z
     COURIER_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(20_000),
 
     /**
+     * SMS provider APIs (ADR 0017). The defaults are the providers' published addresses;
+     * change them only when a provider moves its API or for a local stand-in.
+     */
+    SMS_BULKSMSBD_BASE_URL: urlWithDefault('https://bulksmsbd.net'),
+    SMS_ALPHA_BASE_URL: urlWithDefault('https://api.sms.net.bd'),
+    SMS_SSL_WIRELESS_BASE_URL: urlWithDefault('https://smsplus.sslwireless.com'),
+    SMS_TWILIO_BASE_URL: urlWithDefault('https://api.twilio.com'),
+    /** How long to wait for an SMS provider before giving up on a request. */
+    SMS_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
+    /** Messages one business may send a day unless the super-admin sets its own limit. */
+    SMS_DAILY_LIMIT: z.coerce.number().int().min(0).max(1_000_000).default(1_000),
+
+    /**
      * Keys the phone-number hashes of the shared delivery network (fraud check). Without it
      * the network stays off even when the super-admin switches it on. Changing it starts the
      * network from zero, as old hashes no longer match.

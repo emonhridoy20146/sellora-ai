@@ -14,13 +14,14 @@ import type { LedgerEntry, LedgerType, Wallet } from './schemas.js';
 export type WalletDoc = WithId<Wallet>;
 
 /** Ledger types that count as spending (lifetime spend, low-balance alerts). */
-const SPEND_TYPES = new Set<LedgerType>(['ai_usage', 'subscription']);
+const SPEND_TYPES = new Set<LedgerType>(['ai_usage', 'sms_usage', 'subscription']);
 
 type Funding = 'bonus_first' | 'cash_only' | 'cash_first' | 'bonus_only';
 
 /** Which part of the balance pays for each kind of debit. Free credit is for AI only. */
 const FUNDING: Record<LedgerType, Funding> = {
   ai_usage: 'bonus_first',
+  sms_usage: 'cash_only',
   subscription: 'cash_only',
   withdrawal: 'cash_only',
   adjustment: 'cash_first',

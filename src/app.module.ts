@@ -31,6 +31,7 @@ import { HealthModule } from './modules/health/health.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
 import { PlatformSettingsModule } from './modules/platform/platform-settings.module.js';
 import { PlatformModule } from './modules/platform/platform.module.js';
+import { SmsModule } from './modules/sms/sms.module.js';
 import { StoresModule } from './modules/stores/stores.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
@@ -111,6 +112,7 @@ export class AppModule {
         FraudModule,
         StoresModule,
         LandingPagesModule,
+        SmsModule,
       ],
       controllers: [MetricsController],
       providers: [

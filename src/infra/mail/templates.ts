@@ -405,4 +405,47 @@ export const mailTemplates = {
             : { label: 'Open dashboard', url: p.dashboardUrl },
         );
   },
+
+  smsSenderApproved(
+    locale: Locale,
+    p: { businessName: string; senderName: string; settingsUrl: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `SMS সেন্ডার নাম ${p.senderName} অনুমোদিত`,
+          [
+            `${p.businessName}-এর SMS এখন "${p.senderName}" নামে পাঠানো যাবে।`,
+            'Settings › SMS-এ "সেন্ডার নাম ব্যবহার করুন" চালু করুন। এই নামের SMS-এর দাম একটু বেশি।',
+          ],
+          { label: 'SMS সেটিংস খুলুন', url: p.settingsUrl },
+        )
+      : render(
+          `SMS sender name ${p.senderName} approved`,
+          [
+            `${p.businessName} can now send SMS from the name "${p.senderName}".`,
+            'Turn on "Send from my sender name" in Settings › SMS. Messages from your own name cost a little more per part.',
+          ],
+          { label: 'Open SMS settings', url: p.settingsUrl },
+        );
+  },
+
+  smsSenderRejected(
+    locale: Locale,
+    p: { businessName: string; senderName: string; reason: string; settingsUrl: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `SMS সেন্ডার নাম ${p.senderName} অনুমোদন পায়নি`,
+          [`${p.businessName}-এর জন্য "${p.senderName}" নামটি অনুমোদন পায়নি। কারণ:`, p.reason],
+          { label: 'SMS সেটিংস খুলুন', url: p.settingsUrl },
+        )
+      : render(
+          `SMS sender name ${p.senderName} was not approved`,
+          [
+            `The sender name "${p.senderName}" for ${p.businessName} was not approved. The reviewer said:`,
+            p.reason,
+          ],
+          { label: 'Open SMS settings', url: p.settingsUrl },
+        );
+  },
 };

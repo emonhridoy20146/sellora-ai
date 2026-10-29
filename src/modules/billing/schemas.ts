@@ -211,6 +211,7 @@ walletSchema.index({ orgId: 1 }, { unique: true });
 export const LEDGER_TYPES = [
   'topup',
   'ai_usage',
+  'sms_usage',
   'subscription',
   'refund',
   'adjustment',

@@ -34,6 +34,16 @@ import { escapeRegex } from './text.js';
 
 export type OrderDoc = WithId<Order>;
 
+/** Emitted after an order is placed, from any source. */
+export const ORDER_CREATED = 'order.created';
+
+export interface OrderCreatedEvent {
+  orgId: string;
+  orderId: string;
+  status: OrderStatus;
+  source: OrderSource;
+}
+
 /** Emitted after an order moves to another status. */
 export const ORDER_STATUS_CHANGED = 'order.status_changed';
 
@@ -827,6 +837,12 @@ export class OrdersService {
       target: { type: 'order', id: order._id.toHexString(), label: order.number },
       metadata: { status, source, totalMinor: order.totalMinor, items: order.items.length },
     });
+    this.events.emit(ORDER_CREATED, {
+      orgId,
+      orderId: order._id.toHexString(),
+      status,
+      source,
+    } satisfies OrderCreatedEvent);
     return order;
   }
 

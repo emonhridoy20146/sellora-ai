@@ -11,7 +11,8 @@ export const PLATFORM_PERMISSIONS = {
   'platform.billing.view': 'View subscriptions, wallets, credit usage and profit',
   'platform.billing.manage': 'Adjust wallets, set AI credit rates, approve withdrawals',
   'platform.settings.manage': 'Change platform settings such as trials and sign-up',
-  'platform.stores.approve': 'Approve or reject stores and custom domains',
+  'platform.stores.approve': 'Approve or reject stores, custom domains and SMS sender names',
+  'platform.sms.manage': "Connect Sellora's SMS account, set SMS prices and daily limits",
   'platform.audit.view': 'View platform and tenant audit logs',
   'platform.support.manage': 'Handle support tickets and live chat',
   'platform.backups.manage': 'Download and restore backups',
@@ -43,6 +44,7 @@ export const PLATFORM_ROLE_PERMISSIONS: Record<PlatformRole, readonly PlatformPe
     'platform.billing.view',
     'platform.billing.manage',
     'platform.plans.manage',
+    'platform.sms.manage',
     'platform.audit.view',
   ],
   support: [

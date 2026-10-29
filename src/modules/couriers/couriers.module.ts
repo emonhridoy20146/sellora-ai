@@ -12,7 +12,7 @@ import {
 } from './couriers.controller.js';
 import { CouriersListener } from './couriers.listener.js';
 import { ParcelsService } from './parcels.service.js';
-import { COURIER_ADAPTERS } from './providers/courier-providers.js';
+import { COURIER_ADAPTERS, CourierProviders } from './providers/courier-providers.js';
 import { CourierAccountRepository, ParcelRepository } from './repositories.js';
 import { courierAccountSchema, parcelSchema } from './schemas.js';
 
@@ -38,7 +38,7 @@ import { courierAccountSchema, parcelSchema } from './schemas.js';
     ParcelsService,
     CouriersListener,
   ],
-  exports: [CourierAccountsService, ParcelsService],
+  exports: [CourierAccountsService, ParcelsService, CourierProviders],
 })
 export class CouriersCoreModule {}
 

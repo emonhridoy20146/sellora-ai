@@ -12,6 +12,8 @@ export const QUEUES = {
   media: 'media',
   /** Courier bookings (bulk) and parcel status checks. */
   couriers: 'couriers',
+  /** SMS to customers (order updates, cart recovery, campaigns). */
+  sms: 'sms',
   maintenance: 'maintenance',
 } as const;
 
