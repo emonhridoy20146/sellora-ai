@@ -10,6 +10,7 @@ export const LEDGER_LABEL: Record<LedgerType, string> = {
   topup: 'Top-up',
   bonus: 'Free credit',
   ai_usage: 'AI usage',
+  sms_usage: 'SMS',
   subscription: 'Plan',
   refund: 'Refund',
   adjustment: 'Adjustment',

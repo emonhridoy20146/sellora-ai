@@ -18,6 +18,7 @@ import {
 import { MoneyInput } from '@/components/commerce/money-input';
 import { CourierCard } from '@/components/couriers/courier-card';
 import { RiskCard } from '@/components/couriers/risk-card';
+import { OrderSmsCard } from '@/components/sms/messages-card';
 import { PageError } from '@/components/commerce/page-error';
 import { ProductPicker } from '@/components/commerce/product-picker';
 import { ProductThumb } from '@/components/commerce/product-thumb';
@@ -689,6 +690,7 @@ export default function OrderPage() {
           {(o.landingPage || o.attribution) && <SourceCard order={o} />}
           <CourierCard order={o} />
           {o.status !== 'cancelled' && <RiskCard phone={o.customer.phone} />}
+          <OrderSmsCard orderId={o.id} />
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
               <CardTitle>Payment</CardTitle>

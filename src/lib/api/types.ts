@@ -259,7 +259,14 @@ export interface BillingSummary {
 }
 
 export type LedgerType =
-  'topup' | 'bonus' | 'ai_usage' | 'subscription' | 'refund' | 'adjustment' | 'withdrawal';
+  | 'topup'
+  | 'bonus'
+  | 'ai_usage'
+  | 'sms_usage'
+  | 'subscription'
+  | 'refund'
+  | 'adjustment'
+  | 'withdrawal';
 
 export interface LedgerEntry {
   id: string;
@@ -1770,3 +1777,240 @@ export interface PlatformLandingDetail extends LandingPageSummary {
   }[];
   preview: PreviewLink | null;
 }
+
+// ---------------------------------------------------------------- SMS
+
+export type SmsProviderKey = 'bulksmsbd' | 'alpha_sms' | 'ssl_wireless' | 'twilio';
+export type SmsMode = 'off' | 'sellora' | 'own';
+export type SmsMessageStatus = 'queued' | 'sending' | 'sent' | 'delivered' | 'failed' | 'unknown';
+export type SmsPurpose =
+  | 'order_placed'
+  | 'order_confirmed'
+  | 'order_shipped'
+  | 'order_delivered'
+  | 'order_cancelled'
+  | 'test'
+  | 'cart_recovery'
+  | 'campaign';
+export type SmsFailure =
+  | 'rejected'
+  | 'auth'
+  | 'balance'
+  | 'busy'
+  | 'unavailable'
+  | 'uncertain'
+  | 'insufficient_balance'
+  | 'daily_limit'
+  | 'not_configured'
+  | 'unreachable_number';
+export type OrderSmsEvent =
+  | 'order_placed'
+  | 'order_confirmed'
+  | 'order_shipped'
+  | 'order_delivered'
+  | 'order_cancelled';
+
+export interface SmsDescriptor {
+  key: SmsProviderKey;
+  name: string;
+  credentialFields: { key: string; label: string; secret: boolean; help?: string }[];
+  senderId: 'required' | 'optional';
+  senderIdHelp: string;
+  reach: 'bd_mobile' | 'any';
+  deliveryReports: boolean;
+  canVerify: boolean;
+}
+
+export interface SmsPrice {
+  currency: string;
+  perPartMinor: number;
+  senderNamePerPartMinor: number;
+}
+
+export type SmsRoute =
+  | {
+      ready: true;
+      route: 'sellora' | 'own';
+      providerName: string;
+      senderId: string;
+      senderName: boolean;
+      pricePerPartMinor: number;
+      currency: string;
+    }
+  | { ready: false; route: 'sellora' | 'own'; failure: SmsFailure; message: string };
+
+export interface SmsSettings {
+  mode: SmsMode;
+  language: 'en' | 'bn';
+  shopName: string;
+  contactPhone: string;
+  defaults: { shopName: string; contactPhone: string };
+  own: {
+    provider: SmsProviderKey;
+    providerName: string;
+    credentialsHint: string;
+    senderId: string;
+    reach: 'bd_mobile' | 'any';
+    deliveryReports: boolean;
+    lastCheck: { at: string; summary: string } | null;
+    lastError: { at: string; message: string } | null;
+  } | null;
+  sellora: {
+    available: boolean;
+    sharedSender: string;
+    reach: 'bd_mobile' | 'any' | null;
+    price: SmsPrice | null;
+  };
+  senderName: {
+    name: string;
+    status: 'pending' | 'approved' | 'rejected';
+    reason: string | null;
+    requestedAt: string;
+    decidedAt: string | null;
+  } | null;
+  useSenderName: boolean;
+  route: SmsRoute;
+  orderTemplates: {
+    event: OrderSmsEvent;
+    enabled: boolean;
+    text: string;
+    placeholders: { key: string; label: string }[];
+  }[];
+  samples: Record<string, string>;
+  maxParts: number;
+  maxTemplateChars: number;
+  dailyLimit: number;
+  providers: SmsDescriptor[];
+}
+
+export interface SmsGatewayResult {
+  settings: SmsSettings;
+  check: { summary: string; checked: boolean } | null;
+}
+
+export interface SmsMessage {
+  id: string;
+  to: string;
+  body: string;
+  purpose: SmsPurpose;
+  marketing: boolean;
+  ref: { type: string; id: string; label?: string } | null;
+  route: 'sellora' | 'own';
+  provider: SmsProviderKey | null;
+  providerName: string | null;
+  senderId: string;
+  encoding: 'gsm' | 'unicode';
+  parts: number;
+  priceMinor: number;
+  currency: string;
+  status: SmsMessageStatus;
+  failure: SmsFailure | null;
+  error: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  deliveredAt: string | null;
+}
+
+export interface SmsSummary {
+  days: number;
+  total: number;
+  sent: number;
+  delivered: number;
+  failed: number;
+  waiting: number;
+  unknown: number;
+  parts: number;
+  spentMinor: number;
+  today: number;
+  dailyLimit: number;
+}
+
+export interface SmsOptOut {
+  phone: string;
+  source: 'link' | 'staff';
+  at: string;
+}
+
+export interface SmsPlatform {
+  enabled: boolean;
+  ready: boolean;
+  provider: SmsProviderKey | null;
+  providerName: string | null;
+  credentialsHint: string | null;
+  senderId: string;
+  reach: 'bd_mobile' | 'any' | null;
+  lastCheck: { at: string; summary: string } | null;
+  prices: SmsPrice[];
+  costs: SmsPrice[];
+}
+
+export interface SmsPlatformOverview {
+  platform: SmsPlatform;
+  pendingSenderNames: number;
+  providers: SmsDescriptor[];
+}
+
+export interface SmsPlatformConnectResult {
+  platform: SmsPlatform;
+  check: { summary: string };
+}
+
+export interface SmsSenderNameRow {
+  orgId: string;
+  business: { name: string; slug: string } | null;
+  name: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reason: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
+  inUse: boolean;
+}
+
+export interface SmsSenderNameList {
+  items: SmsSenderNameRow[];
+}
+
+export interface SmsBusinessList {
+  defaultDailyLimit: number;
+  items: SmsBusinessRow[];
+}
+
+export interface SmsBusinessRow {
+  orgId: string;
+  business: { name: string; slug: string; currency: string } | null;
+  mode: SmsMode;
+  ownProvider: SmsProviderKey | null;
+  senderName: string | null;
+  dailyLimit: number | null;
+  effectiveDailyLimit: number;
+  last30Days: { messages: number; failed: number; spentMinor: number };
+}
+
+export interface SmsStatsRow {
+  day: string;
+  currency: string;
+  messages: number;
+  parts: number;
+  revenueMinor: number;
+  costMinor: number;
+  profitMinor: number;
+}
+
+export interface SmsStats {
+  from: string;
+  to: string;
+  timezone: string;
+  days: SmsStatsRow[];
+  totals: Omit<SmsStatsRow, 'day'>[];
+  byStatus: { route: string; status: SmsMessageStatus; count: number }[];
+}
+
+export type SmsPlatformTest =
+  | {
+      ok: true;
+      providerName: string;
+      providerStatus: string;
+      providerMessageId: string | null;
+      parts: number;
+    }
+  | { ok: false; providerName: string; failure: SmsFailure; error: string; parts: number };

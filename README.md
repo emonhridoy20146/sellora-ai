@@ -128,6 +128,9 @@ src/
                           records, the super-admin's domain decision buttons
     landing/              landing page editor: section list and fields, offer editor
                           (packages, add-on), picture field, address field, preview button
+    sms/                  SMS route choice, provider account dialog (shared with the
+                          admin), sender name, order texts with preview, message log,
+                          opt-outs, and the Admin › SMS cards
   lib/
     api/                  fetch wrapper (CSRF, one refresh on 401), error type, response types
     format.ts             money in minor units, credits, dates (Intl, any currency)
@@ -141,10 +144,13 @@ src/
                           contrast, store pages, custom domain statuses and next steps
     landing.ts            landing page statuses, sections and their checks before
                           publishing, package prices, the reviewer's "words on the page"
+    sms.ts                SMS part counting (GSM-7 and Unicode, as operators count),
+                          template preview, placeholders, status and failure labels
   config/
     site.ts               public settings from env
     marketing.ts          feature list with live/coming-soon flags
   app/widget/[key]/       the website chat page that widget.js frames on merchants' sites
+  app/u/[code]/           the public "stop SMS offers" page linked from marketing texts
   proxy.ts                redirects signed-out visitors away from /app and /admin; sets which
                           sites may frame each chat widget (frame-ancestors)
 public/widget.js          the embed script merchants paste into their site
@@ -288,6 +294,26 @@ credentials as above:
 node scripts/landing-flow.mjs
 ```
 
+### SMS browser flow
+
+`scripts/sms-flow.mjs` needs the API and worker pointed at the SMS stand-in
+(`node scripts/sms-stand-in.mjs` in sellora-api, with `SMS_BULKSMSBD_BASE_URL` and
+`SMS_ALPHA_BASE_URL` set as its header says). The super-admin connects Sellora's BulkSMSBD
+account in Admin › SMS (a wrong key refused first), switches Sellora SMS on, sets prices and
+costs and sends a platform test; the business chooses Sellora SMS in Settings › SMS, turns on
+and edits the "Order confirmed" text, sends a test (charged from wallet cash), and a new order
+gets its text, which the order page lists. A sender name is asked for, approved by the
+super-admin and used (charged at the sender-name price); a dropped provider answer shows as
+Unknown and leaves the wallet untouched; a number is stopped and allowed again; the
+super-admin sees the revenue report and changes the business's daily limit. Every SMS is
+checked against what the stand-in received. Screenshots go to `smoke-output/sms/`. It starts
+by turning the business's SMS off and disconnecting the platform account, so it can run again.
+Needs the admin credentials as well:
+
+```bash
+node scripts/sms-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -336,7 +362,9 @@ in `sellora-storefront`), but only on development addresses (`*.sellora.localhos
 custom domains answered by a DNS stand-in) so far, so the public site keeps "Your own online
 store" coming soon until stores run on a real domain with real certificates. Landing pages
 work (M7 part 1: the dashboard's Landing pages editor and numbers, the super-admin's review
-queue, and the pages in `sellora-storefront`) on the same development addresses. Marketing and
+queue, and the pages in `sellora-storefront`) on the same development addresses. SMS works
+(M7 part 2: Settings › SMS, Admin › SMS, the order page's SMS list and the opt-out page `/u/…`),
+but only against a stand-in for the SMS providers; no real SMS has been sent. Marketing and
 analytics appear in the merchant sidebar as
 disabled "Soon" items. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.

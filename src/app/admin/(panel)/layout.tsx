@@ -9,6 +9,7 @@ import {
   Gauge,
   KeyRound,
   Layers,
+  MessageSquareText,
   PanelsTopLeft,
   ScrollText,
   Settings,
@@ -31,6 +32,7 @@ import type {
   PlatformLandingList,
   PlatformStoreDomainList,
   PlatformStoreList,
+  SmsSenderNameList,
 } from '@/lib/api/types';
 
 function nav(
@@ -38,6 +40,7 @@ function nav(
   queues?: BillingOverview['queues'],
   pendingStores?: number,
   pendingLanding?: number,
+  pendingSenderNames?: number,
 ): NavSection[] {
   const s: NavSection[] = [
     {
@@ -87,6 +90,13 @@ function nav(
     });
   }
   const system: NavSection = { label: 'Platform', items: [] };
+  if (can('platform.billing.view') || can('platform.stores.approve'))
+    system.items.push({
+      href: '/admin/sms',
+      label: 'SMS',
+      icon: MessageSquareText,
+      badge: pendingSenderNames,
+    });
   if (can('platform.admins.view'))
     system.items.push({ href: '/admin/admins', label: 'Team', icon: ShieldCheck });
   if (can('platform.settings.manage'))
@@ -135,6 +145,13 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
     enabled: can('platform.stores.approve'),
     refetchInterval: 60_000,
   });
+  const senderNameQueue = useQuery({
+    queryKey: ['platform', 'sms', 'pending-count'],
+    queryFn: () =>
+      api<SmsSenderNameList>('/platform/sms/sender-names', { query: { status: 'pending' } }),
+    enabled: can('platform.stores.approve'),
+    refetchInterval: 60_000,
+  });
   // Stores and custom domains waiting for a person share the badge.
   const storeWork =
     storeQueue.data || domainQueue.data
@@ -147,7 +164,13 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
         <PlatformProvider value={{ me: me.data, can }}>
           <AppShell
             brand={<Brand href="/admin" suffix="Platform" />}
-            sections={nav(can, overview.data?.queues, storeWork, landingQueue.data?.pending)}
+            sections={nav(
+              can,
+              overview.data?.queues,
+              storeWork,
+              landingQueue.data?.pending,
+              senderNameQueue.data?.items.length,
+            )}
             topRight={
               <>
                 <span className="mr-2 hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
