@@ -105,6 +105,19 @@ Secrets never go in code or in git:
 scripts/dns-stand-in.mjs` (a DNS server for made-up domains whose records you set over HTTP;
   not a DNS provider) and start the API with `DNS_SERVERS=127.0.0.1:5300
 STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
+- SMS (ADR 0017): off for every business until it chooses a route in Settings › SMS. A business
+  can connect its own BulkSMSBD, Alpha SMS, SSL Wireless or Twilio account (checked with the
+  provider, stored encrypted, never returned), or use Sellora SMS, which the super-admin sets up
+  in Admin › SMS: connect the platform's provider account, switch it on and set the price and
+  cost per SMS part for each currency. Sellora SMS is paid from wallet cash (free credit is for
+  AI only). `SMS_*_BASE_URL` default to the providers' published APIs, `SMS_DAILY_LIMIT` caps
+  messages per business per day (the super-admin can change it per business), and Twilio
+  delivery reports need `API_PUBLIC_URL` to be the address Twilio can reach. To try it locally
+  without provider accounts, run `node scripts/sms-stand-in.mjs` and set
+  `SMS_BULKSMSBD_BASE_URL=http://127.0.0.1:4060/bulksmsbd` and
+  `SMS_ALPHA_BASE_URL=http://127.0.0.1:4060/alpha` (the script's header lists the demo keys). It
+  is not an SMS gateway: no phone receives anything; its page at http://127.0.0.1:4060/ shows
+  what would have arrived.
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -127,6 +140,7 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
 | `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).                                                                                            |
 | `node scripts/courier-stand-in.mjs`                           | Stand-in for the Steadfast, Pathao and RedX APIs for local demos without courier accounts (not a courier).                                                              |
 | `node scripts/dns-stand-in.mjs`                               | DNS server on 127.0.0.1:5300 for trying custom domains with made-up names; records are set over HTTP on :4050 (not a DNS provider or resolver).                         |
+| `node scripts/sms-stand-in.mjs`                               | Stand-in for the BulkSMSBD and Alpha SMS APIs with an inbox page, for local demos without SMS accounts (not an SMS gateway).                                            |
 
 ## Tests
 
@@ -185,6 +199,8 @@ src/
                              (ADR 0014, 0015)
     landing-pages/           landing pages: sections, offer, templates, review, versions,
                              storefront view and orders, visit numbers (ADR 0016)
+    sms/                     SMS provider adapters, Sellora SMS and wallet charging, order
+                             messages, sender names, opt-outs, delivery reports (ADR 0017)
     health/                  liveness and readiness
 test/
   e2e/                       HTTP tests per area, including tenancy.e2e.ts

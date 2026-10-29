@@ -14,6 +14,7 @@ import { UsersService } from '../users/users.service.js';
 import { SmsSettingsRepository, type SmsSettingsDoc } from './repositories.js';
 import type { SenderNameStatus, SmsMessage, SmsSettings } from './schemas.js';
 import { smsLength } from './segments.js';
+import { SmsProviders } from './providers/sms-providers.js';
 import { SmsPlatformService } from './sms-platform.service.js';
 import { SmsService } from './sms.service.js';
 import { SmsError, canReach } from './sms.types.js';
@@ -43,6 +44,7 @@ export class SmsAdminService {
     @InjectModel('Organization') private readonly orgModel: Model<Organization>,
     private readonly settings: SmsSettingsRepository,
     private readonly platform: SmsPlatformService,
+    private readonly providers: SmsProviders,
     private readonly sms: SmsService,
     private readonly users: UsersService,
     private readonly mail: MailService,
@@ -79,7 +81,11 @@ export class SmsAdminService {
         .countDocuments({ 'senderName.status': 'pending' }, { [CROSS_TENANT]: true })
         .exec(),
     ]);
-    return { platform: this.platform.toDto(platform), pendingSenderNames };
+    return {
+      platform: this.platform.toDto(platform),
+      pendingSenderNames,
+      providers: this.providers.all().map((p) => p.descriptor),
+    };
   }
 
   /** Sends one message from Sellora's own account (no business, no wallet), to check it works. */

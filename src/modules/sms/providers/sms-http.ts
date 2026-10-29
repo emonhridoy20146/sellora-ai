@@ -53,7 +53,10 @@ export class SmsHttp {
   async send(call: SmsCall): Promise<SmsReply> {
     const lost = (why: string) =>
       call.sends
-        ? new SmsError('uncertain', `${why}. ${this.provider} may or may not have sent it.`)
+        ? new SmsError(
+            'uncertain',
+            `${why}. ${this.provider} may have sent it, so it is not sent again.`,
+          )
         : new SmsError('unavailable', `${why}. Try again in a few minutes.`);
 
     let res: Response;
@@ -82,7 +85,9 @@ export class SmsHttp {
           `${this.provider} could not be reached. Try again later.`,
         );
       throw lost(
-        timedOut ? `${this.provider} did not answer in time` : `${this.provider} is unreachable`,
+        timedOut
+          ? `${this.provider} did not answer in time`
+          : `The connection to ${this.provider} dropped before it answered`,
       );
     }
     const raw = await res.text();

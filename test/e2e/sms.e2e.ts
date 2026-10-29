@@ -712,7 +712,9 @@ describe('SMS: providers, order messages, Sellora SMS and opt-outs', () => {
           business: expect.objectContaining({ name: shopName }),
         }),
       ]);
-      expect((await P().get('/v1/platform/sms').expect(200)).body.pendingSenderNames).toBe(1);
+      const overview = (await P().get('/v1/platform/sms').expect(200)).body;
+      expect(overview.pendingSenderNames).toBe(1);
+      expect(overview.providers.map((p: { key: string }) => p.key)).toContain('bulksmsbd');
 
       const stale = await P()
         .post(`/v1/platform/sms/sender-names/${orgId}/approve`)
