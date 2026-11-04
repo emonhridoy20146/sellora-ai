@@ -46,6 +46,7 @@ function keysOf(value: unknown, acc = new Set<string>()): Set<string> {
 describe('billing', () => {
   let app: TestApp;
   let platform: string;
+  let platformEmail: string;
   const fake = new FakeGateways();
 
   beforeAll(async () => {
@@ -53,7 +54,9 @@ describe('billing', () => {
       {},
       { gatewayFetch: fake.fetch, controllers: [ModuleProbeController] },
     );
-    platform = (await app.platformOwner()).token;
+    const owner = await app.platformOwner();
+    platform = owner.token;
+    platformEmail = owner.email;
   });
 
   afterAll(async () => {
@@ -821,6 +824,17 @@ describe('billing', () => {
         .send({ amountMinor: 50_000, gateway: 'sslcommerz' })
         .expect(502);
       expect(down.body.code).toBe('gateway_error');
+
+      // The platform's owners hear of failed payments; without Telegram, by email (ADR 0022).
+      // Repeats within 30 minutes are grouped, so the mismatch above and the outage make one.
+      let alerts: { subject: string; text: string }[] = [];
+      for (let i = 0; i < 40 && !alerts.length; i++) {
+        alerts = (await app.outbox(platformEmail)).filter((m) => m.category === 'platform.alert');
+        if (!alerts.length) await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]!.subject).toBe('Sellora alert: A payment failed');
+      expect(alerts[0]!.text).toContain('through sslcommerz');
     });
 
     it('completes bKash payments through execute, and rejects a mismatched paymentID', async () => {

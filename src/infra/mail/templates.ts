@@ -504,7 +504,10 @@ export const mailTemplates = {
         );
   },
 
-  driveReconnect(locale: Locale, p: { businessName: string; email: string; url: string }): RenderedMail {
+  driveReconnect(
+    locale: Locale,
+    p: { businessName: string; email: string; url: string },
+  ): RenderedMail {
     return locale === 'bn'
       ? render(
           `${p.businessName}: Google Drive আবার সংযোগ করুন`,

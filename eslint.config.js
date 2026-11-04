@@ -48,6 +48,15 @@ export default tseslint.config(
     rules: { 'no-restricted-syntax': 'off' },
   },
   {
+    // Owner reports count rows across every business and read the backup records (ADR 0022);
+    // they only count and sum, never return a business's documents.
+    files: [
+      'src/modules/telegram/reports.service.ts',
+      'src/modules/telegram/telegram-watch.service.ts',
+    ],
+    rules: { 'no-restricted-syntax': 'off' },
+  },
+  {
     files: ['**/*.spec.ts', '**/*.e2e.ts', 'test/**/*.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
