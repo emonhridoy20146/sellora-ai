@@ -70,10 +70,7 @@ export function keptBytes(runs: BackupRun[]): number {
 }
 
 /** "Products, Orders" */
-export function partsLabel(
-  parts: string[],
-  catalogue: Pick<BackupSettings, 'parts'>['parts'],
-): string {
+export function partsLabel(parts: string[], catalogue: { part: string; label: string }[]): string {
   return parts.map((p) => catalogue.find((c) => c.part === p)?.label ?? p).join(', ');
 }
 

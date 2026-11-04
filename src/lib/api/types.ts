@@ -2432,11 +2432,63 @@ export interface RestorePreviewRow {
 }
 
 export interface RestorePreview {
-  run: BackupRun;
+  /** The backup the preview is from (the business's own view has only these two). */
+  run: Pick<BackupRun, 'id' | 'startedAt'>;
   business: { id: string; name: string };
   parts: (Omit<RestorePreviewRow, 'collection'> & {
     part: RestorePart;
     label: string;
     collections: RestorePreviewRow[];
   })[];
+}
+
+// ---------------------------------------------------------------- the business's backups (ADR 0021)
+
+export interface BackupExport {
+  id: string;
+  status: 'running' | 'ready' | 'failed' | 'expired';
+  size: number | null;
+  startedAt: IsoDate;
+  finishedAt: IsoDate | null;
+  expiresAt: IsoDate | null;
+  error: string | null;
+  requestedBy: string | null;
+  downloads: number;
+}
+
+export interface DriveConnection {
+  status: 'connected' | 'reconnect';
+  email: string;
+  folderName: string;
+  enabled: boolean;
+  keep: number;
+  connectedAt: IsoDate;
+  connectedBy: string | null;
+  lastSuccessAt: IsoDate | null;
+  lastAttemptAt: IsoDate | null;
+  lastError: string | null;
+  lastFile: { name: string; size: number; at: IsoDate } | null;
+  copying: boolean;
+}
+
+export interface MerchantRestorePoint {
+  id: string;
+  /** restore_point: made by the business; safety: before a restore; nightly: Sellora's. */
+  kind: 'restore_point' | 'safety' | 'nightly' | 'support';
+  status: 'ready' | 'making';
+  startedAt: IsoDate;
+  verifiedAt: IsoDate | null;
+  by: string | null;
+}
+
+export interface MerchantBackups {
+  exports: BackupExport[];
+  drive: DriveConnection | null;
+  driveModule: boolean;
+  driveConfigured: boolean;
+  points: MerchantRestorePoint[];
+  restores: (Omit<BackupRestore, 'by'> & {
+    by: { type: BackupActor['type']; label: string | null };
+  })[];
+  parts: { part: RestorePart; label: string }[];
 }

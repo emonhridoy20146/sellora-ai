@@ -515,6 +515,73 @@ function DownloadDialog({ run, onClose }: { run: BackupRun; onClose: () => void 
 
 // ---------------------------------------------------------------- one business
 
+/** What a restore would change, part by part, with a box to choose each part. */
+export function RestorePreviewTable({
+  preview,
+  parts,
+  onChange,
+}: {
+  preview: RestorePreview;
+  parts: RestorePart[];
+  onChange: (parts: RestorePart[]) => void;
+}) {
+  const setParts = onChange;
+  return (
+    <>
+      <Table>
+        <THead>
+          <TR>
+            <TH className="w-10">
+              <span className="sr-only">Restore</span>
+            </TH>
+            <TH>Part</TH>
+            <TH className="text-right">In the backup</TH>
+            <TH className="text-right">Now</TH>
+            <TH className="text-right">Comes back</TH>
+            <TH className="text-right">Replaced</TH>
+            <TH className="text-right">Removed</TH>
+          </TR>
+        </THead>
+        <TBody>
+          {preview.parts.map((p) => (
+            <TR key={p.part}>
+              <TD>
+                <Checkbox
+                  id={`part-${p.part}`}
+                  checked={parts.includes(p.part)}
+                  onCheckedChange={(c) =>
+                    setParts(c ? [...parts, p.part] : parts.filter((x) => x !== p.part))
+                  }
+                  aria-label={`Restore ${p.label}`}
+                />
+              </TD>
+              <TD>
+                <label htmlFor={`part-${p.part}`} className="font-medium">
+                  {p.label}
+                </label>
+              </TD>
+              <TD className="tabular text-right">{formatNumber(p.inBackup)}</TD>
+              <TD className="tabular text-right">{formatNumber(p.now)}</TD>
+              <TD className="tabular text-right">{formatNumber(p.added)}</TD>
+              <TD className="tabular text-right">{formatNumber(p.replaced)}</TD>
+              <TD
+                className={`tabular text-right ${p.removed ? 'font-medium text-destructive' : ''}`}
+              >
+                {formatNumber(p.removed)}
+              </TD>
+            </TR>
+          ))}
+        </TBody>
+      </Table>
+      <p className="text-[13px] text-muted-foreground">
+        &ldquo;Removed&rdquo; are records made since the backup: a restore takes them out. Money
+        (wallet, payments, invoices), the audit log, staff access, SMS opt-outs, connected accounts
+        and message logs are never restored for one business.
+      </p>
+    </>
+  );
+}
+
 function pointLabel(r: BackupRun): string {
   const kind = r.scope === 'platform' ? 'Platform backup' : RUN_REASON[r.reason];
   return `${formatDateTime(r.startedAt)} · ${kind}`;
@@ -615,56 +682,7 @@ export function TenantBackupsCard({ orgId, name }: { orgId: string; name: string
 
         {preview && preview.run.id === chosen && (
           <div className="grid gap-3" data-testid="restore-preview">
-            <Table>
-              <THead>
-                <TR>
-                  <TH className="w-10">
-                    <span className="sr-only">Restore</span>
-                  </TH>
-                  <TH>Part</TH>
-                  <TH className="text-right">In the backup</TH>
-                  <TH className="text-right">Now</TH>
-                  <TH className="text-right">Comes back</TH>
-                  <TH className="text-right">Replaced</TH>
-                  <TH className="text-right">Removed</TH>
-                </TR>
-              </THead>
-              <TBody>
-                {preview.parts.map((p) => (
-                  <TR key={p.part}>
-                    <TD>
-                      <Checkbox
-                        id={`part-${p.part}`}
-                        checked={parts.includes(p.part)}
-                        onCheckedChange={(c) =>
-                          setParts(c ? [...parts, p.part] : parts.filter((x) => x !== p.part))
-                        }
-                        aria-label={`Restore ${p.label}`}
-                      />
-                    </TD>
-                    <TD>
-                      <label htmlFor={`part-${p.part}`} className="font-medium">
-                        {p.label}
-                      </label>
-                    </TD>
-                    <TD className="tabular text-right">{formatNumber(p.inBackup)}</TD>
-                    <TD className="tabular text-right">{formatNumber(p.now)}</TD>
-                    <TD className="tabular text-right">{formatNumber(p.added)}</TD>
-                    <TD className="tabular text-right">{formatNumber(p.replaced)}</TD>
-                    <TD
-                      className={`tabular text-right ${p.removed ? 'font-medium text-destructive' : ''}`}
-                    >
-                      {formatNumber(p.removed)}
-                    </TD>
-                  </TR>
-                ))}
-              </TBody>
-            </Table>
-            <p className="text-[13px] text-muted-foreground">
-              &ldquo;Removed&rdquo; are records made since the backup: a restore takes them out.
-              Money (wallet, payments, invoices), the audit log, staff access, SMS opt-outs,
-              connected accounts and message logs are never restored for one business.
-            </p>
+            <RestorePreviewTable preview={preview} parts={parts} onChange={setParts} />
             <div>
               <Button
                 variant="destructive"
