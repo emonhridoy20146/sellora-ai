@@ -42,6 +42,12 @@ export default tseslint.config(
     },
   },
   {
+    // Backups read and write every collection as it is stored (ADR 0020). Each business
+    // query there names its orgId; the restore e2e tests check it touches no other business.
+    files: ['src/modules/backups/backups.service.ts', 'scripts/backup.ts'],
+    rules: { 'no-restricted-syntax': 'off' },
+  },
+  {
     files: ['**/*.spec.ts', '**/*.e2e.ts', 'test/**/*.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',

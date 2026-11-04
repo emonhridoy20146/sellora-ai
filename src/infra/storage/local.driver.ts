@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { link, mkdir, open, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, link, mkdir, open, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -135,6 +135,18 @@ export class LocalStorageDriver extends StorageDriver {
     const temp = `${target}.part-${randomBytes(6).toString('hex')}`;
     try {
       await writeFile(temp, body, { flag: 'wx' });
+      await rename(temp, target);
+    } finally {
+      await rm(temp, { force: true });
+    }
+  }
+
+  async putFile(key: string, path: string, _contentType: string): Promise<void> {
+    const target = this.path(key);
+    await mkdir(dirname(target), { recursive: true });
+    const temp = `${target}.part-${randomBytes(6).toString('hex')}`;
+    try {
+      await copyFile(path, temp);
       await rename(temp, target);
     } finally {
       await rm(temp, { force: true });

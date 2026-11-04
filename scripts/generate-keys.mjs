@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Prints fresh secrets for .env: an Ed25519 JWT key pair and a 32-byte data encryption key.
+// Prints fresh secrets for .env: an Ed25519 JWT key pair, 32-byte data and backup encryption
+// keys and the other random secrets.
 // Usage: npm run keys:generate >> .env   (then edit duplicates by hand)
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
 
@@ -12,6 +13,8 @@ console.log(`JWT_PRIVATE_KEY=${b64(privateKey.export({ type: 'pkcs8', format: 'p
 console.log(`JWT_PUBLIC_KEY=${b64(publicKey.export({ type: 'spki', format: 'pem' }))}`);
 console.log(`DATA_ENCRYPTION_KEYS=${kid}:${randomBytes(32).toString('base64')}`);
 console.log(`DATA_ENCRYPTION_ACTIVE_KID=${kid}`);
+console.log(`BACKUP_ENCRYPTION_KEYS=b${kid}:${randomBytes(32).toString('base64')}`);
+console.log(`BACKUP_ENCRYPTION_ACTIVE_KID=b${kid}`);
 console.log(`WEBCHAT_TOKEN_SECRET=${randomBytes(32).toString('hex')}`);
 console.log(`STORAGE_SIGNING_SECRET=${randomBytes(32).toString('hex')}`);
 console.log(`METRICS_TOKEN=${randomBytes(24).toString('hex')}`);

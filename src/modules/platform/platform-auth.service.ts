@@ -352,4 +352,45 @@ export class PlatformAuthService {
   setupUrl(token: string): string {
     return `${this.config.get('WEB_APP_URL')}/admin/setup?token=${encodeURIComponent(token)}`;
   }
+
+  /**
+   * A fresh authenticator code for a sensitive step (downloading or restoring a backup), on top
+   * of the session. Each code works once, like at sign-in; wrong codes count toward the lock.
+   */
+  async confirmCode(userId: string, code: string): Promise<void> {
+    await this.limits.assertNotBlocked('mfa-fail:subject', `p:${userId}`);
+    const user = await this.load(userId, true);
+    if (!user || user.status !== 'active' || !user.mfa.totpSecretEnc)
+      throw AppError.forbidden('mfa_required', 'Set up two-step verification first.');
+    const secret = this.encryption.decrypt(user.mfa.totpSecretEnc, this.aad(userId));
+    const result = await this.totp.verify(secret, code, user.mfa.totpLastStep);
+    let ok = false;
+    if (result.valid) {
+      const claimed = await this.users
+        .updateOne(
+          {
+            _id: user._id,
+            $or: [
+              { 'mfa.totpLastStep': { $exists: false } },
+              { 'mfa.totpLastStep': { $lt: result.timeStep } },
+            ],
+          },
+          { $set: { 'mfa.totpLastStep': result.timeStep } },
+        )
+        .exec();
+      ok = claimed.modifiedCount === 1;
+    }
+    if (!ok) {
+      await this.limits.consume('mfa-fail:subject', `p:${userId}`);
+      await this.audit.recordSafe({
+        action: 'platform.auth.confirm.failed',
+        outcome: 'failure',
+        actor: { type: 'platform', id: userId, label: user.email },
+      });
+      throw AppError.validation([
+        { path: 'code', message: 'The code is incorrect or was already used. Wait for a new one.' },
+      ]);
+    }
+    await this.limits.reset('mfa-fail:subject', `p:${userId}`);
+  }
 }

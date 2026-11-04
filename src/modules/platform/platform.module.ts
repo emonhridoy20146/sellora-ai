@@ -28,6 +28,6 @@ import {
     PublicPlatformController,
   ],
   providers: [PlatformAuthService, PlatformAdminsService, PlatformTenantsService],
-  exports: [PlatformAdminsService],
+  exports: [PlatformAdminsService, PlatformAuthService],
 })
 export class PlatformModule {}

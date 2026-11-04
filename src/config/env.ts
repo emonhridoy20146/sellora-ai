@@ -124,6 +124,22 @@ export const envSchema = z
     /** How long an upload link stays valid. */
     STORAGE_UPLOAD_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
 
+    /**
+     * Backups (ADR 0020): `kid:base64` 32-byte keys, comma-separated, and the one that
+     * encrypts new backups. Development falls back to the data keys; production needs them.
+     */
+    BACKUP_ENCRYPTION_KEYS: z.string().optional(),
+    BACKUP_ENCRYPTION_ACTIVE_KID: z.string().optional(),
+    /** Where a backup is written before it is uploaded. Empty: the system's temporary folder. */
+    BACKUP_TMP_DIR: z.string().optional(),
+    /** A second S3-compatible bucket (another provider and region) for off-site copies. */
+    BACKUP_OFFSITE_S3_ENDPOINT: z.string().optional(),
+    BACKUP_OFFSITE_S3_REGION: z.string().default('auto'),
+    BACKUP_OFFSITE_S3_BUCKET: z.string().optional(),
+    BACKUP_OFFSITE_S3_ACCESS_KEY_ID: z.string().optional(),
+    BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY: z.string().optional(),
+    BACKUP_OFFSITE_S3_FORCE_PATH_STYLE: bool.default(true),
+
     METRICS_TOKEN: z.string().min(16).optional(),
 
     TELEGRAM_BOT_TOKEN: z.string().optional(),
@@ -250,6 +266,13 @@ export const envSchema = z
           message: 'required in production (signs website chat visitor tokens)',
         });
       }
+      if (!env.BACKUP_ENCRYPTION_KEYS) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['BACKUP_ENCRYPTION_KEYS'],
+          message: 'required in production (encrypts backups; keep a copy away from them)',
+        });
+      }
       if (env.STORAGE_DRIVER === 'local' && !env.STORAGE_SIGNING_SECRET) {
         ctx.addIssue({
           code: 'custom',
@@ -286,6 +309,30 @@ export const envSchema = z
         message: 'required when MAIL_TRANSPORT=smtp',
       });
     }
+    if (env.BACKUP_ENCRYPTION_KEYS) {
+      const backupKids = env.BACKUP_ENCRYPTION_KEYS.split(',').map((p) => p.trim().split(':')[0]);
+      if (
+        !env.BACKUP_ENCRYPTION_ACTIVE_KID ||
+        !backupKids.includes(env.BACKUP_ENCRYPTION_ACTIVE_KID)
+      )
+        ctx.addIssue({
+          code: 'custom',
+          path: ['BACKUP_ENCRYPTION_ACTIVE_KID'],
+          message: 'must match a kid in BACKUP_ENCRYPTION_KEYS',
+        });
+    }
+    const offsite = [
+      env.BACKUP_OFFSITE_S3_BUCKET,
+      env.BACKUP_OFFSITE_S3_ACCESS_KEY_ID,
+      env.BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY,
+    ];
+    if (offsite.some(Boolean) && !offsite.every(Boolean))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['BACKUP_OFFSITE_S3_BUCKET'],
+        message:
+          'BACKUP_OFFSITE_S3_BUCKET, BACKUP_OFFSITE_S3_ACCESS_KEY_ID and BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY go together',
+      });
     const kids = env.DATA_ENCRYPTION_KEYS.split(',').map((p) => p.split(':')[0]);
     if (!kids.includes(env.DATA_ENCRYPTION_ACTIVE_KID)) {
       ctx.addIssue({

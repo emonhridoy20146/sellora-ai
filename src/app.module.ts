@@ -18,6 +18,7 @@ import { AiModule } from './modules/ai/ai.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { AuthCoreModule } from './modules/auth/core/auth-core.module.js';
+import { BackupsModule } from './modules/backups/backups.module.js';
 import { BillingModule } from './modules/billing/billing.module.js';
 import { CampaignsModule } from './modules/campaigns/campaigns.module.js';
 import { CartsModule } from './modules/carts/carts.module.js';
@@ -117,6 +118,7 @@ export class AppModule {
         SmsModule,
         CartsModule,
         CampaignsModule,
+        BackupsModule,
       ],
       controllers: [MetricsController],
       providers: [
