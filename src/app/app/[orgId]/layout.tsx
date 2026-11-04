@@ -71,7 +71,9 @@ function nav(orgId: string, can: (p: string) => boolean): NavSection[] {
             { href: `${base}/landing-pages`, label: 'Landing pages', icon: PanelsTopLeft },
           ]
         : []),
-      { href: `${base}/marketing`, label: 'Marketing', icon: Megaphone, soon: true },
+      ...(can('marketing.view') || can('marketing.manage')
+        ? [{ href: `${base}/marketing`, label: 'Marketing', icon: Megaphone }]
+        : []),
       { href: `${base}/analytics`, label: 'Analytics', icon: BarChart3, soon: true },
     ],
   };

@@ -1804,11 +1804,7 @@ export type SmsFailure =
   | 'not_configured'
   | 'unreachable_number';
 export type OrderSmsEvent =
-  | 'order_placed'
-  | 'order_confirmed'
-  | 'order_shipped'
-  | 'order_delivered'
-  | 'order_cancelled';
+  'order_placed' | 'order_confirmed' | 'order_shipped' | 'order_delivered' | 'order_cancelled';
 
 export interface SmsDescriptor {
   key: SmsProviderKey;
@@ -2014,3 +2010,133 @@ export type SmsPlatformTest =
       parts: number;
     }
   | { ok: false; providerName: string; failure: SmsFailure; error: string; parts: number };
+
+// ------------------------------------------------------------------ abandoned carts (M7c)
+
+export type CartView = 'abandoned' | 'recovered' | 'ordered' | 'dismissed' | 'all';
+export type CartStatus = 'open' | 'ordered' | 'dismissed';
+/** `shopping`: still open and changed in the last 30 minutes, so not counted as left yet. */
+export type CartState = CartStatus | 'shopping';
+export type CartSkip =
+  | 'reminders_off'
+  | 'not_in_plan'
+  | 'quiet_hours'
+  | 'recent_reminder'
+  | 'below_minimum'
+  | 'sms_off'
+  | 'opted_out';
+
+export interface CartQuietHours {
+  enabled: boolean;
+  startHour: number;
+  endHour: number;
+}
+
+export interface CartSettingsStep {
+  step: number;
+  enabled: boolean;
+  delayMinutes: number;
+  text: string;
+  /** The saved text with sample values and the stop link, as the API would send it. */
+  preview: {
+    text: string;
+    parts: number;
+    encoding: 'gsm' | 'unicode';
+    priceMinor: number | null;
+  };
+}
+
+export interface CartSettings {
+  enabled: boolean;
+  language: Locale;
+  steps: CartSettingsStep[];
+  minTotalMinor: number;
+  quietHours: CartQuietHours;
+  timezone: string;
+  currency: string;
+  delays: number[];
+  placeholders: { key: string; label: string }[];
+  defaults: Record<Locale, [string, string]>;
+  samples: Record<Locale, Record<string, string>>;
+  stopSuffix: Record<Locale, string>;
+  maxChars: number;
+  maxParts: number;
+  included: boolean;
+  sms:
+    | { mode: SmsMode; ready: false; message: string }
+    | {
+        mode: SmsMode;
+        ready: true;
+        providerName: string;
+        pricePerPartMinor: number;
+        currency: string;
+      };
+}
+
+export interface AbandonedCartLine {
+  productId: string;
+  variantId: string;
+  quantity: number;
+  name: string;
+  variantTitle: string;
+  unitPriceMinor: number;
+}
+
+export interface CartReminderEntry {
+  /** 1 or 2 for the automatic steps, 0 for one sent by hand. */
+  step: number;
+  manual: boolean;
+  at: IsoDate;
+  /** Nothing was sent: SMS was off, or the number had asked to stop. */
+  skipped: 'off' | 'opted_out' | null;
+  message: {
+    id: string;
+    status: SmsMessageStatus;
+    priceMinor: number;
+    currency: string;
+    error: string | null;
+  } | null;
+}
+
+export interface AbandonedCart {
+  id: string;
+  source: 'store' | 'landing_page';
+  store: { id: string; name: string };
+  landingPage: { id: string; name: string; slug: string } | null;
+  customer: { name: string; phone: string };
+  items: AbandonedCartLine[];
+  totalMinor: number;
+  currency: string;
+  status: CartStatus;
+  state: CartState;
+  /** The restore link the reminders carry. */
+  link: string;
+  lastActivityAt: IsoDate;
+  nextReminderAt: IsoDate | null;
+  lastSkip: { reason: CartSkip; at: IsoDate } | null;
+  reminders: CartReminderEntry[];
+  manualRemindersLeft: number;
+  clicks: number;
+  lastClickAt: IsoDate | null;
+  order: { id: string; number: string; totalMinor: number; at: IsoDate } | null;
+  recovered: boolean;
+  createdAt: IsoDate;
+}
+
+export interface CartSummary {
+  days: number;
+  currency: string;
+  left: number;
+  reminded: number;
+  clicked: number;
+  recovered: number;
+  recoveredMinor: number;
+  orderedWithoutReminder: number;
+  open: number;
+  openMinor: number;
+  dismissed: number;
+  smsSent: number;
+  smsSpentMinor: number;
+  /** Recovered carts out of reminded ones (0–1), or null before the first reminder. */
+  recoveryRate: number | null;
+}

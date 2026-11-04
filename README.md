@@ -314,6 +314,26 @@ Needs the admin credentials as well:
 node scripts/sms-flow.mjs
 ```
 
+### Cart reminder browser flow
+
+`scripts/carts-flow.mjs` needs what sms-flow leaves behind (Sellora SMS ready for the demo
+shop, the SMS stand-in), the live store from stores-flow and the storefront on :3100. The
+business opens Marketing › Abandoned carts, sees a text without `{link}` refused while typing,
+writes its first reminder, turns on a second one and switches reminders on. A shopper types a
+phone number at the store checkout and another on a landing page order form (the flow makes
+and approves that page); both carts show as "Still shopping". The flow then moves the two
+carts' last change back in MongoDB (it reads `../sellora-api/.env`, or `SELLORA_API_DIR`) so
+it need not wait an hour: the worker sends the first reminder by itself and staff send the
+other by hand. The shopper opens the link from the SMS, finds the same cart with their name
+and phone, and orders; the cart shows as Recovered with the order. The landing page link
+brings back the offer, and staff stop reminders for that cart. Screenshots go to
+`smoke-output/carts/`. It turns reminders off and cancels its order at the end, so it can run
+again. Needs the admin credentials as well:
+
+```bash
+node scripts/carts-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -364,9 +384,10 @@ store" coming soon until stores run on a real domain with real certificates. Lan
 work (M7 part 1: the dashboard's Landing pages editor and numbers, the super-admin's review
 queue, and the pages in `sellora-storefront`) on the same development addresses. SMS works
 (M7 part 2: Settings › SMS, Admin › SMS, the order page's SMS list and the opt-out page `/u/…`),
-but only against a stand-in for the SMS providers; no real SMS has been sent. Marketing and
-analytics appear in the merchant sidebar as
-disabled "Soon" items. They will be added milestone by milestone; see
+but only against a stand-in for the SMS providers; no real SMS has been sent. Abandoned cart
+reminders work (M7 part 3: Marketing › Abandoned carts, with the settings, the 30-day numbers
+and every saved cart), through the same SMS stand-in. Analytics appears in the merchant
+sidebar as a disabled "Soon" item. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.
 
 Photo uploads (`lib/upload.ts`) shrink photos to 1600 px in the browser, ask the API for an
