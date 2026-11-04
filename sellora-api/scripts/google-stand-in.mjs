@@ -5,25 +5,25 @@
  * made-up codes and tokens, and keeps "Drive" files in memory. It speaks just enough of
  * OAuth 2.0 and the Drive v3 API for the backups client.
  *
- *   node scripts/google-stand-in.mjs     # on http://localhost:4060
+ *   node scripts/google-stand-in.mjs     # on http://localhost:4070
  *
  * Point the API at it (.env), then restart the API and the worker:
  *
  *   GOOGLE_OAUTH_CLIENT_ID=stand-in-client
  *   GOOGLE_OAUTH_CLIENT_SECRET=stand-in-secret
- *   GOOGLE_OAUTH_AUTH_URL=http://localhost:4060/o/oauth2/v2/auth
- *   GOOGLE_OAUTH_TOKEN_URL=http://localhost:4060/token
- *   GOOGLE_OAUTH_REVOKE_URL=http://localhost:4060/revoke
- *   GOOGLE_API_URL=http://localhost:4060
+ *   GOOGLE_OAUTH_AUTH_URL=http://localhost:4070/o/oauth2/v2/auth
+ *   GOOGLE_OAUTH_TOKEN_URL=http://localhost:4070/token
+ *   GOOGLE_OAUTH_REVOKE_URL=http://localhost:4070/revoke
+ *   GOOGLE_API_URL=http://localhost:4070
  *
- *   open http://localhost:4060/drive            # the stand-in's "Drive": folders and files
- *   curl -X POST localhost:4060/__revoke-all    # as if the merchant removed Sellora's access
- *   curl -X POST localhost:4060/__full          # the next upload fails: "Drive is full"
+ *   open http://localhost:4070/drive            # the stand-in's "Drive": folders and files
+ *   curl -X POST localhost:4070/__revoke-all    # as if the merchant removed Sellora's access
+ *   curl -X POST localhost:4070/__full          # the next upload fails: "Drive is full"
  */
 import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 
-const PORT = Number(process.env.PORT ?? 4060);
+const PORT = Number(process.env.PORT ?? 4070);
 const CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID ?? 'stand-in-client';
 const CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? 'stand-in-secret';
 const EMAIL = process.env.STAND_IN_EMAIL ?? 'merchant@gmail.test';
