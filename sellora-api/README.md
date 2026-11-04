@@ -125,6 +125,16 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
   from before this version has a non-unique index on SMS settings: run
   `npm run db:indexes -- --drop` once to rebuild it as unique (the script says which index
   differs and exits with an error until then).
+- Backups (ADR 0020): `npm run keys:generate` prints `BACKUP_ENCRYPTION_KEYS` and
+  `BACKUP_ENCRYPTION_ACTIVE_KID`; production refuses to start without them (development falls
+  back to the data keys and warns). Keep a copy of the backup keys away from the server:
+  without them no backup can be read. The worker makes the nightly backup (queue `backups`,
+  checked every 5 minutes) into the configured storage, so run `npm run dev:worker`; settings
+  and downloads are in Admin › Backups, restoring one business is on its page in Admin ›
+  Businesses. `BACKUP_TMP_DIR` is where files are written before upload (needs room for one
+  backup). Set all of `BACKUP_OFFSITE_S3_BUCKET`, `_ACCESS_KEY_ID` and `_SECRET_ACCESS_KEY`
+  (plus `_ENDPOINT` and `_REGION`) to copy each verified backup to a second bucket. MongoDB
+  must be a replica set (backups read one snapshot).
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -132,22 +142,23 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
 
 ## Scripts
 
-| Command                                                       | What it does                                                                                                                                                            |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev` / `npm run dev:worker`                          | API / worker with reload (reads `.env`).                                                                                                                                |
-| `npm run build` then `npm start` / `npm run start:worker`     | Production build (SWC) and processes.                                                                                                                                   |
-| `npm run typecheck` · `npm run lint` · `npm run format:check` | Static checks.                                                                                                                                                          |
-| `npm test`                                                    | Unit and end-to-end tests (see below).                                                                                                                                  |
-| `npm run db:indexes`                                          | Builds every MongoDB index (run on deploy; `MONGODB_AUTO_INDEX=false` in production).                                                                                   |
-| `npm run keys:generate`                                       | New JWT key pair and encryption keys.                                                                                                                                   |
-| `npm run platform:bootstrap`                                  | First platform owner (only when there are no platform accounts).                                                                                                        |
-| `npm run openapi:export`                                      | Writes the OpenAPI document.                                                                                                                                            |
-| `npm run dev:seed`                                            | Demo data: two businesses (one with a 12-product catalog for an online store; its pictures are generated patterns), staff, wallet money, AI usage and a platform owner. |
-| `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI; cannot see photos, says how many it got).                                                |
-| `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).                                                                                            |
-| `node scripts/courier-stand-in.mjs`                           | Stand-in for the Steadfast, Pathao and RedX APIs for local demos without courier accounts (not a courier).                                                              |
-| `node scripts/dns-stand-in.mjs`                               | DNS server on 127.0.0.1:5300 for trying custom domains with made-up names; records are set over HTTP on :4050 (not a DNS provider or resolver).                         |
-| `node scripts/sms-stand-in.mjs`                               | Stand-in for the BulkSMSBD and Alpha SMS APIs with an inbox page, for local demos without SMS accounts (not an SMS gateway).                                            |
+| Command                                                       | What it does                                                                                                                                                                                                                 |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev` / `npm run dev:worker`                          | API / worker with reload (reads `.env`).                                                                                                                                                                                     |
+| `npm run build` then `npm start` / `npm run start:worker`     | Production build (SWC) and processes.                                                                                                                                                                                        |
+| `npm run typecheck` · `npm run lint` · `npm run format:check` | Static checks.                                                                                                                                                                                                               |
+| `npm test`                                                    | Unit and end-to-end tests (see below).                                                                                                                                                                                       |
+| `npm run db:indexes`                                          | Builds every MongoDB index (run on deploy; `MONGODB_AUTO_INDEX=false` in production).                                                                                                                                        |
+| `npm run keys:generate`                                       | New JWT key pair and encryption keys.                                                                                                                                                                                        |
+| `npm run platform:bootstrap`                                  | First platform owner (only when there are no platform accounts).                                                                                                                                                             |
+| `npm run openapi:export`                                      | Writes the OpenAPI document.                                                                                                                                                                                                 |
+| `npm run backup -- verify <file>`                             | Checks a downloaded backup file (`.slbk`) and lists what it holds; `decrypt <file> <out>` writes it as JSON lines; `restore <file> --uri … --db <new>` loads it into an empty database. Needs only `BACKUP_ENCRYPTION_KEYS`. |
+| `npm run dev:seed`                                            | Demo data: two businesses (one with a 12-product catalog for an online store; its pictures are generated patterns), staff, wallet money, AI usage and a platform owner.                                                      |
+| `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI; cannot see photos, says how many it got).                                                                                                     |
+| `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).                                                                                                                                                 |
+| `node scripts/courier-stand-in.mjs`                           | Stand-in for the Steadfast, Pathao and RedX APIs for local demos without courier accounts (not a courier).                                                                                                                   |
+| `node scripts/dns-stand-in.mjs`                               | DNS server on 127.0.0.1:5300 for trying custom domains with made-up names; records are set over HTTP on :4050 (not a DNS provider or resolver).                                                                              |
+| `node scripts/sms-stand-in.mjs`                               | Stand-in for the BulkSMSBD and Alpha SMS APIs with an inbox page, for local demos without SMS accounts (not an SMS gateway).                                                                                                 |
 
 ## Tests
 

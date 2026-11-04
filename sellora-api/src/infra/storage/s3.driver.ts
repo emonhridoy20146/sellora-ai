@@ -8,6 +8,8 @@ import {
   S3ServiceException,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
 import {
   StorageDriver,
@@ -90,6 +92,19 @@ export class S3StorageDriver extends StorageDriver {
         Body: body,
         ContentType: contentType,
         ContentLength: body.length,
+      }),
+    );
+  }
+
+  async putFile(key: string, path: string, contentType: string): Promise<void> {
+    const { size } = await stat(path);
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.opts.bucket,
+        Key: key,
+        Body: createReadStream(path),
+        ContentType: contentType,
+        ContentLength: size,
       }),
     );
   }

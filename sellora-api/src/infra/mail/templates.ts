@@ -470,4 +470,29 @@ export const mailTemplates = {
           { label: 'Open the campaign', url: p.url },
         );
   },
+
+  dataRestored(
+    locale: Locale,
+    p: { businessName: string; parts: string; backupAt: string; reason: string; url: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.businessName}: ব্যাকআপ থেকে ডেটা ফেরানো হয়েছে`,
+          [
+            `Sellora সাপোর্ট ${p.businessName}-এর এই অংশগুলো ${p.backupAt}-এর ব্যাকআপ থেকে ফিরিয়েছে: ${p.parts}।`,
+            `কারণ: ${p.reason}`,
+            'ফেরানোর আগে এখনকার ডেটার একটি নিরাপত্তা ব্যাকআপ নেওয়া হয়েছে, ৩০ দিন রাখা হবে। কিছু ভুল মনে হলে সাপোর্টকে জানান।',
+          ],
+          { label: 'ড্যাশবোর্ড খুলুন', url: p.url },
+        )
+      : render(
+          `${p.businessName}: data restored from a backup`,
+          [
+            `Sellora support restored these parts of ${p.businessName} from the backup of ${p.backupAt}: ${p.parts}.`,
+            `Reason: ${p.reason}`,
+            'Before the restore, a safety backup of the data as it was has been taken and is kept for 30 days. If anything looks wrong, tell support.',
+          ],
+          { label: 'Open the dashboard', url: p.url },
+        );
+  },
 };

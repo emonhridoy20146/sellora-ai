@@ -39,6 +39,12 @@ export abstract class StorageDriver {
    */
   abstract put(key: string, body: Buffer, contentType: string): Promise<void>;
 
+  /**
+   * Writes a large object the server produced from a file on its own disk (a backup), without
+   * loading it into memory. One request; S3 allows up to 5 GB.
+   */
+  abstract putFile(key: string, path: string, contentType: string): Promise<void>;
+
   /** Size and type of a stored object, or null when it does not exist. */
   abstract head(key: string): Promise<StoredObject | null>;
 

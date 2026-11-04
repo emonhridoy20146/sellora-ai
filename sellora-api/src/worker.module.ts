@@ -3,6 +3,7 @@ import { coreImports } from './app.module.js';
 import type { Env } from './config/env.js';
 import { AiCoreModule } from './modules/ai/ai.module.js';
 import { AiRepliesListener } from './modules/ai/ai-replies.listener.js';
+import { BackupsCoreModule } from './modules/backups/backups.module.js';
 import { BillingModule } from './modules/billing/billing.module.js';
 import { CampaignsCoreModule } from './modules/campaigns/campaigns.module.js';
 import { CartsCoreModule } from './modules/carts/carts.module.js';
@@ -15,6 +16,7 @@ import { SmsCoreModule } from './modules/sms/sms.module.js';
 import { StoresCoreModule } from './modules/stores/stores.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { AiProcessor } from './workers/ai.processor.js';
+import { BackupsProcessor } from './workers/backups.processor.js';
 import { CampaignsProcessor } from './workers/campaigns.processor.js';
 import { CartsProcessor } from './workers/carts.processor.js';
 import { CouriersProcessor } from './workers/couriers.processor.js';
@@ -44,6 +46,7 @@ export class WorkerModule {
         SmsCoreModule,
         CartsCoreModule,
         CampaignsCoreModule,
+        BackupsCoreModule,
       ],
       providers: [
         MailProcessor,
@@ -56,6 +59,7 @@ export class WorkerModule {
         SmsProcessor,
         CartsProcessor,
         CampaignsProcessor,
+        BackupsProcessor,
         // Messages that arrive by webhook are stored here, so AI replies are scheduled here too.
         AiRepliesListener,
       ],
