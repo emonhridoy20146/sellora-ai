@@ -64,7 +64,7 @@ describe('templates', () => {
 describe('labels and checks', () => {
   it('has words for every status, purpose and failure', () => {
     expect(Object.keys(STATUS_LABEL)).toHaveLength(6);
-    expect(Object.keys(PURPOSE_LABEL)).toHaveLength(8);
+    expect(Object.keys(PURPOSE_LABEL)).toHaveLength(9);
     expect(Object.keys(FAILURE_HELP)).toHaveLength(10);
   });
 
