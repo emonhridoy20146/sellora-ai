@@ -383,6 +383,24 @@ refused), and disconnects Drive. Screenshots go to `smoke-output/merchant-backup
 node scripts/merchant-backups-flow.mjs
 ```
 
+### Telegram browser flow
+
+`scripts/telegram-flow.mjs` needs the API and the worker (the worker sends every message), the
+platform admin details, and the Telegram stand-in (`node scripts/telegram-stand-in.mjs` in
+sellora-api, with the API's `TELEGRAM_BOT_TOKEN` and `TELEGRAM_API_URL` pointing at it; it is
+not Telegram). It opens Admin › Telegram, presses Connect, links the stand-in's private chat
+with `/start <code>` and its group with `/link <code>` (the code must work only once), asks
+`/status` and `/today`, limits the group to reports and sends the daily report with "Send
+now" (it must name no business), sets the sign-in threshold to 3 and makes three wrong
+sign-ins (the owner's chat must get the alert, the group must not), blocks the bot in the
+stand-in (the chat must show Unreachable and come back after a test) and checks "Sent lately".
+It clears the sign-in alert's counters with `redis-cli`, so set `REDIS_URL` to the API's if it
+is not `redis://127.0.0.1:6379/0`. Screenshots go to `smoke-output/telegram/`.
+
+```bash
+REDIS_URL=redis://127.0.0.1:6379/0 node scripts/telegram-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -438,7 +456,9 @@ reminders work (M7 part 3: Marketing › Abandoned carts, with the settings, the
 and every saved cart), through the same SMS stand-in, and so do campaigns and automations
 (M7 part 4). Backups work (M9: Admin › Backups and the restore section on a business's admin page, and
 the business's own Settings › Backups with downloads, restore points and Google Drive copies),
-with Google Drive tried only against a stand-in.
+with Google Drive tried only against a stand-in. Owner reports and alerts on Telegram work
+(Admin › Telegram: linked chats, scheduled reports, alert settings and what was sent), but only
+against a stand-in for the Telegram Bot API; no message has reached real Telegram yet.
 Analytics appears in the merchant
 sidebar as a disabled "Soon" item. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.

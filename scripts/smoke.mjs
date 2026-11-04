@@ -207,6 +207,7 @@ try {
       ['/admin/gateways', 'gateways'],
       ['/admin/sms', 'sms'],
       ['/admin/backups', 'backups'],
+      ['/admin/telegram', 'telegram'],
       ['/admin/admins', 'team'],
       ['/admin/settings', 'settings'],
       ['/admin/audit', 'audit'],

@@ -13,6 +13,7 @@ import {
   MessageSquareText,
   PanelsTopLeft,
   ScrollText,
+  Send,
   Settings,
   ShieldCheck,
   Store,
@@ -100,6 +101,8 @@ function nav(
     });
   if (can('platform.backups.manage'))
     system.items.push({ href: '/admin/backups', label: 'Backups', icon: DatabaseBackup });
+  if (can('platform.telegram.manage'))
+    system.items.push({ href: '/admin/telegram', label: 'Telegram', icon: Send });
   if (can('platform.admins.view'))
     system.items.push({ href: '/admin/admins', label: 'Team', icon: ShieldCheck });
   if (can('platform.settings.manage'))

@@ -2492,3 +2492,71 @@ export interface MerchantBackups {
   })[];
   parts: { part: RestorePart; label: string }[];
 }
+
+// ---------------------------------------------------------------- Telegram (ADR 0022)
+
+export type TelegramTopic = 'reports' | 'backups' | 'billing' | 'ai' | 'security' | 'system';
+
+export interface TelegramChat {
+  chatId: string;
+  title: string;
+  kind: 'private' | 'group' | 'supergroup' | 'channel';
+  topics: TelegramTopic[];
+  status: 'active' | 'unreachable';
+  addedBy: { id: string; label?: string };
+  addedAt: IsoDate;
+  lastError?: string;
+  /** Topics the chat asked for that the admin who linked it may no longer get. */
+  blockedTopics: TelegramTopic[];
+}
+
+export interface TelegramReportSettings {
+  daily: boolean;
+  weekly: boolean;
+  monthly: boolean;
+  hour: number;
+  timezone: string;
+}
+
+export interface TelegramAlertSettings {
+  enabled: boolean;
+  queueBacklog: number;
+  loginFailures: number;
+  aiErrors: number;
+  aiSpendFactor: number;
+  emailFallback: boolean;
+}
+
+export interface TelegramOverview {
+  configured: boolean;
+  bot: { username: string; name: string } | null;
+  problem: string | null;
+  webhook: { url: string; pending: number; lastError: string | null } | null;
+  webhookConnectedAt: IsoDate | null;
+  webhookUrl: string;
+  reports: TelegramReportSettings;
+  alerts: TelegramAlertSettings;
+  lastSent: { daily: IsoDate | null; weekly: IsoDate | null; monthly: IsoDate | null };
+  chats: TelegramChat[];
+  topics: { topic: TelegramTopic; label: string; permission: string; allowed: boolean }[];
+}
+
+export interface TelegramLinkCode {
+  code: string;
+  expiresAt: IsoDate;
+  botUsername: string | null;
+  startUrl: string | null;
+}
+
+export interface TelegramMessage {
+  id: string;
+  chatId: string;
+  topic: TelegramTopic | 'command' | 'test';
+  kind: 'alert' | 'report' | 'reply' | 'test';
+  text: string;
+  status: 'queued' | 'sent' | 'failed' | 'skipped';
+  attempts: number;
+  error: string | null;
+  createdAt: IsoDate;
+  sentAt: IsoDate | null;
+}
