@@ -42,3 +42,34 @@ export const restoreBody = z
     code: otpCodeSchema,
   })
   .strict();
+
+// ---------------------------------------------------------------- the business's own (ADR 0021)
+
+/** The owner's or an admin's restore: their own password instead of a 2-step code. */
+export const merchantRestoreBody = z
+  .object({
+    runId: objectIdSchema,
+    parts: z
+      .array(z.enum(RESTORE_PART_KEYS as [string, ...string[]]))
+      .min(1)
+      .max(RESTORE_PART_KEYS.length),
+    reason: reasonSchema,
+    confirmName: z.string().trim().min(1).max(200),
+    password: z.string().min(1, 'Enter your password').max(200),
+  })
+  .strict();
+
+export const driveBody = z
+  .object({
+    enabled: z.boolean().optional(),
+    keep: z.number().int().min(1).max(30).optional(),
+  })
+  .strict()
+  .refine((b) => b.enabled !== undefined || b.keep !== undefined, { message: 'Nothing to change' });
+
+/** What Google sends back to the callback. Anything else in the query is ignored. */
+export const googleCallbackQuery = z.object({
+  code: z.string().max(2000).optional(),
+  state: z.string().max(2000).optional(),
+  error: z.string().max(200).optional(),
+});
