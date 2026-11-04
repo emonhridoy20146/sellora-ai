@@ -14,7 +14,7 @@
  *
  *   SMOKE_MERCHANT_EMAIL=… SMOKE_MERCHANT_PASSWORD=… node scripts/merchant-backups-flow.mjs
  *
- * Optional: SMOKE_BASE_URL (http://localhost:3000), GOOGLE_STAND_IN_URL (http://localhost:4060).
+ * Optional: SMOKE_BASE_URL (http://localhost:3000), GOOGLE_STAND_IN_URL (http://localhost:4070).
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -26,7 +26,7 @@ const { chromium } = require('playwright');
 
 const env = process.env;
 const BASE = (env.SMOKE_BASE_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
-const GOOGLE = (env.GOOGLE_STAND_IN_URL ?? 'http://localhost:4060').replace(/\/+$/, '');
+const GOOGLE = (env.GOOGLE_STAND_IN_URL ?? 'http://localhost:4070').replace(/\/+$/, '');
 const OUT = env.SMOKE_OUT ?? 'smoke-output/merchant-backups';
 mkdirSync(OUT, { recursive: true });
 
