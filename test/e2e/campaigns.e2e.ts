@@ -5,7 +5,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { RequestContext } from '../../src/common/context/request-context.js';
 import { QUEUES } from '../../src/infra/queue/queue.constants.js';
 import { AutomationsService } from '../../src/modules/campaigns/automations.service.js';
-import { inSendWindow, nextSendTime } from '../../src/modules/campaigns/campaign-rules.js';
+import {
+  DEFAULT_AUTOMATION_TEXTS,
+  inSendWindow,
+  nextSendTime,
+} from '../../src/modules/campaigns/campaign-rules.js';
 import { CampaignsService } from '../../src/modules/campaigns/campaigns.service.js';
 import { SmsService, type SmsJob } from '../../src/modules/sms/sms.service.js';
 import { SmsProcessor } from '../../src/workers/sms.processor.js';
@@ -796,6 +800,23 @@ describe('SMS campaigns and automations', () => {
         /^Hi Rahim, thank you for shopping at Nakshi Ghor! We hope you like your order SL-1042\. Stop: /,
       );
       expect(a.win_back).toMatchObject({ enabled: false, days: 60 });
+    });
+
+    it('switching the language swaps the texts still as Sellora wrote them', async () => {
+      const bn = await patchAutomations({ language: 'bn' }).expect(200);
+      expect(bn.body).toMatchObject({ language: 'bn' });
+      expect(bn.body.after_delivery.text).toBe(DEFAULT_AUTOMATION_TEXTS.bn.after_delivery);
+      expect(bn.body.win_back.text).toBe(DEFAULT_AUTOMATION_TEXTS.bn.win_back);
+      expect(bn.body.after_delivery.defaultText).toBe(DEFAULT_AUTOMATION_TEXTS.bn.after_delivery);
+      const own = 'ধন্যবাদ {name}! {shop}';
+      await patchAutomations({ after_delivery: { text: own } }).expect(200);
+      const en = await patchAutomations({ language: 'en' }).expect(200);
+      expect(en.body.after_delivery.text).toBe(own);
+      expect(en.body.win_back.text).toBe(DEFAULT_AUTOMATION_TEXTS.en.win_back);
+      const back = await patchAutomations({
+        after_delivery: { text: DEFAULT_AUTOMATION_TEXTS.en.after_delivery },
+      }).expect(200);
+      expect(back.body.after_delivery.text).toBe(DEFAULT_AUTOMATION_TEXTS.en.after_delivery);
     });
 
     it('checks the days, placeholders and link, and only marketing managers change them', async () => {

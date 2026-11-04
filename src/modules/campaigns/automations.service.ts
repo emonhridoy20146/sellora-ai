@@ -310,9 +310,15 @@ export class AutomationsService {
       changes.language = patch.language;
     }
     for (const kind of AUTOMATION_KINDS) {
-      const p = patch[kind];
-      if (!p) continue;
       const current = s[kind];
+      // Texts still as Sellora wrote them follow the language; the business's own words stay.
+      const p =
+        set.language &&
+        patch[kind]?.text === undefined &&
+        current.text.trim() === DEFAULT_AUTOMATION_TEXTS[s.language][kind]
+          ? { ...patch[kind], text: DEFAULT_AUTOMATION_TEXTS[set.language as SmsLanguage][kind] }
+          : patch[kind];
+      if (!p) continue;
       let link = current.link;
       if (p.link !== undefined) {
         try {
