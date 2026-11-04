@@ -1,8 +1,9 @@
 'use client';
 
 import { Banknote, Minus, Plus } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useId, useMemo, useState, useSyncExternalStore } from 'react';
+import { cartToken, landingCartTokenKey, setCartToken, useCartCapture } from '@/lib/cart-capture';
 import { cn } from '@/lib/cn';
 import { dictionary } from '@/lib/i18n';
 import {
@@ -10,6 +11,7 @@ import {
   firstAvailable,
   offerTotals,
   packageCharge,
+  restoredChoice,
   variantFor,
 } from '@/lib/landing-offer';
 import { formatMoney, formatNumber } from '@/lib/money';
@@ -73,6 +75,8 @@ export interface LandingOrderFormProps {
   zones: DeliveryZone[];
   defaultZoneId: string | null;
   buttonLabel: string;
+  /** The business texts reminders about orders left with a phone number. */
+  cartReminders: boolean;
 }
 
 /**
@@ -97,15 +101,17 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
   const [edited, setEdited] = useState<{ name: string; phone: string; line1: string } | null>(null);
   const details = edited ?? { name: saved.name, phone: saved.phone, line1: saved.line1 };
 
+  const searchParams = useSearchParams();
+  const [restored] = useState(() => restoredChoice(new URLSearchParams(searchParams), props));
   // A package with a badge ("Most popular") is the one most shoppers pick: start there.
   const [packageId, setPackageId] = useState<string | null>(
-    (packages.find((p) => p.badge) ?? packages[0])?.id ?? null,
+    restored?.packageId ?? (packages.find((p) => p.badge) ?? packages[0])?.id ?? null,
   );
   const [chosen, setChosen] = useState<(string | undefined)[]>(
-    () => firstAvailable(product)?.optionValues ?? [],
+    () => restored?.optionValues ?? firstAvailable(product)?.optionValues ?? [],
   );
-  const [quantity, setQuantity] = useState(1);
-  const [withAddOn, setWithAddOn] = useState(false);
+  const [quantity, setQuantity] = useState(restored?.quantity ?? 1);
+  const [withAddOn, setWithAddOn] = useState(restored?.addOn ?? false);
   const [chosenZone, setChosenZone] = useState<string | null>(null);
   const zoneId = chosenZone ?? props.defaultZoneId ?? (zones.length === 1 ? zones[0]!.id : null);
   const [note, setNote] = useState('');
@@ -172,6 +178,25 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
     return key;
   };
 
+  // With reminders on, the choice is saved once the number is valid (and again as it changes).
+  const tokenKey = landingCartTokenKey(slug);
+  useCartCapture(
+    `/api/landing/${encodeURIComponent(slug)}/carts`,
+    tokenKey,
+    props.cartReminders && !preview && variant && isBdMobile(details.phone)
+      ? {
+          packageId: packages.length ? packageId : null,
+          variantId: variant.id,
+          quantity: packages.length ? (pkg?.quantity ?? 1) : quantity,
+          addOn: Boolean(addOn && withAddOn),
+          customer: {
+            name: details.name.trim().slice(0, 80),
+            phone: asciiDigits(details.phone).replace(/[\s-]/g, ''),
+          },
+        }
+      : null,
+  );
+
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (placing || preview) return;
@@ -188,6 +213,8 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
     const body = payload();
     const website = (new FormData(e.currentTarget).get('website') as string | null) ?? '';
     const attribution = load<Attribution>(attributionKey(pageId), 'session');
+    // The saved cart this order comes from, if one was saved; the order closes it.
+    const token = cartToken(tokenKey, false);
     try {
       const res = await fetch(`/api/landing/${encodeURIComponent(slug)}/order`, {
         method: 'POST',
@@ -199,6 +226,7 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
           ...body,
           ...(website ? { website } : {}),
           ...(attribution && Object.keys(attribution).length ? { attribution } : {}),
+          ...(token ? { cartToken: token } : {}),
         }),
       });
       const r = await readJson<LandingPlaced>(res, t);
@@ -209,6 +237,7 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
           'local',
         );
         save(`sl_lp_${pageId}`, null, 'session');
+        setCartToken(tokenKey, null);
         router.replace(
           `/${slug}/thanks?receipt=${encodeURIComponent(r.data.receipt)}${r.data.duplicate ? '&again=1' : ''}`,
         );
@@ -423,7 +452,7 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
           id={fid('customer.phone')}
           label={t.phone}
           error={errors['customer.phone']}
-          hint={t.phoneHint}
+          hint={props.cartReminders ? `${t.phoneHint} ${t.cartReminderNotice}` : t.phoneHint}
         >
           <input
             id={fid('customer.phone')}

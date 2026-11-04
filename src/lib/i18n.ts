@@ -171,6 +171,14 @@ const en = {
   callShop: 'Call the shop',
   deliveryCharges: 'Delivery charges',
   madeWith: 'Page made with Sellora',
+  cartReminderNotice:
+    'If you do not finish, we may text this number a reminder. Each text has a link to stop them.',
+  restoringCart: 'Opening your cart…',
+  restoreOpen: 'Open it',
+  restoreInvalid: 'This link is not valid',
+  restoreInvalidText: 'It may have expired. You can still shop as usual.',
+  restoreOrdered: 'You already ordered this',
+  restoreOrderedText: 'Thank you! The shop will call you to confirm the order.',
 };
 
 type Dictionary = typeof en;
@@ -343,6 +351,14 @@ const bn: Dictionary = {
   callShop: 'দোকানে কল করুন',
   deliveryCharges: 'ডেলিভারি চার্জ',
   madeWith: 'Sellora দিয়ে তৈরি পেজ',
+  cartReminderNotice:
+    'অর্ডার শেষ না করলে এই নম্বরে একটি মনে করিয়ে দেওয়ার SMS যেতে পারে। প্রতিটি SMS-এ বন্ধ করার লিংক থাকে।',
+  restoringCart: 'আপনার কার্ট খোলা হচ্ছে…',
+  restoreOpen: 'খুলুন',
+  restoreInvalid: 'লিংকটি সঠিক নয়',
+  restoreInvalidText: 'লিংকের মেয়াদ শেষ হয়ে থাকতে পারে। আপনি স্বাভাবিকভাবে কেনাকাটা করতে পারেন।',
+  restoreOrdered: 'আপনি এটি আগেই অর্ডার করেছেন',
+  restoreOrderedText: 'ধন্যবাদ! অর্ডার নিশ্চিত করতে দোকান থেকে আপনাকে কল করা হবে।',
 };
 
 export type { Dictionary };

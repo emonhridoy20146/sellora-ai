@@ -190,3 +190,25 @@ export function readAttribution(search: string, referrer: string, ownHost: strin
   }
   return out;
 }
+
+/**
+ * The choice a reminder link brings back (`?cart=1&pkg=…&v=…&q=…&addon=1`), checked against
+ * what the page sells now; anything that no longer fits is left at its default.
+ */
+export function restoredChoice(
+  params: URLSearchParams,
+  props: Pick<LandingView, 'product' | 'packages' | 'maxFreeQuantity' | 'addOn'> & {
+    product: LandingProduct;
+  },
+) {
+  if (params.get('cart') !== '1') return null;
+  const variant = props.product.variants.find((v) => v.id === params.get('v'));
+  const pkg = props.packages.find((p) => p.id === params.get('pkg'));
+  const q = Number(params.get('q'));
+  return {
+    packageId: pkg?.id ?? null,
+    optionValues: variant?.optionValues ?? null,
+    quantity: Number.isInteger(q) && q >= 1 && q <= props.maxFreeQuantity ? q : null,
+    addOn: Boolean(props.addOn) && params.get('addon') === '1',
+  };
+}

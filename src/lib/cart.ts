@@ -2,6 +2,7 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 import { addLine, parseCart, setLineQuantity, type CartItem } from './cart-lines';
+import { cartStorageKey } from './cart-keys';
 
 export { MAX_LINES, MAX_QUANTITY, type CartItem } from './cart-lines';
 
@@ -9,7 +10,7 @@ const EMPTY: CartItem[] = [];
 const listeners = new Set<() => void>();
 const cache = new Map<string, { raw: string | null; items: CartItem[] }>();
 
-const storageKey = (storeId: string) => `sl_cart_${storeId}`;
+const storageKey = cartStorageKey;
 
 function safeGet(key: string): string | null {
   try {

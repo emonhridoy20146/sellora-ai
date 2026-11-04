@@ -594,6 +594,7 @@ function OrderFormBlock({ s, ctx }: { s: LandingSectionOf<'order_form'>; ctx: Ct
             zones={view.zones}
             defaultZoneId={view.defaultZoneId}
             buttonLabel={s.buttonLabel || t.orderNow}
+            cartReminders={view.cartReminders ?? false}
           />
         ) : (
           <p className="rounded-store-lg border border-line bg-surface p-6 text-center font-medium">

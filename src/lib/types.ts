@@ -185,6 +185,8 @@ export interface Quote {
   minOrderMinor: number;
   belowMinimum: boolean;
   canCheckout: boolean;
+  /** The business texts reminders about carts left with a phone number (shown under it). */
+  cartReminders?: boolean;
 }
 
 export interface Shipment {
@@ -408,9 +410,27 @@ export interface LandingView extends LandingHead {
   zones: DeliveryZone[];
   defaultZoneId: string | null;
   currency: string;
+  /** The business texts reminders about carts left with a phone number (shown under it). */
+  cartReminders?: boolean;
 }
 
 export type Landing = LandingHead | LandingView;
+
+/** What a reminder link (`/r/<code>`) brings back. */
+export interface RestoredCart {
+  kind: 'store' | 'landing_page';
+  status: 'open' | 'ordered' | 'dismissed';
+  token: string | null;
+  items: { productId: string; variantId: string; quantity: number }[];
+  landingPage: { slug: string } | null;
+  selection: {
+    packageId: string | null;
+    variantId: string;
+    quantity: number;
+    addOn: boolean;
+  } | null;
+  customer: { name: string; phone: string };
+}
 
 export function isShown(l: Landing): l is LandingView {
   return (l.state === 'live' || l.state === 'preview') && 'sections' in l;

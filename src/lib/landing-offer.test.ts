@@ -6,6 +6,7 @@ import {
   offerTotals,
   packageCharge,
   readAttribution,
+  restoredChoice,
   stockText,
   variantFor,
   videoSrc,
@@ -190,5 +191,28 @@ describe('landing page offer', () => {
     expect(readAttribution(`?gclid=${'x'.repeat(300)}`, 'not a url', 'a.test').gclid).toHaveLength(
       200,
     );
+  });
+
+  it('brings back the choice from a reminder link, keeping only what still fits', () => {
+    const product = view.product!;
+    const read = (q: string) => restoredChoice(new URLSearchParams(q), { ...view, product });
+    expect(read('pkg=two222&v=v1')).toBeNull();
+    expect(read('cart=1&pkg=two222&v=v2&addon=1')).toEqual({
+      packageId: 'two222',
+      optionValues: ['200ml'],
+      quantity: null,
+      addOn: true,
+    });
+    expect(read('cart=1&pkg=gone99&v=nope&q=4')).toEqual({
+      packageId: null,
+      optionValues: null,
+      quantity: 4,
+      addOn: false,
+    });
+    expect(read('cart=1&q=99')?.quantity).toBeNull();
+    expect(
+      restoredChoice(new URLSearchParams('cart=1&addon=1'), { ...view, product, addOn: null })
+        ?.addOn,
+    ).toBe(false);
   });
 });

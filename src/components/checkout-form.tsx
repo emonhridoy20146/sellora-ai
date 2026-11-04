@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useId, useMemo, useState, useSyncExternalStore } from 'react';
 import { useCart } from '@/lib/cart';
+import { cartToken, setCartToken, storeCartTokenKey, useCartCapture } from '@/lib/cart-capture';
 import { cn } from '@/lib/cn';
 import { formatMoney } from '@/lib/money';
 import { asciiDigits, isBdMobile } from '@/lib/phone';
@@ -84,6 +85,24 @@ export function CheckoutForm() {
     [cart.items],
   );
 
+  // With reminders on, the cart is saved once the number is valid (and again as it changes).
+  const tokenKey = storeCartTokenKey(storeId);
+  const phoneDigits = asciiDigits(details.phone).replace(/[\s-]/g, '');
+  useCartCapture(
+    '/api/carts',
+    tokenKey,
+    quote?.cartReminders && state === 'open' && isBdMobile(details.phone) && cart.items.length
+      ? {
+          items: cart.items.map((i) => ({
+            productId: i.productId,
+            variantId: i.variantId,
+            quantity: i.quantity,
+          })),
+          customer: { name: details.name.trim().slice(0, 80), phone: phoneDigits },
+        }
+      : null,
+  );
+
   const set = (key: keyof Details) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setEdited({ ...details, [key]: e.target.value });
 
@@ -138,15 +157,18 @@ export function CheckoutForm() {
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(website ? { website } : {}),
     };
+    // The saved cart this order comes from, if one was saved; the order closes it.
+    const token = cartToken(tokenKey, false);
     try {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey() },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, ...(token ? { cartToken: token } : {}) }),
       });
       const r = await readJson<{ orderNumber: string; receipt: string }>(res, t);
       if (r.ok) {
         save(DETAILS_KEY, { ...details, email: '' }, 'local');
+        setCartToken(tokenKey, null);
         save(`sl_checkout_${storeId}`, null, 'session');
         cart.clear();
         router.replace(`/order?receipt=${encodeURIComponent(r.data.receipt)}&new=1`);
@@ -194,7 +216,7 @@ export function CheckoutForm() {
             id={fid('customer.phone')}
             label={t.phone}
             error={errors['customer.phone']}
-            hint={t.phoneHint}
+            hint={quote?.cartReminders ? `${t.phoneHint} ${t.cartReminderNotice}` : t.phoneHint}
           >
             <input
               id={fid('customer.phone')}

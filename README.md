@@ -99,6 +99,7 @@ sellora-web, and connecting a custom domain by `scripts/domains-flow.mjs` there.
 | `/pages/[key]`                | The business's pages: about, delivery, returns, privacy, terms.                        |
 | `/[slug]`                     | A landing page: its sections, the order form, a sticky order button on phones.         |
 | `/[slug]/thanks?receipt=…`    | The thank-you page after a landing page order (signed receipt, never indexed).         |
+| `/r/[code]`                    | The link in a cart reminder SMS: puts the cart and the shopper's details back, then opens checkout or the landing page offer. Never indexed. |
 | `/sitemap.xml`, `/robots.txt` | Per store, with its live landing pages; drafts and previews are never indexed.         |
 
 A store that is not open yet shows "opening soon", a paused store shows a closed note, a
@@ -144,6 +145,15 @@ suspended store shows "not available", and an address with no store shows a page
   prices it again. Where the shopper came from (UTM tags, ad click ids, the referring site)
   is kept for the visit in session storage and sent with the order; a small beacon counts the
   visit once the page has rendered.
+- **Cart reminders** (ADR 0018 in sellora-api). When the business has reminders on, the
+  API's quote and landing page answers say so (`cartReminders`), the phone field says a
+  reminder text may come, and `lib/cart-capture.ts` sends the cart 1.5 seconds after the
+  shopper stops typing a valid number (`/api/carts`, `/api/landing/[slug]/carts`) with a
+  random token kept in local storage (`lib/cart-keys.ts`); the order then carries the token,
+  so the saved cart closes as ordered. The reminder link `/r/[code]` asks the API for the
+  cart, reprices store carts, writes the cart, token, name and phone back into the browser
+  (`app/r/[code]/restore.tsx`) and moves on to `/checkout` or to `/<slug>?cart=1…#order`,
+  where `restoredChoice` (`lib/landing-offer.ts`) picks the same package, options and add-on.
 - **Security headers.** No framing, no referrer beyond the origin, no camera, microphone or
   location (`next.config.ts`).
 
