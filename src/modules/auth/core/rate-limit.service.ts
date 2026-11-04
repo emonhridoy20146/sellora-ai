@@ -52,6 +52,10 @@ export class RateLimitService {
       // Test SMS from Settings › SMS (each one costs money) and the public opt-out page.
       'sms-test:org': { points: 10, durationSec: 3600 },
       'sms-optout:ip': { points: 30, durationSec: 600 },
+      // Abandoned carts (ADR 0018): the storefront saves a cart as the shopper types, and the
+      // reminder link restores it.
+      'cart-capture:ip': { points: 60, durationSec: 600 },
+      'cart-restore:ip': { points: 30, durationSec: 600 },
     };
     const multiplier = config.get('RATE_LIMIT_IP_MULTIPLIER');
     for (const [name, spec] of Object.entries(this.specs)) {

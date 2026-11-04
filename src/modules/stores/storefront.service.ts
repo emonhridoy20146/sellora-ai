@@ -10,6 +10,7 @@ import { CROSS_TENANT } from '../../infra/database/tenant-guard.plugin.js';
 import { REDIS } from '../../infra/redis/redis.module.js';
 import { RateLimitService } from '../auth/core/rate-limit.service.js';
 import { EntitlementsService } from '../billing/entitlements.service.js';
+import { CartsService } from '../carts/carts.service.js';
 import { CustomersService } from '../commerce/customers.service.js';
 import { OrdersService, type OrderDoc } from '../commerce/orders.service.js';
 import {
@@ -60,6 +61,8 @@ export interface CheckoutInput {
   zoneId: string | null;
   note?: string;
   website?: string;
+  /** The saved cart this checkout came from (ADR 0018), closed when the order is made. */
+  cartToken?: string;
 }
 
 /** Products shown per home page section, at most. */
@@ -99,6 +102,7 @@ export class StorefrontService {
     private readonly shopSettings: ShopSettingsService,
     private readonly couriers: CourierAccountsService,
     private readonly limits: RateLimitService,
+    private readonly carts: CartsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -447,7 +451,7 @@ export class StorefrontService {
       redis: this.redis,
       scope: `sf:idem:${r.store._id.toHexString()}`,
       key: idempotencyKey,
-      fingerprint: sha256(canonicalJson({ ...input, website: undefined })),
+      fingerprint: sha256(canonicalJson({ ...input, website: undefined, cartToken: undefined })),
       before: async () => {
         const ip = RequestContext.current()?.ip;
         if (ip) await this.limits.consume('checkout:ip', ip);
@@ -543,12 +547,72 @@ export class StorefrontService {
       }
       throw err;
     }
+    await this.closeCart(input.cartToken, order);
     return {
       orderNumber: order.number,
       totalMinor: order.totalMinor,
       currency: order.currency,
       receipt: this.links.receiptToken(r.store._id.toHexString(), order._id.toHexString()),
     };
+  }
+
+  /** Closes the saved cart an order came from. Never fails the order. */
+  async closeCart(token: string | undefined, order: OrderDoc): Promise<void> {
+    try {
+      await this.carts.checkedOut(token, order);
+    } catch (err) {
+      this.logger.error({ err, orderId: order._id.toHexString() }, 'Could not close the cart');
+    }
+  }
+
+  // ---------------------------------------------------------------- abandoned carts
+
+  /** A cart price for the checkout page, and whether the cart may be saved for reminders. */
+  async cartQuote(r: ResolvedStore, items: CartLineInput[], zoneId?: string | null) {
+    const quote = await this.quote(r, items, zoneId);
+    return { ...quote, cartReminders: r.state === 'open' && (await this.carts.capturing()) };
+  }
+
+  /**
+   * Saves the checkout's cart for reminders once the shopper has typed a number (ADR 0018).
+   * Lines the store no longer sells are left out; prices are the store's prices now.
+   */
+  async saveCart(
+    r: ResolvedStore,
+    input: { token: string; items: CartLineInput[]; customer: { name: string; phone: string } },
+  ) {
+    const quote = await this.quote(r, input.items, undefined);
+    const lines = quote.lines.flatMap((l) =>
+      'unitPriceMinor' in l && l.problem !== 'duplicate'
+        ? [
+            {
+              productId: l.productId,
+              variantId: l.variantId,
+              quantity: l.quantity,
+              name: l.name,
+              variantTitle: l.variantTitle,
+              unitPriceMinor: l.unitPriceMinor,
+            },
+          ]
+        : [],
+    );
+    return this.carts.capture({
+      source: 'store',
+      store: { id: r.store._id, name: r.store.name, url: this.links.url(r.store) },
+      token: input.token,
+      phone: input.customer.phone,
+      name: input.customer.name,
+      items: lines,
+      totalMinor: lines.reduce((a, l) => a + l.unitPriceMinor * l.quantity, 0),
+      currency: r.org.currency,
+    });
+  }
+
+  /** The cart behind a reminder link on this store; 404 when it is not this store's. */
+  async restoreCart(r: ResolvedStore, code: string) {
+    const found = await this.carts.restore(r.store._id, code);
+    if (!found) throw AppError.notFound('cart', 'This link is not valid.');
+    return found;
   }
 
   // ---------------------------------------------------------------- after the order

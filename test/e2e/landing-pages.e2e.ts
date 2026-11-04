@@ -658,6 +658,82 @@ describe('landing pages', () => {
       });
     });
 
+    it('saves the order form for cart reminders once on, restores it by link, and closes it on order', async () => {
+      const tok = `tok_${'a'.repeat(20)}`;
+      const cart = {
+        token: tok,
+        packageId: 'pkg002',
+        variantId: gel.variants[0]!.id,
+        addOn: true,
+        customer: { name: 'Shirin', phone: '01922334455' },
+      };
+      expect((await shop('get', `/${page.slug}`).expect(200)).body.cartReminders).toBe(false);
+      expect((await shop('post', `/${page.slug}/carts`).send(cart).expect(200)).body).toEqual({
+        saved: false,
+      });
+      await O().patch(url('/carts/settings')).send({ enabled: true }).expect(200);
+      expect((await shop('get', `/${page.slug}`).expect(200)).body.cartReminders).toBe(true);
+      expect((await shop('post', `/${page.slug}/carts`).send(cart).expect(200)).body).toEqual({
+        saved: true,
+      });
+      const [saved] = (await O().get(url('/carts?view=all')).expect(200)).body.items as {
+        id: string;
+        source: string;
+        landingPage: { slug: string };
+        items: { name: string; quantity: number }[];
+        totalMinor: number;
+        link: string;
+        status: string;
+        recovered: boolean;
+      }[];
+      // 2 jars for 800 and the soap for 99; delivery is not part of the cart.
+      expect(saved).toMatchObject({
+        source: 'landing_page',
+        landingPage: { slug: page.slug },
+        items: [
+          { name: 'Aloe Vera Gel', quantity: 2 },
+          { name: 'Neem Soap', quantity: 1 },
+        ],
+        totalMinor: 89_900,
+        status: 'open',
+      });
+      // The link works on the store's address while the rest of the shop is still a draft.
+      const code = saved!.link.split('/r/')[1]!;
+      const restored = await t
+        .http()
+        .get(`/v1/storefront/carts/${code}`)
+        .set('x-storefront-key', key)
+        .set('x-store-host', host)
+        .set('x-shopper-ip', '203.0.113.9')
+        .expect(200);
+      expect(restored.body).toMatchObject({
+        kind: 'landing_page',
+        landingPage: { slug: page.slug },
+        selection: {
+          packageId: 'pkg002',
+          variantId: gel.variants[0]!.id,
+          quantity: 2,
+          addOn: true,
+        },
+        customer: { name: 'Shirin', phone: '01922334455' },
+        token: tok,
+      });
+      await order(
+        orderBody({ customer: { name: 'Shirin', phone: '01922334455' }, cartToken: tok }),
+        'idem-lp-cart-01',
+      ).expect(201);
+      const closed = (
+        await O()
+          .get(url(`/carts/${saved!.id}`))
+          .expect(200)
+      ).body as {
+        status: string;
+        recovered: boolean;
+      };
+      expect(closed).toMatchObject({ status: 'ordered', recovered: false });
+      await O().patch(url('/carts/settings')).send({ enabled: false }).expect(200);
+    });
+
     it('stops taking orders while paused', async () => {
       expect(
         (

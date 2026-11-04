@@ -1,5 +1,5 @@
 import { Schema, type Types } from 'mongoose';
-import { tenantSchema } from '../../infra/database/schema-helpers.js';
+import { tenantSchema, uniquePerTenant } from '../../infra/database/schema-helpers.js';
 
 // ---------------------------------------------------------------- catalog
 
@@ -561,4 +561,4 @@ export const shopSettingsSchema = tenantSchema<ShopSettings>({
   autoConfirmManualOrders: { type: Boolean, default: true },
 });
 shopSettingsSchema.path('orgId').index(false);
-shopSettingsSchema.index({ orgId: 1 }, { unique: true });
+uniquePerTenant(shopSettingsSchema);

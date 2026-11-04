@@ -1,5 +1,5 @@
 import { Schema, type Types } from 'mongoose';
-import { tenantSchema } from '../../infra/database/schema-helpers.js';
+import { tenantSchema, uniquePerTenant } from '../../infra/database/schema-helpers.js';
 
 export const FILE_PURPOSES = ['product_image', 'chat_media', 'store_asset'] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
@@ -73,4 +73,4 @@ export const storageUsageSchema = tenantSchema<StorageUsage>({
   usedBytes: { type: Number, required: true, default: 0 },
 });
 storageUsageSchema.path('orgId').index(false);
-storageUsageSchema.index({ orgId: 1 }, { unique: true });
+uniquePerTenant(storageUsageSchema);

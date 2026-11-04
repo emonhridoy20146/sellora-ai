@@ -1,5 +1,9 @@
 import { Schema, type Types } from 'mongoose';
-import { platformSchema, tenantSchema } from '../../infra/database/schema-helpers.js';
+import {
+  platformSchema,
+  tenantSchema,
+  uniquePerTenant,
+} from '../../infra/database/schema-helpers.js';
 import {
   BILLING_INTERVALS,
   FEATURE_MODULE_KEYS,
@@ -170,7 +174,7 @@ export const subscriptionSchema = tenantSchema<Subscription>(
 );
 // One subscription per business: replace the default orgId index with a unique one.
 subscriptionSchema.path('orgId').index(false);
-subscriptionSchema.index({ orgId: 1 }, { unique: true });
+uniquePerTenant(subscriptionSchema);
 subscriptionSchema.index({ status: 1, currentPeriodEnd: 1 });
 subscriptionSchema.index({ status: 1, trialEndsAt: 1 });
 subscriptionSchema.index({ nextCreditGrantAt: 1 });
@@ -206,7 +210,7 @@ export const walletSchema = tenantSchema<Wallet>(
 );
 // One wallet per business: replace the default orgId index with a unique one.
 walletSchema.path('orgId').index(false);
-walletSchema.index({ orgId: 1 }, { unique: true });
+uniquePerTenant(walletSchema);
 
 export const LEDGER_TYPES = [
   'topup',

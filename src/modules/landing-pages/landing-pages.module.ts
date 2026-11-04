@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BillingModule } from '../billing/billing.module.js';
+import { CartsCoreModule } from '../carts/carts.module.js';
 import { CommerceCoreModule } from '../commerce/commerce.module.js';
 import { FilesCoreModule } from '../files/files.module.js';
 import { OrgsModule } from '../orgs/orgs.module.js';
@@ -28,6 +29,7 @@ import { landingPageSchema, landingPageStatSchema, landingPageVersionSchema } fr
 @Module({
   imports: [
     BillingModule,
+    CartsCoreModule,
     CommerceCoreModule,
     FilesCoreModule,
     OrgsModule,

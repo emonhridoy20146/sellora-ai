@@ -1,5 +1,9 @@
 import { Schema, type Types } from 'mongoose';
-import { platformSchema, tenantSchema } from '../../infra/database/schema-helpers.js';
+import {
+  platformSchema,
+  tenantSchema,
+  uniquePerTenant,
+} from '../../infra/database/schema-helpers.js';
 import type { SmsEncoding } from './segments.js';
 import { SMS_PROVIDER_KEYS, type SmsErrorKind, type SmsProviderKey } from './sms.types.js';
 import {
@@ -111,7 +115,7 @@ export const smsSettingsSchema = tenantSchema<SmsSettings>({
   },
   dailyLimit: { type: Number, default: null, min: 0 },
 });
-smsSettingsSchema.index({ orgId: 1 }, { unique: true });
+uniquePerTenant(smsSettingsSchema);
 smsSettingsSchema.index({ 'senderName.status': 1, 'senderName.requestedAt': 1 });
 
 export const SMS_STATUSES = [

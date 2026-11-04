@@ -600,6 +600,33 @@ export class SmsService {
     });
   }
 
+  /** This business's messages with these ids (unknown or malformed ids are left out). */
+  async findMessages(ids: string[]): Promise<SmsMessageDoc[]> {
+    const valid = [...new Set(ids)].filter((id) => Types.ObjectId.isValid(id));
+    if (!valid.length) return [];
+    return this.messages.find({ _id: { $in: valid.map((id) => new Types.ObjectId(id)) } });
+  }
+
+  /**
+   * Messages for one purpose sent since `since` (any route), and what the Sellora SMS among
+   * them cost the business.
+   */
+  async spentOn(purpose: SmsPurpose, since: Date): Promise<{ count: number; spentMinor: number }> {
+    const [row] = await this.messages.aggregate<{ count: number; spentMinor: number }>([
+      {
+        $match: { purpose, createdAt: { $gte: since }, status: { $in: ['sent', 'delivered'] } },
+      },
+      {
+        $group: {
+          _id: null,
+          count: { $sum: 1 },
+          spentMinor: { $sum: { $cond: [{ $eq: ['$route', 'sellora'] }, '$priceMinor', 0] } },
+        },
+      },
+    ]);
+    return { count: row?.count ?? 0, spentMinor: row?.spentMinor ?? 0 };
+  }
+
   toDto(m: SmsMessageDoc) {
     return {
       id: m._id.toHexString(),

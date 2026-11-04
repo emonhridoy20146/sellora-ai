@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { emailSchema, moneyMinorSchema, objectIdSchema } from '../../common/validation/schemas.js';
+import { cartToken } from '../carts/carts.dto.js';
 import { BUSINESS_CATEGORY_KEYS } from '../orgs/business-categories.js';
 import { DOMAIN_STATUSES, STORE_STATUSES } from './schemas.js';
 import { THEME_KEYS, themeSettingsSchema } from './themes.js';
@@ -165,6 +166,8 @@ export const checkoutBody = z
     note: optText(500),
     /** Left empty by people; bots fill every field. */
     website: z.string().max(200).optional(),
+    /** The saved cart this order comes from (abandoned cart reminders). */
+    cartToken: cartToken.optional(),
   })
   .strict();
 

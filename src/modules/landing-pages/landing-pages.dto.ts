@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { objectIdSchema } from '../../common/validation/schemas.js';
+import { cartToken } from '../carts/carts.dto.js';
 import { ATTRIBUTION_KEYS } from '../commerce/schemas.js';
 import { LANDING_LANGUAGES, landingContentSchema, MAX_FREE_QUANTITY } from './blocks.js';
 import { REVIEW_FILTERS } from './landing-review.service.js';
@@ -120,6 +121,8 @@ export const orderBody = z
     /** Left empty by people; bots fill every field. */
     website: z.string().max(200).optional(),
     attribution: attribution.optional(),
+    /** The saved cart this order comes from (abandoned cart reminders). */
+    cartToken: cartToken.optional(),
   })
   .strict();
 

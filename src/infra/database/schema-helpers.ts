@@ -41,6 +41,16 @@ export function tenantSchema<T extends { orgId: Types.ObjectId }>(
   return schema;
 }
 
+/**
+ * One document per business (settings, wallets, subscriptions): makes the `orgId` index
+ * unique. Declaring a second `{ orgId: 1 }` index instead leaves two definitions with the
+ * same key, and MongoDB keeps whichever it builds first, often the one that is not unique.
+ */
+export function uniquePerTenant<T>(schema: Schema<T>): Schema<T> {
+  schema.path('orgId').index({ unique: true });
+  return schema;
+}
+
 export type WithId<T> = T & { _id: Types.ObjectId; createdAt: Date; updatedAt: Date };
 
 export function oid(value: string | Types.ObjectId): Types.ObjectId {

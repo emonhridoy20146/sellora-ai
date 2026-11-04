@@ -1,5 +1,9 @@
 import { Schema, type Types } from 'mongoose';
-import { platformSchema, tenantSchema } from '../../infra/database/schema-helpers.js';
+import {
+  platformSchema,
+  tenantSchema,
+  uniquePerTenant,
+} from '../../infra/database/schema-helpers.js';
 
 /** A business's fraud check preferences. */
 export interface FraudSettings {
@@ -14,7 +18,7 @@ export const fraudSettingsSchema = tenantSchema<FraudSettings>({
   sharedSince: Date,
 });
 fraudSettingsSchema.path('orgId').index(false);
-fraudSettingsSchema.index({ orgId: 1 }, { unique: true });
+uniquePerTenant(fraudSettingsSchema);
 
 /**
  * One parcel's end, shared with the network: whether the courier delivered it or brought it

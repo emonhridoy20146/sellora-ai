@@ -22,6 +22,7 @@ import {
   RequirePermissions,
   RequirePlatformPermissions,
 } from '../auth/decorators.js';
+import * as cartsDto from '../carts/carts.dto.js';
 import { STORE_PAGE_KEYS } from './schemas.js';
 import { StoreDomainsService } from './store-domains.service.js';
 import { StoreReviewService } from './store-review.service.js';
@@ -415,7 +416,32 @@ export class StorefrontController {
     @Headers(PREVIEW_HEADER) preview: string | undefined,
     @ZodBody(dto.cartBody) body: z.infer<typeof dto.cartBody>,
   ) {
-    return this.open(host, preview, (r) => this.storefront.quote(r, body.items, body.zoneId));
+    return this.open(host, preview, (r) => this.storefront.cartQuote(r, body.items, body.zoneId));
+  }
+
+  @Post('carts')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Save the checkout cart for reminders (only while the business has them on)',
+  })
+  saveCart(
+    @Headers(STORE_HOST_HEADER) host: string | undefined,
+    @ZodBody(cartsDto.storeCartBody) body: z.infer<typeof cartsDto.storeCartBody>,
+  ) {
+    // Previews never save carts: a reviewer's number must not get reminders.
+    return this.open(host, undefined, (r) => this.storefront.saveCart(r, body));
+  }
+
+  @Get('carts/:code')
+  @ApiOperation({ summary: 'The cart behind a reminder link (items and the shopper’s details)' })
+  async restoreCart(
+    @Headers(STORE_HOST_HEADER) host: string | undefined,
+    @ZodParam('code', cartsDto.cartCodeParam) code: string,
+  ) {
+    // Landing page carts come back while the rest of the shop is closed too.
+    const r = await this.storefront.resolve(this.host(host));
+    if (!r || r.state === 'unavailable') throw AppError.notFound('cart', 'This link is not valid.');
+    return this.storefront.inStore(r, () => this.storefront.restoreCart(r, code));
   }
 
   @Post('checkout')

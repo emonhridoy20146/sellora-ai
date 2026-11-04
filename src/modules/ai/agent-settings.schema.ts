@@ -1,5 +1,5 @@
 import { Schema, type Types } from 'mongoose';
-import { tenantSchema } from '../../infra/database/schema-helpers.js';
+import { tenantSchema, uniquePerTenant } from '../../infra/database/schema-helpers.js';
 import { MODEL_TIERS, type ModelTier } from '../billing/credit-schemas.js';
 
 export const AI_TONES = ['friendly', 'professional', 'casual'] as const;
@@ -120,4 +120,4 @@ export const aiAgentSettingsSchema = tenantSchema<AiAgentSettings>(
   { collection: 'ai_agent_settings' },
 );
 aiAgentSettingsSchema.path('orgId').index(false);
-aiAgentSettingsSchema.index({ orgId: 1 }, { unique: true });
+uniquePerTenant(aiAgentSettingsSchema);

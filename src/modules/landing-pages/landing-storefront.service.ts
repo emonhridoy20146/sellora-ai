@@ -8,6 +8,7 @@ import type { WithId } from '../../infra/database/schema-helpers.js';
 import { REDIS } from '../../infra/redis/redis.module.js';
 import { RateLimitService } from '../auth/core/rate-limit.service.js';
 import { EntitlementsService } from '../billing/entitlements.service.js';
+import { CartsService } from '../carts/carts.service.js';
 import { CustomersService } from '../commerce/customers.service.js';
 import { OrdersService, type OrderDoc } from '../commerce/orders.service.js';
 import { OrderRepository, ProductRepository } from '../commerce/repositories.js';
@@ -57,6 +58,17 @@ export interface LandingOrderInput {
   note?: string;
   website?: string;
   attribution?: OrderAttribution;
+  /** The saved cart this order comes from (ADR 0018), closed when the order is made. */
+  cartToken?: string;
+}
+
+export interface LandingCartInput {
+  token: string;
+  packageId: string | null;
+  variantId: string;
+  quantity: number;
+  addOn: boolean;
+  customer: { name: string; phone: string };
 }
 
 /** Same phone, same page, still pending, within this window: the first receipt is shown again. */
@@ -88,6 +100,7 @@ export class LandingStorefrontService {
     private readonly entitlements: EntitlementsService,
     private readonly links: StoreLinksService,
     private readonly limits: RateLimitService,
+    private readonly carts: CartsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -281,6 +294,8 @@ export class LandingStorefrontService {
         })),
         defaultZoneId: settings.defaultZoneId,
         currency,
+        // The order form says reminders may come only when the business has them on.
+        cartReminders: state === 'live' && (await this.carts.capturing()),
       };
     });
   }
@@ -355,7 +370,14 @@ export class LandingStorefrontService {
       redis: this.redis,
       scope: `lp:idem:${l.page._id.toHexString()}`,
       key: idempotencyKey,
-      fingerprint: sha256(canonicalJson({ ...input, website: undefined, attribution: undefined })),
+      fingerprint: sha256(
+        canonicalJson({
+          ...input,
+          website: undefined,
+          attribution: undefined,
+          cartToken: undefined,
+        }),
+      ),
       before: async () => {
         const ip = RequestContext.current()?.ip;
         if (ip) await this.limits.consume('checkout:ip', ip);
@@ -513,7 +535,78 @@ export class LandingStorefrontService {
       orders: 1,
       revenueMinor: order.totalMinor,
     });
+    await this.storefront.closeCart(input.cartToken, order);
     return this.placed(l, order, false);
+  }
+
+  /**
+   * Saves the order form's choice for reminders once the shopper has typed a number
+   * (ADR 0018), priced the way the order would be. Only on live pages.
+   */
+  async saveCart(l: ResolvedLanding, input: LandingCartInput): Promise<{ saved: boolean }> {
+    if (l.state !== 'live' || !l.content) return { saved: false };
+    const { offer } = l.content;
+    const { org, store } = l.store;
+    return this.inPage(l, async () => {
+      const product = offer.productId ? await this.products.findById(offer.productId) : null;
+      const variant = product?.variants.find((v) => v._id.toHexString() === input.variantId);
+      if (!product || !variant || product.status !== 'active' || product.currency !== org.currency)
+        return { saved: false };
+      const pkg = offer.packages.length
+        ? offer.packages.find((p) => p.id === input.packageId)
+        : undefined;
+      if (offer.packages.length && !pkg) return { saved: false };
+      const quantity = pkg
+        ? pkg.quantity
+        : Math.min(Math.max(1, input.quantity), MAX_FREE_QUANTITY);
+      const main = packageCharge(variant.priceMinor, quantity, pkg ? pkg.priceMinor : null);
+      const lines = [
+        {
+          productId: product._id.toHexString(),
+          variantId: variant._id.toHexString(),
+          quantity,
+          name: product.name,
+          variantTitle: variant.title === 'Default' ? '' : variant.title,
+          unitPriceMinor: main.unitPriceMinor,
+        },
+      ];
+      let total = main.totalMinor;
+      if (input.addOn && offer.addOn) {
+        const extra = await this.products.findById(offer.addOn.productId);
+        const extraVariant = extra?.variants.find(
+          (v) => v._id.toHexString() === offer.addOn!.variantId,
+        );
+        if (extra && extraVariant && extra.status === 'active' && extra.currency === org.currency) {
+          const charge = packageCharge(extraVariant.priceMinor, 1, offer.addOn.priceMinor);
+          lines.push({
+            productId: extra._id.toHexString(),
+            variantId: extraVariant._id.toHexString(),
+            quantity: 1,
+            name: extra.name,
+            variantTitle: extraVariant.title === 'Default' ? '' : extraVariant.title,
+            unitPriceMinor: charge.unitPriceMinor,
+          });
+          total += charge.totalMinor;
+        }
+      }
+      return this.carts.capture({
+        source: 'landing_page',
+        store: { id: store._id, name: store.name, url: this.links.url(store) },
+        landingPage: { id: l.page._id.toHexString(), name: l.page.name, slug: l.page.slug },
+        token: input.token,
+        phone: input.customer.phone,
+        name: input.customer.name,
+        items: lines,
+        selection: {
+          packageId: pkg?.id ?? null,
+          variantId: variant._id.toHexString(),
+          quantity,
+          addOn: input.addOn && lines.length > 1,
+        },
+        totalMinor: total,
+        currency: org.currency,
+      });
+    });
   }
 
   private placed(l: ResolvedLanding, order: OrderDoc, duplicate: boolean) {

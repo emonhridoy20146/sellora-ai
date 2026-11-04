@@ -21,6 +21,7 @@ import {
   RequirePermissions,
   RequirePlatformPermissions,
 } from '../auth/decorators.js';
+import * as cartsDto from '../carts/carts.dto.js';
 import { StorefrontKeyGuard } from '../stores/storefront-key.guard.js';
 import { idempotencyKey } from '../stores/stores.dto.js';
 import * as dto from './landing-pages.dto.js';
@@ -309,6 +310,20 @@ export class LandingStorefrontController {
       throw AppError.badRequest('idempotency_key_required', key.error.issues[0]!.message);
     // Previews never take orders: `page` is resolved without the preview token.
     return this.landing.order(await this.page(host, slug), body, key.data);
+  }
+
+  @Post(':slug/carts')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Save the order form’s choice for reminders (only while the business has them on)',
+  })
+  async saveCart(
+    @Headers(STORE_HOST_HEADER) host: string | undefined,
+    @ZodParam('slug', dto.slugParam) slug: string,
+    @ZodBody(cartsDto.landingCartBody) body: z.infer<typeof cartsDto.landingCartBody>,
+  ) {
+    // Previews never save carts: `page` is resolved without the preview token.
+    return this.landing.saveCart(await this.page(host, slug), body);
   }
 
   @Get(':slug/receipt')
