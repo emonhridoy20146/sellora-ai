@@ -69,6 +69,8 @@ const services = [
     CategoryRepository,
     ProductRepository,
     OrderRepository,
+    // Read by SMS campaigns, which choose customers by what they did (ADR 0019).
+    CustomerRepository,
     ProductsService,
     CustomersService,
     OrdersService,

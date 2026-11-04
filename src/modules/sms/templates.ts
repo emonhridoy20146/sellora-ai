@@ -10,11 +10,21 @@ export const ORDER_SMS_EVENTS = [
 ] as const;
 export type OrderSmsEvent = (typeof ORDER_SMS_EVENTS)[number];
 
-export const SMS_PURPOSES = [...ORDER_SMS_EVENTS, 'test', 'cart_recovery', 'campaign'] as const;
+export const SMS_PURPOSES = [
+  ...ORDER_SMS_EVENTS,
+  'test',
+  'cart_recovery',
+  'campaign',
+  'automation',
+] as const;
 export type SmsPurpose = (typeof SMS_PURPOSES)[number];
 
 /** Marketing purposes need the number not to have opted out, and carry an opt-out link. */
-export const MARKETING_PURPOSES: ReadonlySet<SmsPurpose> = new Set(['cart_recovery', 'campaign']);
+export const MARKETING_PURPOSES: ReadonlySet<SmsPurpose> = new Set([
+  'cart_recovery',
+  'campaign',
+  'automation',
+]);
 
 export type SmsLanguage = 'en' | 'bn';
 

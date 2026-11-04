@@ -68,7 +68,7 @@ brought an order.
   any order is created (online store, landing page, inbox or by hand), open carts of the
   business with the customer's number are marked ordered. The storefront also sends the
   cart's token with the checkout, so the cart the order came from is closed even if the
-  shopper changed their number. A cart is *recovered* when it was ordered within 7 days of a
+  shopper changed their number. A cart is _recovered_ when it was ordered within 7 days of a
   reminder that was not refused (queued, sent, delivered or uncertain). The page shows
   carts left, reminded, recovered (count and order value), still open (value), the cart SMS
   spend and the recovery rate for the last 30 days, and lists carts by what happened.

@@ -26,7 +26,14 @@ import {
   type SmsMessageDoc,
   type SmsSettingsDoc,
 } from './repositories.js';
-import type { SmsFailure, SmsLink, SmsMessage, SmsRoute, SmsStatus } from './schemas.js';
+import {
+  SMS_STATUSES,
+  type SmsFailure,
+  type SmsLink,
+  type SmsMessage,
+  type SmsRoute,
+  type SmsStatus,
+} from './schemas.js';
 import { MAX_SMS_PARTS, plainSmsText, smsLength } from './segments.js';
 import { SmsPlatformService } from './sms-platform.service.js';
 import {
@@ -625,6 +632,55 @@ export class SmsService {
       },
     ]);
     return { count: row?.count ?? 0, spentMinor: row?.spentMinor ?? 0 };
+  }
+
+  /**
+   * Messages made for one thing (a campaign, an automation) by status, and what the Sellora
+   * SMS among them cost: only messages the provider accepted are charged.
+   */
+  async statsFor(
+    ref: { type: string; id: string },
+    since?: Date,
+  ): Promise<{ byStatus: Record<SmsStatus, number>; spentMinor: number }> {
+    const rows = await this.messages.aggregate<{ _id: SmsStatus; count: number; spent: number }>([
+      {
+        $match: {
+          'ref.type': ref.type,
+          'ref.id': ref.id,
+          ...(since ? { createdAt: { $gte: since } } : {}),
+        },
+      },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          spent: {
+            $sum: {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$route', 'sellora'] },
+                    { $in: ['$status', ['sent', 'delivered']] },
+                  ],
+                },
+                '$priceMinor',
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]);
+    const byStatus = Object.fromEntries(SMS_STATUSES.map((st) => [st, 0])) as Record<
+      SmsStatus,
+      number
+    >;
+    let spentMinor = 0;
+    for (const r of rows) {
+      byStatus[r._id] = r.count;
+      spentMinor += r.spent;
+    }
+    return { byStatus, spentMinor };
   }
 
   toDto(m: SmsMessageDoc) {

@@ -448,4 +448,26 @@ export const mailTemplates = {
           { label: 'Open SMS settings', url: p.settingsUrl },
         );
   },
+  campaignPaused(
+    locale: Locale,
+    p: { businessName: string; campaign: string; needed: string; have: string; url: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `ক্যাম্পেইন "${p.campaign}" থেমে আছে: ওয়ালেটে টাকা কম`,
+          [
+            `${p.businessName}-এর ক্যাম্পেইন "${p.campaign}" পাঠানো থেমে আছে, কারণ পরের SMS-গুলোর জন্য ওয়ালেটে যথেষ্ট টাকা নেই (দরকার ${p.needed}, আছে ${p.have})।`,
+            'ওয়ালেট টপ আপ করে ক্যাম্পেইন পেজে "আবার চালু করুন" চাপুন। যারা আগেই SMS পেয়েছেন তারা আর পাবেন না।',
+          ],
+          { label: 'ক্যাম্পেইন খুলুন', url: p.url },
+        )
+      : render(
+          `Campaign "${p.campaign}" paused: not enough wallet cash`,
+          [
+            `${p.businessName}'s campaign "${p.campaign}" stopped sending because the wallet does not have enough cash for the next texts (needs ${p.needed}, has ${p.have}).`,
+            'Top up the wallet, then press "Resume" on the campaign page. Customers who already got the text will not get it again.',
+          ],
+          { label: 'Open the campaign', url: p.url },
+        );
+  },
 };

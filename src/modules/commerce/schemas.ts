@@ -261,6 +261,8 @@ customerSchema.index(
   { unique: true, partialFilterExpression: { phone: { $type: 'string' } } },
 );
 customerSchema.index({ orgId: 1, updatedAt: -1 });
+// Win-back automations look for customers whose last order turned N days old (ADR 0019).
+customerSchema.index({ orgId: 1, 'stats.lastOrderAt': 1 });
 
 // ---------------------------------------------------------------- orders
 

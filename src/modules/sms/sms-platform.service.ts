@@ -152,6 +152,8 @@ export class SmsPlatformService {
             checkedAt: new Date(),
             checkSummary: check.summary,
           },
+          // Connected before anything else read the settings: start with the placeholder prices.
+          $setOnInsert: { prices: DEFAULT_SMS_PRICES, costs: DEFAULT_SMS_COSTS },
         },
         { upsert: true },
       )

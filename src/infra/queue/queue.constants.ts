@@ -16,6 +16,8 @@ export const QUEUES = {
   sms: 'sms',
   /** Abandoned cart reminders: a sweep every minute. */
   carts: 'carts',
+  /** SMS campaigns and automations: a sweep every 30 seconds. */
+  campaigns: 'campaigns',
   maintenance: 'maintenance',
 } as const;
 
