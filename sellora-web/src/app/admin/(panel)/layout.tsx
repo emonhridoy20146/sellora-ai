@@ -6,6 +6,7 @@ import {
   Building2,
   Cpu,
   CreditCard,
+  DatabaseBackup,
   Gauge,
   KeyRound,
   Layers,
@@ -97,6 +98,8 @@ function nav(
       icon: MessageSquareText,
       badge: pendingSenderNames,
     });
+  if (can('platform.backups.manage'))
+    system.items.push({ href: '/admin/backups', label: 'Backups', icon: DatabaseBackup });
   if (can('platform.admins.view'))
     system.items.push({ href: '/admin/admins', label: 'Team', icon: ShieldCheck });
   if (can('platform.settings.manage'))
