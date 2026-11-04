@@ -17,7 +17,7 @@
  * Optional: SMOKE_BASE_URL (http://localhost:3000), GOOGLE_STAND_IN_URL (http://localhost:4070).
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
