@@ -164,21 +164,33 @@ Last updated: 2026-10-28.
 | Delivery reports                                                                                                                                                                        | Partial | Twilio only (signed callbacks, tested). Bangladeshi providers report "accepted"; shown as Sent.                                                                                                                   |
 | Super-admin SMS revenue, cost and profit by day; businesses with 30 days of use                                                                                                         | Done    | Admin › SMS.                                                                                                                                                                                                      |
 
-## M7 — Abandoned carts, campaigns and automations
+## M7 — Abandoned cart reminders (third part of M7)
 
-| Feature                                             | Status      | Notes |
-| --------------------------------------------------- | ----------- | ----- |
-| Abandoned cart reminders, campaigns and automations | Not started | Next. |
+| Feature                                                                                                                                                                                                                   | Status  | Notes                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Carts saved when a shopper types a phone number at the store checkout or on a landing page order form (debounced, one cart per browser token, phone plus items only, no address), kept 60 days                            | Done    | ADR 0018. Only while reminders are on and the plan has the marketing module. The forms tell the shopper a reminder may come. API e2e tests and the browser flow. |
+| Settings: on/off, English or Bangla, two reminders (delay 30 minutes to 2 days, own text with `{name} {shop} {items} {total} {link}`, live preview, part count and cost), smallest cart, quiet hours                      | Done    | Marketing › Abandoned carts. `{link}` is required; the stop link is added to every reminder. Settings changes re-plan waiting carts.                             |
+| Worker sweep every minute: sends the due reminder once (claimed, unique key per cart and step), skips quiet hours, small carts, SMS off (retried for 12 hours), stopped numbers and numbers reminded in the last 24 hours | Done    | E2e tests with a controlled clock; the browser flow saw the worker send a reminder (after moving the cart's last change back in the database).                   |
+| Restore link `<store>/r/<code>`: brings back the store cart (repriced, unavailable items dropped) or the landing page offer, with the shopper's name and phone filled in; counts clicks                                   | Done    | Storefront `src/app/r/[code]`. Browser flow for both kinds.                                                                                                      |
+| Recovered: an order from the cart (by token) or from the same number within 7 days of a sent reminder                                                                                                                     | Done    | Orders from any channel close open carts for that number.                                                                                                        |
+| Cart list (left, recovered, ordered, stopped, all; phone search), details with every reminder and its SMS status, send now (at most 3 by hand), stop reminders, copy link; 30-day numbers                                 | Done    | Marketing viewers can look; marketing managers change things.                                                                                                    |
+| Reminders reaching real phones                                                                                                                                                                                            | Partial | Only the SMS stand-in received them; no real SMS has been sent (see SMS above).                                                                                  |
+
+## M7 — Campaigns and automations
+
+| Feature                                       | Status      | Notes |
+| --------------------------------------------- | ----------- | ----- |
+| SMS campaigns to customer groups, automations | Not started | Next. |
 
 ## Later milestones
 
-| Milestone | Features                                                                                                                        | Status                                                                  |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| M5        | Couriers and fraud check                                                                                                        | See above                                                               |
-| M6        | Store builder, themes, subdomain and custom domain with super-admin approval (`sellora-storefront`)                             | Done in development (see above); real DNS and certificates still to try |
-| M7        | Landing page builder, marketing automation, SMS, abandoned carts                                                                | Landing pages and SMS done in development (see above); the rest next    |
-| M8        | Ads analytics and forecasts, AI SEO studio, reports                                                                             | Not started                                                             |
-| M9        | Backups (daily, weekly, monthly; client Google Drive; super-admin restore and download), Telegram stats, VPS deployment scripts | Not started                                                             |
+| Milestone | Features                                                                                                                        | Status                                                                    |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| M5        | Couriers and fraud check                                                                                                        | See above                                                                 |
+| M6        | Store builder, themes, subdomain and custom domain with super-admin approval (`sellora-storefront`)                             | Done in development (see above); real DNS and certificates still to try   |
+| M7        | Landing page builder, marketing automation, SMS, abandoned carts                                                                | Landing pages, SMS and cart reminders done in development; campaigns next |
+| M8        | Ads analytics and forecasts, AI SEO studio, reports                                                                             | Not started                                                               |
+| M9        | Backups (daily, weekly, monthly; client Google Drive; super-admin restore and download), Telegram stats, VPS deployment scripts | Not started                                                               |
 
 ## Known gaps and follow-ups
 

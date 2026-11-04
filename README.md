@@ -118,6 +118,13 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
   `SMS_ALPHA_BASE_URL=http://127.0.0.1:4060/alpha` (the script's header lists the demo keys). It
   is not an SMS gateway: no phone receives anything; its page at http://127.0.0.1:4060/ shows
   what would have arrived.
+- Abandoned cart reminders (ADR 0018): off for every business until it turns them on in
+  Marketing › Abandoned carts (needs the marketing module and a working SMS route). The worker
+  looks for due reminders every minute (queue `carts`), so run `npm run dev:worker` too. The
+  reminder link is `<store address>/r/<code>`; the stop link uses `WEB_APP_URL`. A database
+  from before this version has a non-unique index on SMS settings: run
+  `npm run db:indexes -- --drop` once to rebuild it as unique (the script says which index
+  differs and exits with an error until then).
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin

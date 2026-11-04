@@ -211,12 +211,14 @@ export class CartsService {
 
   async settingsDto(s: CartSettingsDoc) {
     const smsSettings = await this.sms.settings();
-    const [route, samples, org, included] = await Promise.all([
+    const [route, samplesEn, samplesBn, org, included] = await Promise.all([
       this.sms.resolveRoute(smsSettings),
-      this.samples(s.language, smsSettings),
+      this.samples('en', smsSettings),
+      this.samples('bn', smsSettings),
       this.orgs.get(this.orgId()),
       this.entitlements.hasModule(this.orgId(), 'marketing'),
     ]);
+    const samples = s.language === 'bn' ? samplesBn : samplesEn;
     const price = 'failure' in route ? null : route.pricePerPart;
     return {
       enabled: s.enabled,
@@ -247,6 +249,12 @@ export class CartsService {
         label: CART_PLACEHOLDERS[key as keyof typeof CART_PLACEHOLDERS],
       })),
       defaults: DEFAULT_CART_TEXTS,
+      // Made-up values and the stop text, so the editor can preview what it has not saved.
+      samples: { en: samplesEn, bn: samplesBn },
+      stopSuffix: {
+        en: optOutSuffix('en', this.sampleOptOut()),
+        bn: optOutSuffix('bn', this.sampleOptOut()),
+      },
       maxChars: MAX_CART_TEXT_CHARS,
       maxParts: MAX_SMS_PARTS,
       included,
@@ -846,7 +854,10 @@ export class CartsService {
 
   toDto(
     c: CartDoc,
-    messages: Map<string, { status: SmsMessage['status']; priceMinor: number; error?: string }>,
+    messages: Map<
+      string,
+      { status: SmsMessage['status']; priceMinor: number; currency: string; error?: string }
+    >,
     now = new Date(),
   ) {
     const state: CartStatus | 'shopping' =
@@ -883,6 +894,7 @@ export class CartsService {
                 id: r.messageId!,
                 status: m.status,
                 priceMinor: m.priceMinor,
+                currency: m.currency,
                 error: m.error ?? null,
               }
             : null,

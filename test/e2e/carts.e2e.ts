@@ -56,6 +56,8 @@ interface SettingsDto {
   quietHours: { enabled: boolean; startHour: number; endHour: number };
   included: boolean;
   sms: { mode: string; ready: boolean };
+  samples: Record<'en' | 'bn', Record<string, string>>;
+  stopSuffix: Record<'en' | 'bn', string>;
 }
 
 const BULK_KEY = 'bulk-api-key-0001';
@@ -262,6 +264,12 @@ describe('Abandoned carts: saving, reminders, the restore link and recovered ord
         /^Hi Rahim, you left Red saree and 1 more at Nakshi Ghor\. Order here: https:\/\/your-shop\.shops\.test\/r\/\w{10} Stop: http:\/\/localhost:3000\/u\/\w+$/,
       );
       expect(s.steps[0]!.preview).toMatchObject({ parts: 1, priceMinor: 0 });
+      // The same values in both languages, for previews of texts not saved yet.
+      expect(s.samples.en).toMatchObject({ name: 'Rahim', items: 'Red saree and 1 more' });
+      expect(s.samples.bn).toMatchObject({ name: 'রহিম', shop: 'Nakshi Ghor' });
+      expect(s.samples.bn.link).toBe(s.samples.en.link);
+      expect(s.stopSuffix.en).toMatch(/^ Stop: http:\/\/localhost:3000\/u\/\w+$/);
+      expect(s.stopSuffix.bn).toMatch(/^ বন্ধ করতে: /);
     });
 
     it('only marketing staff change them; a viewer can look, a sales agent cannot', async () => {

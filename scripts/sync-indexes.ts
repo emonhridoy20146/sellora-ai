@@ -13,6 +13,7 @@ import type { Connection } from 'mongoose';
 import { AppModule } from '../src/app.module.js';
 
 const drop = process.argv.includes('--drop');
+let failed = 0;
 const app = await NestFactory.createApplicationContext(AppModule.forRoot(), {
   logger: ['error', 'warn'],
 });
@@ -24,7 +25,16 @@ try {
       const dropped = await model.syncIndexes();
       console.log(`${name}: in sync${dropped.length ? `, dropped ${dropped.join(', ')}` : ''}`);
     } else {
-      await model.createIndexes();
+      try {
+        await model.createIndexes();
+      } catch (err) {
+        // An index with the same key but other options (one that should now be unique)
+        // blocks the build. Only `--drop` replaces it, so a failed unique build is a choice.
+        if ((err as { code?: number }).code !== 86) throw err;
+        failed += 1;
+        console.log(`${name}: an index differs from the schema; run with --drop to rebuild it`);
+        continue;
+      }
       const diff = await model.diffIndexes();
       console.log(
         `${name}: built${diff.toDrop.length ? `, not in schema: ${diff.toDrop.join(', ')}` : ''}`,
@@ -34,3 +44,4 @@ try {
 } finally {
   await app.close();
 }
+if (failed) process.exitCode = 1;
