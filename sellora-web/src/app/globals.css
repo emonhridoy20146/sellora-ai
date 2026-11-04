@@ -1,0 +1,169 @@
+@import 'tailwindcss';
+
+/* Dark mode follows the `dark` class that next-themes puts on <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens. Components use the semantic names (bg-card, text-muted-foreground…), never
+ * raw hex, so light/dark and a future white-label theme change in one place.
+ * Chart colors follow the validated data-viz palette (series-1 blue, series-2 orange).
+ */
+:root {
+  --background: #f6f6f3;
+  --foreground: #0b0b0b;
+  --card: #fcfcfb;
+  --card-foreground: #0b0b0b;
+  --popover: #ffffff;
+  --popover-foreground: #0b0b0b;
+  --muted: #efeeea;
+  --muted-foreground: #5f5e5a;
+  --accent: #eceae5;
+  --accent-foreground: #0b0b0b;
+  --primary: #256abf;
+  --primary-foreground: #ffffff;
+  --secondary: #e9e8e3;
+  --secondary-foreground: #1d1d1b;
+  --border: #e1e0d9;
+  --input: #d6d5cd;
+  --ring: #2a78d6;
+  --destructive: #c23131;
+  --destructive-foreground: #ffffff;
+  --success: #006300;
+  --success-soft: #e3f3e3;
+  --warning: #8a5a00;
+  --warning-soft: #fdf1d6;
+  --danger-soft: #fbe5e5;
+  --info-soft: #e3eefb;
+  --sidebar: #fbfbf9;
+
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --chart-grid: #e1e0d9;
+  --chart-axis: #c3c2b7;
+  --chart-muted: #898781;
+}
+
+.dark {
+  --background: #0d0d0d;
+  --foreground: #f0efec;
+  --card: #1a1a19;
+  --card-foreground: #f0efec;
+  --popover: #222220;
+  --popover-foreground: #f0efec;
+  --muted: #232321;
+  --muted-foreground: #a9a89f;
+  --accent: #2a2a28;
+  --accent-foreground: #f0efec;
+  --primary: #3987e5;
+  --primary-foreground: #ffffff;
+  --secondary: #2a2a28;
+  --secondary-foreground: #f0efec;
+  --border: #2c2c2a;
+  --input: #3a3a37;
+  --ring: #3987e5;
+  --destructive: #e66767;
+  --destructive-foreground: #0b0b0b;
+  --success: #3fbf3f;
+  --success-soft: #142a14;
+  --warning: #f2b93b;
+  --warning-soft: #2e2410;
+  --danger-soft: #331717;
+  --info-soft: #14243a;
+  --sidebar: #131312;
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --chart-grid: #2c2c2a;
+  --chart-axis: #383835;
+  --chart-muted: #898781;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger-soft: var(--danger-soft);
+  --color-info-soft: var(--info-soft);
+  --color-sidebar: var(--sidebar);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+
+  --font-sans:
+    var(--font-inter), var(--font-bengali), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Printing (invoices, packing slips, receipts): always light, one document per page. */
+@media print {
+  :root,
+  .dark {
+    color-scheme: light;
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #ffffff;
+    --card-foreground: #000000;
+    --muted-foreground: #444444;
+    --border: #bbbbbb;
+  }
+  .print-page {
+    break-after: page;
+  }
+  .print-page:last-child {
+    break-after: auto;
+  }
+}
+
+@page {
+  margin: 12mm;
+}
