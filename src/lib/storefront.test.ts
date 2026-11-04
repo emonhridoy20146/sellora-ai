@@ -5,6 +5,7 @@ import { mainAddressRedirect } from './main-address';
 import { currencyExponent, formatMoney } from './money';
 import { asciiDigits, isBdMobile } from './phone';
 import { clientIp, sameOrigin } from './request';
+import { SHORT_CODE_RE, shortLinkLocation } from './short-link';
 
 const item = (variantId: string, quantity = 1) => ({
   productId: 'p'.repeat(24),
@@ -141,5 +142,30 @@ describe('main address', () => {
   it('does nothing without a host or with a broken URL', () => {
     expect(mainAddressRedirect(main, null, '/')).toBeNull();
     expect(mainAddressRedirect('not a url', 'a.test', '/')).toBeNull();
+  });
+});
+
+describe('short links', () => {
+  it('sends the shopper to the page on this store with its tracking tags', () => {
+    expect(
+      shortLinkLocation({
+        path: '/products/red-saree',
+        query: { utm_source: 'sms', utm_medium: 'sms', utm_campaign: 'eid-offer' },
+      }),
+    ).toBe('/products/red-saree?utm_source=sms&utm_medium=sms&utm_campaign=eid-offer');
+    expect(shortLinkLocation({ path: '/', query: {} })).toBe('/');
+  });
+
+  it('never leaves the store, whatever the answer says', () => {
+    expect(shortLinkLocation({ path: '//evil.test/x', query: {} })).toBe('/');
+    expect(shortLinkLocation({ path: 'https://evil.test', query: {} })).toBe('/');
+    expect(shortLinkLocation({ path: '/\\evil.test', query: {} })).toBe('/');
+    expect(shortLinkLocation(null)).toBe('/');
+  });
+
+  it('accepts only 8-letter codes', () => {
+    expect(SHORT_CODE_RE.test('Ab12Cd34')).toBe(true);
+    expect(SHORT_CODE_RE.test('Ab12Cd3')).toBe(false);
+    expect(SHORT_CODE_RE.test('../admin')).toBe(false);
   });
 });

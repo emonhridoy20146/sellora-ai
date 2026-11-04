@@ -100,6 +100,7 @@ sellora-web, and connecting a custom domain by `scripts/domains-flow.mjs` there.
 | `/[slug]`                     | A landing page: its sections, the order form, a sticky order button on phones.         |
 | `/[slug]/thanks?receipt=…`    | The thank-you page after a landing page order (signed receipt, never indexed).         |
 | `/r/[code]`                    | The link in a cart reminder SMS: puts the cart and the shopper's details back, then opens checkout or the landing page offer. Never indexed. |
+| `/c/[code]`                    | The short link in a campaign or automation SMS: the API counts the click, then the shopper goes to the store page, landing page or product with `utm_source=sms`. Never indexed. |
 | `/sitemap.xml`, `/robots.txt` | Per store, with its live landing pages; drafts and previews are never indexed.         |
 
 A store that is not open yet shows "opening soon", a paused store shows a closed note, a
@@ -154,6 +155,11 @@ suspended store shows "not available", and an address with no store shows a page
   cart, reprices store carts, writes the cart, token, name and phone back into the browser
   (`app/r/[code]/restore.tsx`) and moves on to `/checkout` or to `/<slug>?cart=1…#order`,
   where `restoredChoice` (`lib/landing-offer.ts`) picks the same package, options and add-on.
+- **SMS short links** (ADR 0019 in sellora-api). `app/c/[code]/route.ts` asks the API
+  where an 8-letter code goes on this store (`/v1/storefront/links/<code>`, which counts the
+  click) and redirects there with `utm_source=sms&utm_medium=sms&utm_campaign=<name>`; the
+  landing page and store already keep those tags with the order. A code that is not this
+  store's goes to the home page; `lib/short-link.ts` never sends the shopper off the store.
 - **Security headers.** No framing, no referrer beyond the origin, no camera, microphone or
   location (`next.config.ts`).
 
