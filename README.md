@@ -135,6 +135,12 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
   backup). Set all of `BACKUP_OFFSITE_S3_BUCKET`, `_ACCESS_KEY_ID` and `_SECRET_ACCESS_KEY`
   (plus `_ENDPOINT` and `_REGION`) to copy each verified backup to a second bucket. MongoDB
   must be a replica set (backups read one snapshot).
+- Merchant backups (ADR 0021): "Download your data" and restore points need nothing more than
+  the worker. Daily Google Drive copies need a Google Cloud OAuth client (Web application) with
+  `<API_PUBLIC_URL>/v1/backups/google/callback` as its redirect URI and the Drive API turned
+  on: set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`. Without them the Drive card
+  says it is not set up. To try it locally, run `node scripts/google-stand-in.mjs` and set the
+  `GOOGLE_*` URLs it prints in its header (it is not Google).
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -159,6 +165,7 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
 | `node scripts/courier-stand-in.mjs`                           | Stand-in for the Steadfast, Pathao and RedX APIs for local demos without courier accounts (not a courier).                                                                                                                   |
 | `node scripts/dns-stand-in.mjs`                               | DNS server on 127.0.0.1:5300 for trying custom domains with made-up names; records are set over HTTP on :4050 (not a DNS provider or resolver).                                                                              |
 | `node scripts/sms-stand-in.mjs`                               | Stand-in for the BulkSMSBD and Alpha SMS APIs with an inbox page, for local demos without SMS accounts (not an SMS gateway).                                                                                                 |
+| `node scripts/google-stand-in.mjs`                            | Stand-in for Google's sign-in and Google Drive with a consent page and a Drive page, for trying Drive backups without a Google client (not Google).                                                                          |
 
 ## Tests
 

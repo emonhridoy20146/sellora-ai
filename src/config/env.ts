@@ -139,6 +139,14 @@ export const envSchema = z
     BACKUP_OFFSITE_S3_ACCESS_KEY_ID: z.string().optional(),
     BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY: z.string().optional(),
     BACKUP_OFFSITE_S3_FORCE_PATH_STYLE: bool.default(true),
+    /** Google Drive copies for merchants (ADR 0021): a Google Cloud OAuth client. */
+    GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+    GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+    GOOGLE_OAUTH_AUTH_URL: z.url().default('https://accounts.google.com/o/oauth2/v2/auth'),
+    GOOGLE_OAUTH_TOKEN_URL: z.url().default('https://oauth2.googleapis.com/token'),
+    GOOGLE_OAUTH_REVOKE_URL: z.url().default('https://oauth2.googleapis.com/revoke'),
+    /** Drive API and uploads (`/drive/v3`, `/upload/drive/v3`). */
+    GOOGLE_API_URL: z.url().default('https://www.googleapis.com'),
 
     METRICS_TOKEN: z.string().min(16).optional(),
 
@@ -332,6 +340,12 @@ export const envSchema = z
         path: ['BACKUP_OFFSITE_S3_BUCKET'],
         message:
           'BACKUP_OFFSITE_S3_BUCKET, BACKUP_OFFSITE_S3_ACCESS_KEY_ID and BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY go together',
+      });
+    if (Boolean(env.GOOGLE_OAUTH_CLIENT_ID) !== Boolean(env.GOOGLE_OAUTH_CLIENT_SECRET))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['GOOGLE_OAUTH_CLIENT_ID'],
+        message: 'GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET go together',
       });
     const kids = env.DATA_ENCRYPTION_KEYS.split(',').map((p) => p.split(':')[0]);
     if (!kids.includes(env.DATA_ENCRYPTION_ACTIVE_KID)) {

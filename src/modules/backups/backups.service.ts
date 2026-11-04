@@ -61,10 +61,17 @@ import type {
 const SETTINGS_ID = 'global';
 const BATCH = 500;
 /** Collections a business's backup leaves out: they describe backups, not the business. */
-const NEVER_IN_TENANT = new Set(['backup_runs', 'backup_restores']);
+const NEVER_IN_TENANT = new Set([
+  'backup_runs',
+  'backup_restores',
+  'backup_exports',
+  'drive_connections',
+]);
 const CONTENT_TYPE = 'application/vnd.sellora.backup';
 /** Lines between lease renewals while a backup is written or read back. */
 const RENEW_EVERY = 20_000;
+/** Restore points a business makes itself: the newest this many are kept. */
+export const MERCHANT_POINTS_KEPT = 3;
 /** A download link works once, for this long. */
 const DOWNLOAD_LINK_SECONDS = 300;
 
@@ -74,6 +81,10 @@ export const BACKUP_JOBS = {
   write: 'write',
   testRestore: 'test-restore',
   restore: 'restore',
+  /** A business's "Download your data" ZIP (ADR 0021). */
+  export: 'export',
+  /** A copy to a business's Google Drive (ADR 0021). */
+  driveCopy: 'drive-copy',
 } as const;
 
 type Doc = Record<string, unknown> & { _id?: unknown };
@@ -98,6 +109,17 @@ export interface RunDto {
   testRestorePending: boolean;
   offsite: { at: string; ok: boolean; error: string | null } | null;
   startedBy: Actor | null;
+}
+
+/** A restore point as the business sees it. */
+export interface MerchantPointDto {
+  id: string;
+  /** restore_point: the business made it; safety: made before a restore; nightly: Sellora's. */
+  kind: 'restore_point' | 'safety' | 'nightly' | 'support';
+  status: 'ready' | 'making';
+  startedAt: string;
+  verifiedAt: string | null;
+  by: string | null;
 }
 
 /**
@@ -267,23 +289,30 @@ export class BackupsService {
    * Starts a backup now (a super-admin's "Back up now", or of one business): the run is
    * recorded at once, so a second request gets a conflict, and the worker makes the file.
    */
-  async request(p: { orgId?: string; by: Actor }): Promise<RunDto> {
+  async request(p: { orgId?: string; by: Actor; reason?: 'manual' | 'merchant' }): Promise<RunDto> {
     const orgId = p.orgId ? (await this.orgs.get(p.orgId))._id : undefined;
+    const reason = orgId ? (p.reason ?? 'manual') : 'manual';
     const run = await this.start({
       scope: orgId ? 'tenant' : 'platform',
       ...(orgId ? { orgId } : {}),
-      reason: 'manual',
+      reason,
       by: p.by,
       now: new Date(),
     });
     const id = run._id.toHexString();
     await this.queue.add(BACKUP_JOBS.write, { runId: id }, { jobId: `write-${id}`, attempts: 1 });
-    await this.audit.record({
-      ...(orgId ? { orgId: orgId.toHexString() } : {}),
-      action: 'platform.backups.started',
-      target: { type: 'backup', id, label: orgId ? 'Business backup' : 'Platform backup' },
-      metadata: { scope: run.scope },
-    });
+    if (reason === 'merchant')
+      await this.audit.record({
+        orgId: orgId!.toHexString(),
+        action: 'backup.restore_point_made',
+        target: { type: 'backup', id, label: 'Restore point' },
+      });
+    else
+      await this.audit.record({
+        action: 'platform.backups.started',
+        target: { type: 'backup', id, label: orgId ? 'Business backup' : 'Platform backup' },
+        metadata: { scope: run.scope, ...(orgId ? { orgId: orgId.toHexString() } : {}) },
+      });
     return toDto(run);
   }
 
@@ -303,6 +332,10 @@ export class BackupsService {
   /** Writes and verifies the run's file; a platform backup then takes its tiers and copies. */
   private async complete(run: BackupRunDoc, now: Date): Promise<RunDto> {
     const done = await this.write(run, run.scope === 'tenant' ? run.orgId! : null);
+    if (run.scope === 'tenant' && run.reason === 'merchant' && done.status === 'verified') {
+      await this.keepNewestMerchantPoints(run.orgId!, now);
+      return this.require(done.id);
+    }
     if (run.scope !== 'platform' || done.status !== 'verified') return done;
     const s = await this.settings();
     const verified = await this.runs
@@ -580,6 +613,17 @@ export class BackupsService {
     return remove.length;
   }
 
+  /** A business keeps its newest restore points; older ones go (ADR 0021). */
+  private async keepNewestMerchantPoints(orgId: Types.ObjectId, now: Date): Promise<void> {
+    const old = await this.runs
+      .find({ scope: 'tenant', orgId, reason: 'merchant', status: 'verified' }, { key: 1 })
+      .sort({ startedAt: -1 })
+      .skip(MERCHANT_POINTS_KEPT)
+      .lean<BackupRunDoc[]>()
+      .exec();
+    for (const r of old) await this.removeFile(r, now);
+  }
+
   private async removeFile(r: Pick<BackupRunDoc, '_id' | 'key'>, now: Date): Promise<void> {
     if (r.key) {
       await this.storage.delete(r.key);
@@ -722,6 +766,48 @@ export class BackupsService {
     return rows.map(toDto);
   }
 
+  /**
+   * The business's own view of its restore points (ADR 0021): verified backups that hold it,
+   * and its own restore points still being made. Nothing about other businesses or the
+   * platform (no sizes, counts or admins' names).
+   */
+  async merchantPoints(orgId: string): Promise<MerchantPointDto[]> {
+    const org = new Types.ObjectId(orgId);
+    const rows = await this.runs
+      .find({
+        $or: [
+          { status: 'verified', scope: 'platform' },
+          { status: 'verified', scope: 'tenant', orgId: org },
+          {
+            status: { $in: ['running', 'verifying'] },
+            scope: 'tenant',
+            orgId: org,
+            reason: 'merchant',
+          },
+        ],
+      })
+      .sort({ startedAt: -1 })
+      .limit(30)
+      .lean<BackupRunDoc[]>()
+      .exec();
+    return rows.map((r) => ({
+      id: r._id.toHexString(),
+      kind:
+        r.scope === 'platform'
+          ? 'nightly'
+          : r.reason === 'merchant'
+            ? 'restore_point'
+            : r.reason === 'safety'
+              ? 'safety'
+              : 'support',
+      status: r.status === 'verified' ? 'ready' : 'making',
+      startedAt: r.startedAt.toISOString(),
+      verifiedAt: r.verifiedAt?.toISOString() ?? null,
+      by:
+        r.scope === 'platform' || r.startedBy?.type !== 'user' ? null : (r.startedBy.label ?? null),
+    }));
+  }
+
   async require(id: string): Promise<RunDto> {
     return toDto(await this.load(id));
   }
@@ -820,6 +906,8 @@ export class BackupsService {
     const run = await this.load(runId);
     if (run.status !== 'verified')
       throw AppError.conflict('backup_not_verified', 'Choose a verified backup.');
+    if (run.scope === 'tenant' && !run.orgId?.equals(orgId))
+      throw AppError.conflict('backup_other_business', 'This backup belongs to another business.');
     const all = new Set<string>(RESTORE_PART_KEYS.flatMap((p) => RESTORE_PARTS[p].collections));
     const inBackup = new Map<string, Set<string>>([...all].map((c) => [c, new Set<string>()]));
     await this.readTenant(run, orgId, all, (c, d) => {
@@ -997,7 +1085,7 @@ export class BackupsService {
         target,
         metadata,
       });
-      await this.tellOwner(org, parts, run.startedAt, record.reason);
+      await this.tellOwner(org, parts, run.startedAt, record.reason, record.by);
     } catch (err) {
       this.logger.error({ err, orgId: orgId.toHexString(), runId }, 'Restore failed');
       const error = changed
@@ -1056,6 +1144,7 @@ export class BackupsService {
     parts: RestorePart[],
     at: Date,
     reason: string,
+    by?: Actor,
   ) {
     try {
       const [owner] = await this.users.findByIds([org.ownerUserId]);
@@ -1074,6 +1163,7 @@ export class BackupsService {
           }).format(at),
           reason,
           url: `${web}/app/${org._id.toHexString()}`,
+          ...(by?.type === 'user' && by.label ? { by: by.label } : {}),
         }),
       });
     } catch (err) {

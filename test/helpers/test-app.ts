@@ -19,6 +19,7 @@ import { META_FETCH } from '../../src/modules/meta/meta-graph.js';
 import { COURIER_FETCH } from '../../src/modules/couriers/courier.types.js';
 import { SMS_FETCH } from '../../src/modules/sms/sms.types.js';
 import { DNS_LOOKUP, type DnsLookup } from '../../src/modules/stores/dns-lookup.js';
+import { GOOGLE_FETCH } from '../../src/modules/backups/google-drive.js';
 import { REDIS } from '../../src/infra/redis/redis.module.js';
 import type { Redis } from 'ioredis';
 import { testEnv } from './env.js';
@@ -67,6 +68,8 @@ export class TestApp {
       smsFetch?: typeof fetch;
       /** Replaces DNS lookups for custom domains, so tests can play the DNS provider's part. */
       dnsLookup?: DnsLookup;
+      /** Replaces the fetch the Google Drive client uses, so tests can play Google's part. */
+      googleFetch?: typeof fetch;
     } = {},
   ): Promise<TestApp> {
     const env = testEnv(overrides);
@@ -82,6 +85,8 @@ export class TestApp {
       builder = builder.overrideProvider(COURIER_FETCH).useValue(opts.courierFetch);
     if (opts.smsFetch) builder = builder.overrideProvider(SMS_FETCH).useValue(opts.smsFetch);
     if (opts.dnsLookup) builder = builder.overrideProvider(DNS_LOOKUP).useValue(opts.dnsLookup);
+    if (opts.googleFetch)
+      builder = builder.overrideProvider(GOOGLE_FETCH).useValue(opts.googleFetch);
     const moduleRef = await builder.compile();
     const app = moduleRef.createNestApplication<NestExpressApplication>({
       bodyParser: false,

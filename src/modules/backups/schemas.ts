@@ -156,3 +156,98 @@ BackupRestoreSchema.index(
   { lockKey: 1 },
   { unique: true, partialFilterExpression: { lockKey: { $type: 'string' } } },
 );
+
+/** A "Download your data" ZIP (ADR 0021): made by the worker, kept 7 days. */
+export interface BackupExport {
+  orgId: Types.ObjectId;
+  status: 'running' | 'ready' | 'failed' | 'expired';
+  key?: string;
+  size?: number;
+  counts?: Record<string, number>;
+  requestedBy: Actor;
+  startedAt: Date;
+  finishedAt?: Date;
+  /** The file is removed after this. */
+  expiresAt?: Date;
+  error?: string;
+  downloads: number;
+  /** Set while it is being made: one at a time per business. */
+  lockKey?: string;
+}
+export type BackupExportDoc = WithId<BackupExport>;
+
+export const BackupExportSchema = platformSchema<BackupExport>(
+  {
+    orgId: { type: Schema.Types.ObjectId, required: true },
+    status: { type: String, enum: ['running', 'ready', 'failed', 'expired'], required: true },
+    key: String,
+    size: Number,
+    counts: { type: Schema.Types.Mixed },
+    requestedBy: actor,
+    startedAt: { type: Date, required: true },
+    finishedAt: Date,
+    expiresAt: Date,
+    error: String,
+    downloads: { type: Number, default: 0 },
+    lockKey: String,
+  },
+  { collection: 'backup_exports', minimize: false },
+);
+BackupExportSchema.index({ orgId: 1, startedAt: -1 });
+BackupExportSchema.index({ status: 1, expiresAt: 1 });
+BackupExportSchema.index(
+  { lockKey: 1 },
+  { unique: true, partialFilterExpression: { lockKey: { $type: 'string' } } },
+);
+
+/** A business's Google Drive connection for daily copies (ADR 0021). One per business. */
+export interface DriveConnection {
+  orgId: Types.ObjectId;
+  status: 'connected' | 'reconnect';
+  email: string;
+  folderId: string;
+  folderName: string;
+  refreshTokenEnc: string;
+  connectedBy: Actor;
+  connectedAt: Date;
+  enabled: boolean;
+  /** Copies kept in the folder. */
+  keep: number;
+  lastAttemptAt?: Date;
+  lastSuccessAt?: Date;
+  lastError?: string;
+  /** Failed attempts since `failures.slot` (the day's 04:00). */
+  failures?: { slot: Date; count: number };
+  lastFile?: { id: string; name: string; size: number; at: Date };
+  /** Set while a copy is being made. */
+  busyUntil?: Date;
+  /** When the sweep queued a copy (so the next sweep does not queue it again). */
+  queuedAt?: Date;
+  reconnectMailedAt?: Date;
+}
+export type DriveConnectionDoc = WithId<DriveConnection>;
+
+export const DriveConnectionSchema = platformSchema<DriveConnection>(
+  {
+    orgId: { type: Schema.Types.ObjectId, required: true },
+    status: { type: String, enum: ['connected', 'reconnect'], required: true },
+    email: { type: String, default: '' },
+    folderId: { type: String, required: true },
+    folderName: { type: String, required: true },
+    refreshTokenEnc: { type: String, required: true },
+    connectedBy: actor,
+    connectedAt: { type: Date, required: true },
+    enabled: { type: Boolean, default: true },
+    keep: { type: Number, default: 7, min: 1, max: 30 },
+    lastAttemptAt: Date,
+    lastSuccessAt: Date,
+    lastError: String,
+    failures: { slot: Date, count: Number },
+    lastFile: { id: String, name: String, size: Number, at: Date },
+    busyUntil: Date,
+    queuedAt: Date,
+    reconnectMailedAt: Date,
+  },
+  { collection: 'drive_connections', minimize: false },
+);
+DriveConnectionSchema.index({ orgId: 1 }, { unique: true });

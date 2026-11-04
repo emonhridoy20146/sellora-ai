@@ -473,13 +473,21 @@ export const mailTemplates = {
 
   dataRestored(
     locale: Locale,
-    p: { businessName: string; parts: string; backupAt: string; reason: string; url: string },
+    p: {
+      businessName: string;
+      parts: string;
+      backupAt: string;
+      reason: string;
+      url: string;
+      /** Who restored it, when it was the business's own staff (else Sellora support). */
+      by?: string;
+    },
   ): RenderedMail {
     return locale === 'bn'
       ? render(
           `${p.businessName}: ব্যাকআপ থেকে ডেটা ফেরানো হয়েছে`,
           [
-            `Sellora সাপোর্ট ${p.businessName}-এর এই অংশগুলো ${p.backupAt}-এর ব্যাকআপ থেকে ফিরিয়েছে: ${p.parts}।`,
+            `${p.by ?? 'Sellora সাপোর্ট'} ${p.businessName}-এর এই অংশগুলো ${p.backupAt}-এর ব্যাকআপ থেকে ফিরিয়েছে: ${p.parts}।`,
             `কারণ: ${p.reason}`,
             'ফেরানোর আগে এখনকার ডেটার একটি নিরাপত্তা ব্যাকআপ নেওয়া হয়েছে, ৩০ দিন রাখা হবে। কিছু ভুল মনে হলে সাপোর্টকে জানান।',
           ],
@@ -488,11 +496,31 @@ export const mailTemplates = {
       : render(
           `${p.businessName}: data restored from a backup`,
           [
-            `Sellora support restored these parts of ${p.businessName} from the backup of ${p.backupAt}: ${p.parts}.`,
+            `${p.by ?? 'Sellora support'} restored these parts of ${p.businessName} from the backup of ${p.backupAt}: ${p.parts}.`,
             `Reason: ${p.reason}`,
             'Before the restore, a safety backup of the data as it was has been taken and is kept for 30 days. If anything looks wrong, tell support.',
           ],
           { label: 'Open the dashboard', url: p.url },
+        );
+  },
+
+  driveReconnect(locale: Locale, p: { businessName: string; email: string; url: string }): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.businessName}: Google Drive আবার সংযোগ করুন`,
+          [
+            `Sellora আর ${p.email} Google Drive-এ ${p.businessName}-এর দৈনিক কপি রাখতে পারছে না: Google বলছে অনুমতি সরানো হয়েছে বা মেয়াদ শেষ।`,
+            'সেটিংস › ব্যাকআপ থেকে Google Drive আবার সংযোগ করুন। তার আগ পর্যন্ত কোনো নতুন কপি যাবে না।',
+          ],
+          { label: 'ব্যাকআপ খুলুন', url: p.url },
+        )
+      : render(
+          `${p.businessName}: reconnect Google Drive`,
+          [
+            `Sellora can no longer save ${p.businessName}'s daily copy to the Google Drive of ${p.email}: Google says the access was removed or has expired.`,
+            'Connect Google Drive again in Settings › Backups. Until then no new copies are saved.',
+          ],
+          { label: 'Open backups', url: p.url },
         );
   },
 };
