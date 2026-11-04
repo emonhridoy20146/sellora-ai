@@ -14,6 +14,7 @@ import { MetaCoreModule } from './modules/meta/meta.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
 import { SmsCoreModule } from './modules/sms/sms.module.js';
 import { StoresCoreModule } from './modules/stores/stores.module.js';
+import { TelegramCoreModule } from './modules/telegram/telegram.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { AiProcessor } from './workers/ai.processor.js';
 import { BackupsProcessor } from './workers/backups.processor.js';
@@ -25,6 +26,7 @@ import { MaintenanceProcessor } from './workers/maintenance.processor.js';
 import { MediaProcessor } from './workers/media.processor.js';
 import { OutboxProcessor } from './workers/outbox.processor.js';
 import { SmsProcessor } from './workers/sms.processor.js';
+import { TelegramProcessor } from './workers/telegram.processor.js';
 import { WebhooksProcessor } from './workers/webhooks.processor.js';
 
 @Module({})
@@ -47,6 +49,7 @@ export class WorkerModule {
         CartsCoreModule,
         CampaignsCoreModule,
         BackupsCoreModule,
+        TelegramCoreModule,
       ],
       providers: [
         MailProcessor,
@@ -60,6 +63,7 @@ export class WorkerModule {
         CartsProcessor,
         CampaignsProcessor,
         BackupsProcessor,
+        TelegramProcessor,
         // Messages that arrive by webhook are stored here, so AI replies are scheduled here too.
         AiRepliesListener,
       ],

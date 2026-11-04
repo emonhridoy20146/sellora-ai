@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Types, type Model } from 'mongoose';
+import { PLATFORM_ALERT, type PlatformAlertEvent } from '../../../common/alerts/platform-alert.js';
 import { AppConfig } from '../../../config/app-config.js';
 import { RequestContext } from '../../../common/context/request-context.js';
 import { randomToken } from '../../../common/crypto/tokens.js';
@@ -258,6 +259,14 @@ export class PaymentsService {
           },
         },
       );
+      this.alertFailed({
+        gateway: input.gateway,
+        purpose: input.purpose,
+        amountMinor: input.amountMinor,
+        currency: wallet.currency,
+        orgId,
+        reason: `the checkout could not be opened (${reason})`,
+      });
       throw new AppError(
         'gateway_error',
         502,
@@ -463,6 +472,14 @@ export class PaymentsService {
               gateway: payment.gateway,
             },
           });
+          this.alertFailed({
+            gateway: payment.gateway,
+            purpose: payment.purpose,
+            amountMinor: payment.amountMinor,
+            currency: payment.currency,
+            orgId: payment.orgId.toHexString(),
+            reason: 'the provider reported another amount or currency (held for review)',
+          });
           return { payment: (await this.payments.findById(payment._id))!, applied: false };
         }
         const updated = await this.payments.findOneAndUpdate(
@@ -544,14 +561,52 @@ export class PaymentsService {
     raw: Record<string, unknown>,
     source: string,
   ): Promise<PaymentDoc | null> {
-    await this.payments.updateOne(
+    const res = await this.payments.updateOne(
       { _id: id, status: 'pending' },
       {
         $set: { status, failureReason: reason },
         $push: { events: { at: new Date(), type: `${source}:${status}`, data: raw } },
       },
     );
-    return this.payments.findById(id);
+    const payment = await this.payments.findById(id);
+    // A payer closing the checkout is not a failure worth an alert.
+    if (res.modified && status === 'failed' && payment)
+      this.alertFailed({
+        gateway: payment.gateway,
+        purpose: payment.purpose,
+        amountMinor: payment.amountMinor,
+        currency: payment.currency,
+        orgId: payment.orgId.toHexString(),
+        reason,
+      });
+    return payment;
+  }
+
+  /** Tells the platform's owners about a failed payment (ADR 0022); grouped for 30 minutes. */
+  private alertFailed(p: {
+    gateway: string;
+    purpose: Payment['purpose'];
+    amountMinor: number;
+    currency: string;
+    orgId: string;
+    reason: string;
+  }): void {
+    const event: PlatformAlertEvent = {
+      topic: 'billing',
+      key: 'payment-failed',
+      level: 'warning',
+      title: 'A payment failed',
+      lines: [
+        `${formatMoney(p.amountMinor, p.currency)} ${p.purpose === 'subscription' ? 'subscription' : 'wallet top-up'} through ${p.gateway}`,
+        `Reason: ${p.reason}`,
+        `Business ${p.orgId}`,
+      ],
+    };
+    try {
+      this.events.emit(PLATFORM_ALERT, event);
+    } catch (err) {
+      this.logger.warn({ err }, 'Payment alert not sent');
+    }
   }
 
   // ---------------------------------------------------------------- gateway callbacks

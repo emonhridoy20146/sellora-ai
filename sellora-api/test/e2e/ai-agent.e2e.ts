@@ -813,6 +813,40 @@ describe('AI sales agent', () => {
         mode: 'paused',
         reason: 'ai_error',
       });
+
+      // Both errors count toward the owners' AI error alert, and the handover is counted for
+      // their reports (ADR 0022).
+      const window = 15 * 60_000;
+      const counted = async () => {
+        const b = Math.floor(Date.now() / window);
+        const [now, before] = await Promise.all([
+          t.redis.get(`tg-count:ai_error:${b}`),
+          t.redis.get(`tg-count:ai_error:${b - 1}`),
+        ]);
+        return Number(now ?? 0) + Number(before ?? 0);
+      };
+      const handovers = async () =>
+        (await t.db.collection('platform_counts').find({ name: 'handovers' }).toArray()).reduce(
+          (n, r) => n + (r.count as number),
+          0,
+        );
+      for (let i = 0; i < 40 && ((await counted()) < 2 || (await handovers()) < 1); i++)
+        await new Promise((r) => setTimeout(r, 50));
+      expect(await counted()).toBeGreaterThanOrEqual(2);
+      expect(await handovers()).toBeGreaterThanOrEqual(1);
+    });
+
+    it('alerts the owners at once when the provider refuses the key', async () => {
+      const v = await visitor();
+      const id = await v.say('hello again');
+      ai.then(FakeAnthropic.error(401, 'authentication_error'));
+      await run(v.conversationId, id, true).catch(() => undefined);
+      let held: string | null = null;
+      for (let i = 0; i < 40 && !held; i++) {
+        held = await t.redis.get('tg-alert:ai-provider-auth-anthropic');
+        if (!held) await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(held).not.toBeNull();
     });
 
     it('hands over when the model declines to answer', async () => {

@@ -103,6 +103,7 @@ export class BillingSeeder implements OnApplicationBootstrap {
   ],
   exports: [
     BillingJobsService,
+    PlatformBillingService,
     EntitlementsService,
     CreditsService,
     WalletService,

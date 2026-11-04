@@ -16,6 +16,7 @@ export const PLATFORM_PERMISSIONS = {
   'platform.audit.view': 'View platform and tenant audit logs',
   'platform.support.manage': 'Handle support tickets and live chat',
   'platform.backups.manage': 'Download and restore backups',
+  'platform.telegram.manage': 'Choose the Telegram chats that get owner reports and alerts',
   'platform.impersonate': 'Open a business in read-only support mode',
 } as const;
 

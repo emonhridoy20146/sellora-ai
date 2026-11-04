@@ -18,6 +18,8 @@ export const QUEUES = {
   carts: 'carts',
   /** SMS campaigns and automations: a sweep every 30 seconds. */
   campaigns: 'campaigns',
+  /** Owner reports and alerts on Telegram, and the bot's command replies (ADR 0022). */
+  telegram: 'telegram',
   maintenance: 'maintenance',
 } as const;
 

@@ -20,6 +20,7 @@ import { COURIER_FETCH } from '../../src/modules/couriers/courier.types.js';
 import { SMS_FETCH } from '../../src/modules/sms/sms.types.js';
 import { DNS_LOOKUP, type DnsLookup } from '../../src/modules/stores/dns-lookup.js';
 import { GOOGLE_FETCH } from '../../src/modules/backups/google-drive.js';
+import { TELEGRAM_FETCH } from '../../src/infra/telegram/telegram.client.js';
 import { REDIS } from '../../src/infra/redis/redis.module.js';
 import type { Redis } from 'ioredis';
 import { testEnv } from './env.js';
@@ -70,6 +71,8 @@ export class TestApp {
       dnsLookup?: DnsLookup;
       /** Replaces the fetch the Google Drive client uses, so tests can play Google's part. */
       googleFetch?: typeof fetch;
+      /** Replaces the fetch the Telegram client uses, so tests can play Telegram's part. */
+      telegramFetch?: typeof fetch;
     } = {},
   ): Promise<TestApp> {
     const env = testEnv(overrides);
@@ -87,6 +90,8 @@ export class TestApp {
     if (opts.dnsLookup) builder = builder.overrideProvider(DNS_LOOKUP).useValue(opts.dnsLookup);
     if (opts.googleFetch)
       builder = builder.overrideProvider(GOOGLE_FETCH).useValue(opts.googleFetch);
+    if (opts.telegramFetch)
+      builder = builder.overrideProvider(TELEGRAM_FETCH).useValue(opts.telegramFetch);
     const moduleRef = await builder.compile();
     const app = moduleRef.createNestApplication<NestExpressApplication>({
       bodyParser: false,

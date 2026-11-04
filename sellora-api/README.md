@@ -141,6 +141,12 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
   on: set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`. Without them the Drive card
   says it is not set up. To try it locally, run `node scripts/google-stand-in.mjs` and set the
   `GOOGLE_*` URLs it prints in its header (it is not Google).
+- Owner reports and alerts on Telegram (ADR 0022): create a bot with @BotFather and set
+  `TELEGRAM_BOT_TOKEN` on the API and the worker. In Admin › Telegram press "Connect" (real
+  Telegram needs `API_PUBLIC_URL` to be a public HTTPS address), then "Link a chat". Without a
+  token the page says it is not set up and alerts are emailed to the platform owners. To try
+  it locally, run `node scripts/telegram-stand-in.mjs` and set the two `TELEGRAM_*` lines in its
+  header (it is not Telegram).
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -166,6 +172,7 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
 | `node scripts/dns-stand-in.mjs`                               | DNS server on 127.0.0.1:5300 for trying custom domains with made-up names; records are set over HTTP on :4050 (not a DNS provider or resolver).                                                                              |
 | `node scripts/sms-stand-in.mjs`                               | Stand-in for the BulkSMSBD and Alpha SMS APIs with an inbox page, for local demos without SMS accounts (not an SMS gateway).                                                                                                 |
 | `node scripts/google-stand-in.mjs`                            | Stand-in for Google's sign-in and Google Drive with a consent page and a Drive page, for trying Drive backups without a Google client (not Google).                                                                          |
+| `node scripts/telegram-stand-in.mjs`                          | Stand-in for the Telegram Bot API with a page of chats you can type in, for trying owner reports, alerts and commands without a bot (not Telegram).                                                                          |
 
 ## Tests
 

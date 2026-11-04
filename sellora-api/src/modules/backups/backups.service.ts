@@ -1,5 +1,6 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import type { Queue } from 'bullmq';
 import type { Redis } from 'ioredis';
@@ -11,6 +12,7 @@ import { join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { Types, type Connection, type Model, type mongo } from 'mongoose';
+import { PLATFORM_ALERT, type PlatformAlertEvent } from '../../common/alerts/platform-alert.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { AppConfig } from '../../config/app-config.js';
 import { MailService } from '../../infra/mail/mail.service.js';
@@ -147,10 +149,20 @@ export class BackupsService {
     @InjectQueue(QUEUES.backups) private readonly queue: Queue,
     private readonly signer: UrlSigner,
     @Inject(REDIS) private readonly redis: Redis,
+    private readonly events: EventEmitter2,
   ) {}
 
   private get db(): mongo.Db {
     return this.connection.db!;
+  }
+
+  /** Tells the platform's owners (Telegram or email, ADR 0022). Never throws. */
+  private alert(event: PlatformAlertEvent): void {
+    try {
+      this.events.emit(PLATFORM_ALERT, event);
+    } catch (err) {
+      this.logger.warn({ err }, 'Backup alert not sent');
+    }
   }
 
   // ---------------------------------------------------------------- settings
@@ -245,7 +257,7 @@ export class BackupsService {
       .exec();
     for (const r of stuck) {
       if (r.key) await this.storage.delete(r.key).catch(() => undefined);
-      await this.runs.updateOne(
+      const res = await this.runs.updateOne(
         { _id: r._id, status: r.status },
         {
           $set: {
@@ -256,6 +268,17 @@ export class BackupsService {
           $unset: { lockKey: 1, leaseUntil: 1 },
         },
       );
+      if (res.modifiedCount && r.scope === 'platform')
+        this.alert({
+          topic: 'backups',
+          key: 'backup-failed',
+          level: 'critical',
+          title: 'A platform backup failed',
+          lines: [
+            'The server stopped while the backup was being made.',
+            `Started ${r.startedAt.toISOString()} (${r.reason}).`,
+          ],
+        });
     }
     return stuck.length;
   }
@@ -500,7 +523,17 @@ export class BackupsService {
         $unset: { lockKey: 1, leaseUntil: 1 },
       },
     );
-    return this.require(id.toHexString());
+    const dto = await this.require(id.toHexString());
+    // A business's own restore point failing is shown on its page; the platform's is an alert.
+    if (dto.scope === 'platform')
+      this.alert({
+        topic: 'backups',
+        key: 'backup-failed',
+        level: 'critical',
+        title: 'A platform backup failed or could not be verified',
+        lines: [`Reason: ${message}`, `Started ${dto.startedAt} (${dto.reason}).`],
+      });
+    return dto;
   }
 
   /**
@@ -593,6 +626,16 @@ export class BackupsService {
         { _id: id },
         { $set: { offsite: { at: new Date(), ok: false, error: describe(err) } } },
       );
+      this.alert({
+        topic: 'backups',
+        key: 'backup-offsite',
+        level: 'warning',
+        title: 'The off-site copy of a backup failed',
+        lines: [
+          `Reason: ${describe(err)}`,
+          `Backup ${id.toHexString()}; the copy on this server is fine.`,
+        ],
+      });
     } finally {
       await rm(temp, { force: true });
     }
@@ -713,6 +756,14 @@ export class BackupsService {
       );
     } catch (err) {
       this.logger.error({ err, runId: id }, 'Test restore failed');
+      if (run.scope === 'platform')
+        this.alert({
+          topic: 'backups',
+          key: 'backup-test-restore',
+          level: 'critical',
+          title: 'A test restore of a platform backup failed',
+          lines: [`Reason: ${describe(err)}`, `Backup ${id}, made ${run.startedAt.toISOString()}.`],
+        });
       await this.runs.updateOne(
         { _id: run._id },
         {

@@ -150,8 +150,13 @@ export const envSchema = z
 
     METRICS_TOKEN: z.string().min(16).optional(),
 
-    TELEGRAM_BOT_TOKEN: z.string().optional(),
-    TELEGRAM_CHAT_ID: z.string().optional(),
+    /** The bot that sends owner reports and alerts (ADR 0022), from @BotFather. Secret. */
+    TELEGRAM_BOT_TOKEN: z
+      .string()
+      .regex(/^\d+:[A-Za-z0-9_-]{20,}$/, 'Expected a bot token like 123456:ABC…')
+      .optional(),
+    /** Telegram's Bot API; a stand-in can play it locally. */
+    TELEGRAM_API_URL: z.url().default('https://api.telegram.org'),
 
     WEBCHAT_TOKEN_SECRET: z.string().min(32).optional(),
 

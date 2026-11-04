@@ -1,13 +1,21 @@
 import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import {
+  PLATFORM_ALERT,
+  PLATFORM_SIGNAL,
+  type PlatformAlertEvent,
+  type PlatformSignalEvent,
+} from '../../../common/alerts/platform-alert.js';
 import type { ModelTier } from '../../billing/credit-schemas.js';
 import { CreditsService } from '../../billing/credits.service.js';
 import { AiProviders } from '../provider/ai-providers.service.js';
-import type {
-  AiEffort,
-  AiMessage,
-  AiToolResult,
-  AiToolSpec,
-  AiTurnResult,
+import {
+  AiProviderError,
+  type AiEffort,
+  type AiMessage,
+  type AiToolResult,
+  type AiToolSpec,
+  type AiTurnResult,
 } from '../provider/ai-provider.js';
 import { AgentTools, type HandoverReason, type ToolRunContext } from './agent-tools.js';
 import { imageTokens } from './agent-images.js';
@@ -69,7 +77,39 @@ export class AgentRunner {
     private readonly credits: CreditsService,
     private readonly providers: AiProviders,
     private readonly tools: AgentTools,
+    private readonly events: EventEmitter2,
   ) {}
+
+  /**
+   * Tells the platform's owners when the provider fails (ADR 0022): a refused or missing key
+   * at once, other errors counted toward a spike. Never throws.
+   */
+  private reportProviderError(err: unknown, provider: string): void {
+    if (!(err instanceof AiProviderError)) return;
+    try {
+      if (err.kind === 'auth' || err.kind === 'not_configured') {
+        const alert: PlatformAlertEvent = {
+          topic: 'ai',
+          key: `ai-provider-${err.kind}-${provider}`,
+          level: 'critical',
+          title:
+            err.kind === 'auth'
+              ? `The ${provider} AI provider refused Sellora's key`
+              : `The ${provider} AI provider is not set up`,
+          lines: [err.message, 'AI replies hand chats to the team until this is fixed.'],
+        };
+        this.events.emit(PLATFORM_ALERT, alert);
+      } else {
+        const signal: PlatformSignalEvent = {
+          kind: 'ai_error',
+          detail: `${provider}: ${err.kind}${err.status ? ` (${err.status})` : ''}`,
+        };
+        this.events.emit(PLATFORM_SIGNAL, signal);
+      }
+    } catch {
+      // Alerts never break a reply.
+    }
+  }
 
   /** The catalogue model replies use for a tier (throws when none is enabled). */
   modelFor(tier: ModelTier) {
@@ -78,7 +118,13 @@ export class AgentRunner {
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
     const model = await this.credits.modelForTier(input.tier);
-    const provider = this.providers.get(model.provider);
+    let provider: ReturnType<AiProviders['get']>;
+    try {
+      provider = this.providers.get(model.provider);
+    } catch (err) {
+      this.reportProviderError(err, model.provider);
+      throw err;
+    }
     const messages = [...input.messages];
     const toolsSize = estimateTokens(JSON.stringify(input.tools));
     const systemSize = estimateTokens(input.system);
@@ -115,6 +161,7 @@ export class AgentRunner {
         });
       } catch (err) {
         await this.credits.release(requestId);
+        this.reportProviderError(err, model.provider);
         throw err;
       }
       // Billed against the catalogue entry that was asked for, whatever alias the provider reports.
