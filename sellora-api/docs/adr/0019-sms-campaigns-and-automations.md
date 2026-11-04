@@ -69,6 +69,9 @@ campaign brought orders.
     automation text in the last 24 hours waits a day (and is skipped after three days). Purpose
     `automation` (a marketing purpose: opt-outs apply, stop link added). Keys
     `auto:after_delivery:<order>` and `auto:win_back:<customer>:<last order time>`.
+- **Language.** Automations start with default texts in the business's language. Switching the
+  language swaps a text only while it is still Sellora's default; a text the business wrote
+  stays. The stop line follows the text's own language (Bangla letters make a Bangla text).
 - **Plan and roles.** Campaigns and automations need the `marketing` module; marketing
   managers create, send and switch; marketing viewers look. Starting, cancelling a campaign
   and changing an automation are in the audit log.
