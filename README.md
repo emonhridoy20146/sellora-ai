@@ -334,6 +334,27 @@ again. Needs the admin credentials as well:
 node scripts/carts-flow.mjs
 ```
 
+### Campaign and automation browser flow
+
+`scripts/campaigns-flow.mjs` needs the same as carts-flow (Sellora SMS ready for the demo
+shop, the SMS stand-in, the live store and the storefront on :3100), and must run between
+9 AM and 9 PM in the business's time zone, because campaigns only go out then. It adds three
+customers with a new tag (one of them asked to stop) and opens Marketing › Campaigns. A new
+campaign to that tag shows "2 get the text"; a placeholder the campaign cannot use is refused
+while typing; picking a product adds `{link}`, and the preview shows the stop link and the
+price. A test text arrives at the stand-in with a real short link. The campaign is scheduled
+for tomorrow at 10 AM and cancelled; its copy is sent now, and only the two reachable numbers
+get it. One customer opens the short link on a phone, lands on the product and orders; the
+report counts the click and the order. On Marketing › Automations the thank-you after delivery
+gets a store link and is switched on, the language switch swaps the default texts (and not
+the business's own), and delivering the customer's order plans the thank-you. Screenshots go
+to `smoke-output/campaigns/`. It switches the automations off at the end; the customers it
+added and the delivered order stay. Needs the admin credentials as well:
+
+```bash
+node scripts/campaigns-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from

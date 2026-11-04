@@ -1,62 +1,30 @@
 'use client';
 
-import { Lock, ShoppingCart } from 'lucide-react';
-import Link from 'next/link';
 import { CartsCard } from '@/components/carts/carts-card';
 import { useCartSettings, useCartSummary } from '@/components/carts/data';
 import { CartSettingsCard } from '@/components/carts/settings-card';
+import { MarketingHeader } from '@/components/campaigns/marketing-header';
 import { PageError } from '@/components/commerce/page-error';
 import { useOrg } from '@/components/org-context';
-import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
-import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Stat } from '@/components/ui/stat';
 import { formatMoney, formatNumber } from '@/lib/format';
 
 /**
  * Marketing › Abandoned carts: the last 30 days in numbers, the reminder settings, and every
- * saved cart with its reminders. Marketing viewers may look; marketing managers change things.
+ * saved cart with its reminders. Marketing viewers may look; marketing managers change things
+ * (the marketing layout checks the role and the plan).
  */
 export default function AbandonedCartsPage() {
-  const { org, can, modules } = useOrg();
+  const { org, can } = useOrg();
   const editable = can('marketing.manage');
-  const visible = editable || can('marketing.view');
-  const inPlan = modules === null || modules.includes('marketing');
-  const settings = useCartSettings(org.id, visible && inPlan);
-  const summary = useCartSummary(org.id, visible && inPlan);
-
-  if (!visible)
-    return (
-      <EmptyState icon={ShoppingCart} title="Your role does not include marketing">
-        Ask the business owner to give your role access to marketing.
-      </EmptyState>
-    );
-  if (!inPlan)
-    return (
-      <EmptyState
-        icon={Lock}
-        title="Abandoned cart reminders are not in your plan"
-        action={
-          can('billing.view') && (
-            <Button asChild>
-              <Link href={`/app/${org.id}/billing/plans`}>See plans</Link>
-            </Button>
-          )
-        }
-      >
-        Upgrade to text shoppers who leave a phone number but do not order, with a link back to
-        their cart.
-      </EmptyState>
-    );
+  const settings = useCartSettings(org.id);
+  const summary = useCartSummary(org.id);
 
   const sm = summary.data;
   return (
     <>
-      <PageHeader
-        title="Abandoned carts"
-        description="Shoppers who typed a phone number and left without ordering, and the reminders that bring them back."
-      />
+      <MarketingHeader />
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Stat
           label="Carts left, 30 days"

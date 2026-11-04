@@ -110,6 +110,7 @@ export const PURPOSE_LABEL: Record<SmsPurpose, string> = {
   test: 'Test',
   cart_recovery: 'Cart reminder',
   campaign: 'Campaign',
+  automation: 'Automation',
 };
 
 export const STATUS_LABEL: Record<

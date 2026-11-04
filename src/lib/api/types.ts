@@ -1791,7 +1791,8 @@ export type SmsPurpose =
   | 'order_cancelled'
   | 'test'
   | 'cart_recovery'
-  | 'campaign';
+  | 'campaign'
+  | 'automation';
 export type SmsFailure =
   | 'rejected'
   | 'auth'
@@ -2139,4 +2140,212 @@ export interface CartSummary {
   smsSpentMinor: number;
   /** Recovered carts out of reminded ones (0–1), or null before the first reminder. */
   recoveryRate: number | null;
+}
+
+// ---------------------------------------------------------------- SMS campaigns (ADR 0019)
+
+export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'paused' | 'sent' | 'cancelled';
+export type CampaignPause = 'staff' | 'wallet' | 'sms_off' | 'not_in_plan' | 'invalid';
+export type CampaignWait = 'night' | 'daily_limit';
+export type LinkKind = 'none' | 'store' | 'landing_page' | 'product';
+
+/** Who a campaign goes to. Empty fields do not filter. */
+export interface CampaignAudience {
+  ordered: 'any' | 'ordered' | 'delivered';
+  minOrders?: number;
+  minSpentMinor?: number;
+  orderedWithinDays?: number;
+  noOrderForDays?: number;
+  tags?: string[];
+  sources?: string[];
+}
+
+/** Where {link} goes, as the editor sends it. */
+export interface LinkInput {
+  kind: LinkKind;
+  storeId?: string;
+  targetId?: string;
+}
+
+export interface CampaignLink {
+  kind: LinkKind;
+  label: string | null;
+  storeId: string | null;
+  targetId: string | null;
+  path: string | null;
+  /** The real short link, once the first text (or test) went out. */
+  url: string | null;
+  clicks: number;
+  lastClickAt: IsoDate | null;
+}
+
+export interface AudienceCount {
+  customers: number;
+  optedOut: number;
+  unreachable: number;
+  recipients: number;
+}
+
+export interface MarketingPreview {
+  text: string;
+  parts: number;
+  encoding: 'gsm7' | 'unicode';
+  language: Locale;
+}
+
+export interface CampaignCounts {
+  recipients: number;
+  queued: number;
+  optedOut: number;
+  unreachable: number;
+}
+
+export interface CampaignSummary {
+  id: string;
+  name: string;
+  status: CampaignStatus;
+  text: string;
+  link: { kind: LinkKind; label: string | null };
+  scheduledAt: IsoDate | null;
+  startedAt: IsoDate | null;
+  finishedAt: IsoDate | null;
+  pause: { reason: CampaignPause; at: IsoDate } | null;
+  wait: { reason: CampaignWait; until: IsoDate } | null;
+  counts: CampaignCounts;
+  orders: { count: number; revenueMinor: number };
+  estimate: {
+    recipients: number;
+    parts: number;
+    pricePerPartMinor: number;
+    totalMinor: number;
+    currency: string;
+  } | null;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export interface Campaign extends Omit<CampaignSummary, 'link'> {
+  audience: CampaignAudience;
+  link: CampaignLink;
+  preview: MarketingPreview;
+  cancelledAt: IsoDate | null;
+  /** Recipients handled so far (0–1). */
+  progress: number;
+  messages: { byStatus: Record<SmsMessageStatus, number>; spentMinor: number };
+  /** Recipients who pressed stop after the campaign started. */
+  stopped: number;
+  testsLeft: number;
+}
+
+export interface CampaignOptions {
+  included: boolean;
+  timezone: string;
+  currency: string;
+  stores: { id: string; name: string; url: string; status: string }[];
+  landingPages: { id: string; name: string; slug: string; storeId: string }[];
+  tags: string[];
+  sources: string[];
+  placeholders: { key: string; label: string }[];
+  maxChars: number;
+  maxParts: number;
+  maxTests: number;
+  sendWindow: { startHour: number; endHour: number };
+  stopSuffix: Record<Locale, string>;
+  sampleNames: Record<Locale, string>;
+  shopName: string;
+  sms:
+    | { mode: string; ready: false; message: string }
+    | {
+        mode: string;
+        ready: true;
+        providerName: string;
+        pricePerPartMinor: number;
+        currency: string;
+        reach: 'bd_mobile' | 'any';
+      };
+  wallet: { cashMinor: number; currency: string };
+  daily: { limit: number; sentToday: number; left: number };
+}
+
+export interface CampaignRecipient {
+  id: string;
+  customerId: string;
+  name: string;
+  phone: string;
+  status: 'pending' | 'queued' | 'skipped';
+  skip: 'opted_out' | 'unreachable' | 'off' | 'cancelled' | null;
+  queuedAt: IsoDate | null;
+  message: {
+    id: string;
+    status: SmsMessageStatus;
+    parts: number;
+    priceMinor: number;
+    currency: string;
+    error: string | null;
+  } | null;
+  order: { id: string; number: string; totalMinor: number; at: IsoDate } | null;
+}
+
+export type AutomationKind = 'after_delivery' | 'win_back';
+export type AutomationSkip =
+  | 'off'
+  | 'not_in_plan'
+  | 'returned'
+  | 'opted_out'
+  | 'late'
+  | 'no_phone'
+  | 'ordered_again'
+  | 'blocked'
+  | 'link_gone';
+
+export interface Automation {
+  kind: AutomationKind;
+  enabled: boolean;
+  days: number;
+  dayChoices: number[];
+  text: string;
+  defaultText: string;
+  placeholders: { key: string; label: string }[];
+  link: CampaignLink & { problem: string | null };
+  enabledAt: IsoDate | null;
+  preview: MarketingPreview;
+  last30Days: {
+    planned: number;
+    sent: number;
+    skipped: number;
+    messages: { byStatus: Record<SmsMessageStatus, number>; spentMinor: number };
+    orders: { count: number; revenueMinor: number };
+  };
+}
+
+export interface AutomationSettings {
+  included: boolean;
+  language: Locale;
+  sendWindow: { startHour: number; endHour: number };
+  gapHours: number;
+  maxLateDays: number;
+  maxChars: number;
+  maxParts: number;
+  sms:
+    | { mode: string; ready: false; message: string }
+    | { mode: string; ready: true; pricePerPartMinor: number; currency: string };
+  after_delivery: Automation;
+  win_back: Automation;
+}
+
+export interface AutomationSend {
+  id: string;
+  kind: AutomationKind;
+  customerId: string | null;
+  orderId: string | null;
+  orderNumber: string | null;
+  name: string;
+  phone: string;
+  status: 'pending' | 'sent' | 'skipped';
+  skip: AutomationSkip | null;
+  dueAt: IsoDate;
+  sentAt: IsoDate | null;
+  message: CampaignRecipient['message'];
+  order: CampaignRecipient['order'];
+  createdAt: IsoDate;
 }

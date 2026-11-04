@@ -18,7 +18,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={label}
-      className="inline-flex rounded-lg border bg-muted p-0.5"
+      className="inline-flex w-fit max-w-full overflow-x-auto rounded-lg border bg-muted p-0.5"
     >
       {options.map((o) => (
         <button
@@ -28,7 +28,7 @@ export function Segmented<T extends string>({
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            'rounded-md px-3 py-1 text-[13px] font-medium transition-colors',
+            'shrink-0 rounded-md px-3 py-1 text-[13px] font-medium whitespace-nowrap transition-colors',
             value === o.value
               ? 'bg-card text-foreground shadow-xs'
               : 'text-muted-foreground hover:text-foreground',

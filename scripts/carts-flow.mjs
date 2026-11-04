@@ -233,7 +233,8 @@ function phoneContext() {
 
 async function cartsPage() {
   await page.goto(`${BASE}${org}/marketing/carts`, { waitUntil: 'networkidle' });
-  await page.getByRole('heading', { name: 'Abandoned carts', level: 1 }).waitFor();
+  await page.getByRole('heading', { name: 'Marketing', level: 1 }).waitFor();
+  await page.locator('a[aria-current=page]', { hasText: 'Abandoned carts' }).waitFor();
 }
 
 async function showView(label) {
@@ -335,8 +336,15 @@ try {
   await step('Marketing › Abandoned carts, reminders off', async () => {
     await page.goto(`${BASE}${org}`, { waitUntil: 'networkidle' });
     await page.getByRole('link', { name: 'Marketing' }).click();
+    // Marketing opens on campaigns; cart reminders are the third tab.
+    await page.waitForURL('**/marketing/campaigns');
+    await page
+      .getByRole('navigation', { name: 'Sections' })
+      .getByRole('link', { name: 'Abandoned carts' })
+      .click();
     await page.waitForURL('**/marketing/carts');
-    await page.getByRole('heading', { name: 'Abandoned carts', level: 1 }).waitFor();
+    await page.getByRole('heading', { name: 'Marketing', level: 1 }).waitFor();
+    await page.locator('a[aria-current=page]', { hasText: 'Abandoned carts' }).waitFor();
     const sw = page.getByRole('switch', { name: 'Send cart reminders' });
     check((await sw.getAttribute('aria-checked')) === 'false', 'reminders are not off');
     await page.getByText(/Sent with .* per SMS part, from your wallet cash/).waitFor();
