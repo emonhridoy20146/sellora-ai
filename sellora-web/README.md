@@ -368,6 +368,21 @@ fresh code, and the business sees the product again. Each 2-step code works once
 waits for the next 30-second code each time. Screenshots go to `smoke-output/backups/`. It
 deletes its product at the end.
 
+### Merchant backups browser flow
+
+`scripts/merchant-backups-flow.mjs` needs the API and the worker, the demo business, and the
+Google stand-in (`node scripts/google-stand-in.mjs` in sellora-api, with the API's `GOOGLE_*`
+settings pointing at it; it is not Google). As the owner it opens Settings › Backups, prepares
+a download and saves the ZIP (products.csv must hold the product it added, the JSON files no
+secrets), connects Google Drive through the stand-in's consent page, waits for the worker's
+first copy in the stand-in's Drive and saves another with "Copy now", makes a restore point,
+deletes the product, previews and restores Products (a wrong password first, which must be
+refused), and disconnects Drive. Screenshots go to `smoke-output/merchant-backups/`.
+
+```bash
+node scripts/merchant-backups-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -421,8 +436,9 @@ queue, and the pages in `sellora-storefront`) on the same development addresses.
 but only against a stand-in for the SMS providers; no real SMS has been sent. Abandoned cart
 reminders work (M7 part 3: Marketing › Abandoned carts, with the settings, the 30-day numbers
 and every saved cart), through the same SMS stand-in, and so do campaigns and automations
-(M7 part 4). Platform backups work (M9 part 1: Admin › Backups and the restore section on a
-business's admin page); the merchant's own backups and Google Drive copies are not built yet.
+(M7 part 4). Backups work (M9: Admin › Backups and the restore section on a business's admin page, and
+the business's own Settings › Backups with downloads, restore points and Google Drive copies),
+with Google Drive tried only against a stand-in.
 Analytics appears in the merchant
 sidebar as a disabled "Soon" item. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.

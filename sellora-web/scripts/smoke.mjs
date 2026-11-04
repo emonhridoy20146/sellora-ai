@@ -135,6 +135,7 @@ try {
       ['/settings/channels', 'settings-channels'],
       ['/settings/couriers', 'settings-couriers'],
       ['/settings/sms', 'settings-sms'],
+      ['/settings/backups', 'settings-backups'],
       ['/inbox', 'inbox'],
       ['/ai-agent', 'ai-agent'],
       ['/orders', 'orders'],
