@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { TenantBackupsCard } from '@/components/backups/admin';
 import { INTERVAL_LABEL, LEDGER_LABEL } from '@/components/billing/labels';
 import { usePlatform } from '@/components/platform-context';
 import { StatusBadge } from '@/components/status-badge';
@@ -312,6 +313,7 @@ export default function TenantPage() {
               </>
             )
           ))}
+        {can('platform.backups.manage') && <TenantBackupsCard orgId={t.id} name={t.name} />}
       </div>
 
       <ConfirmDialog

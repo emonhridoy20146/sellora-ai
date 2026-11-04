@@ -2349,3 +2349,94 @@ export interface AutomationSend {
   order: CampaignRecipient['order'];
   createdAt: IsoDate;
 }
+
+// ---------------------------------------------------------------- backups (ADR 0020)
+
+export type BackupStatus = 'running' | 'verifying' | 'verified' | 'failed' | 'deleted';
+export type BackupTier = 'daily' | 'weekly' | 'monthly';
+export type RestorePart =
+  'products' | 'customers' | 'orders' | 'conversations' | 'landing_pages' | 'settings';
+
+export interface BackupActor {
+  type: 'platform' | 'user' | 'system';
+  id?: string;
+  label?: string;
+}
+
+export interface BackupRun {
+  id: string;
+  scope: 'platform' | 'tenant';
+  orgId: string | null;
+  reason: 'scheduled' | 'manual' | 'safety' | 'merchant';
+  status: BackupStatus;
+  tiers: BackupTier[];
+  size: number | null;
+  sha256: string | null;
+  docs: number | null;
+  counts: Record<string, number>;
+  startedAt: IsoDate;
+  finishedAt: IsoDate | null;
+  verifiedAt: IsoDate | null;
+  durationMs: number | null;
+  error: string | null;
+  testRestore: { at: IsoDate; ok: boolean; ms: number; error: string | null } | null;
+  testRestorePending: boolean;
+  offsite: { at: IsoDate; ok: boolean; error: string | null } | null;
+  startedBy: BackupActor | null;
+}
+
+export interface BackupSettings {
+  enabled: boolean;
+  hour: number;
+  timezone: string;
+  keep: { daily: number; weekly: number; monthly: number };
+  keyId: string;
+  offsiteConfigured: boolean;
+  parts: { part: RestorePart; label: string; collections: string[] }[];
+}
+
+export interface BackupDownloadLink {
+  url: string;
+  expiresAt: IsoDate;
+  filename: string;
+}
+
+export interface BackupRestore {
+  id: string;
+  orgId: string;
+  runId: string;
+  safetyRunId: string | null;
+  parts: RestorePart[];
+  status: 'running' | 'done' | 'failed';
+  reason: string;
+  by: BackupActor;
+  startedAt: IsoDate;
+  finishedAt: IsoDate | null;
+  restored: Record<string, number>;
+  removed: Record<string, number>;
+  error: string | null;
+}
+
+export interface TenantBackups {
+  points: BackupRun[];
+  restores: BackupRestore[];
+}
+
+export interface RestorePreviewRow {
+  collection: string;
+  inBackup: number;
+  now: number;
+  added: number;
+  replaced: number;
+  removed: number;
+}
+
+export interface RestorePreview {
+  run: BackupRun;
+  business: { id: string; name: string };
+  parts: (Omit<RestorePreviewRow, 'collection'> & {
+    part: RestorePart;
+    label: string;
+    collections: RestorePreviewRow[];
+  })[];
+}

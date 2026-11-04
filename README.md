@@ -355,6 +355,19 @@ added and the delivered order stay. Needs the admin credentials as well:
 node scripts/campaigns-flow.mjs
 ```
 
+### Backups browser flow
+
+`scripts/backups-flow.mjs` needs the API and the worker (the worker makes the files), the
+demo business and the platform admin details. It adds a product to the demo shop, opens
+Admin › Backups and presses "Back up now"; the backup must become Verified, and a test restore
+must pass. Downloading asks for a reason and a fresh 2-step code; the saved `.slbk` file must
+have the size and checksum the list shows and must not contain the product's name (it is
+encrypted). The business then deletes the product; on the business's admin page "See what
+would change" shows it coming back, Products are restored with the name typed and another
+fresh code, and the business sees the product again. Each 2-step code works once, so the flow
+waits for the next 30-second code each time. Screenshots go to `smoke-output/backups/`. It
+deletes its product at the end.
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -407,7 +420,10 @@ queue, and the pages in `sellora-storefront`) on the same development addresses.
 (M7 part 2: Settings › SMS, Admin › SMS, the order page's SMS list and the opt-out page `/u/…`),
 but only against a stand-in for the SMS providers; no real SMS has been sent. Abandoned cart
 reminders work (M7 part 3: Marketing › Abandoned carts, with the settings, the 30-day numbers
-and every saved cart), through the same SMS stand-in. Analytics appears in the merchant
+and every saved cart), through the same SMS stand-in, and so do campaigns and automations
+(M7 part 4). Platform backups work (M9 part 1: Admin › Backups and the restore section on a
+business's admin page); the merchant's own backups and Google Drive copies are not built yet.
+Analytics appears in the merchant
 sidebar as a disabled "Soon" item. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.
 

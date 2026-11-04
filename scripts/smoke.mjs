@@ -205,6 +205,7 @@ try {
       ['/admin/ai-pricing', 'ai-pricing'],
       ['/admin/gateways', 'gateways'],
       ['/admin/sms', 'sms'],
+      ['/admin/backups', 'backups'],
       ['/admin/admins', 'team'],
       ['/admin/settings', 'settings'],
       ['/admin/audit', 'audit'],
