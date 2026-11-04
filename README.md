@@ -88,20 +88,20 @@ sellora-web, and connecting a custom domain by `scripts/domains-flow.mjs` there.
 
 ## Pages
 
-| Path                          | What it shows                                                                          |
-| ----------------------------- | -------------------------------------------------------------------------------------- |
-| `/`                           | The home page sections the business arranged (hero, categories, products, features …). |
-| `/products`                   | All products, by category, search and sort, with pages.                                |
-| `/products/[slug]`            | Pictures, sizes and colours with live stock, add to cart.                              |
-| `/cart`, `/checkout`          | Cart (kept in the browser), then name, phone, address, delivery area and note.         |
-| `/order?receipt=…`            | The receipt after ordering (a signed token valid for 90 days).                         |
-| `/track`                      | Order tracking by order number and phone.                                              |
-| `/pages/[key]`                | The business's pages: about, delivery, returns, privacy, terms.                        |
-| `/[slug]`                     | A landing page: its sections, the order form, a sticky order button on phones.         |
-| `/[slug]/thanks?receipt=…`    | The thank-you page after a landing page order (signed receipt, never indexed).         |
-| `/r/[code]`                    | The link in a cart reminder SMS: puts the cart and the shopper's details back, then opens checkout or the landing page offer. Never indexed. |
-| `/c/[code]`                    | The short link in a campaign or automation SMS: the API counts the click, then the shopper goes to the store page, landing page or product with `utm_source=sms`. Never indexed. |
-| `/sitemap.xml`, `/robots.txt` | Per store, with its live landing pages; drafts and previews are never indexed.         |
+| Path                          | What it shows                                                                                                                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`                           | The home page sections the business arranged (hero, categories, products, features …).                                                                                           |
+| `/products`                   | All products, by category, search and sort, with pages.                                                                                                                          |
+| `/products/[slug]`            | Pictures, sizes and colours with live stock, add to cart.                                                                                                                        |
+| `/cart`, `/checkout`          | Cart (kept in the browser), then name, phone, address, delivery area and note.                                                                                                   |
+| `/order?receipt=…`            | The receipt after ordering (a signed token valid for 90 days).                                                                                                                   |
+| `/track`                      | Order tracking by order number and phone.                                                                                                                                        |
+| `/pages/[key]`                | The business's pages: about, delivery, returns, privacy, terms.                                                                                                                  |
+| `/[slug]`                     | A landing page: its sections, the order form, a sticky order button on phones.                                                                                                   |
+| `/[slug]/thanks?receipt=…`    | The thank-you page after a landing page order (signed receipt, never indexed).                                                                                                   |
+| `/r/[code]`                   | The link in a cart reminder SMS: puts the cart and the shopper's details back, then opens checkout or the landing page offer. Never indexed.                                     |
+| `/c/[code]`                   | The short link in a campaign or automation SMS: the API counts the click, then the shopper goes to the store page, landing page or product with `utm_source=sms`. Never indexed. |
+| `/sitemap.xml`, `/robots.txt` | Per store, with its live landing pages; drafts and previews are never indexed.                                                                                                   |
 
 A store that is not open yet shows "opening soon", a paused store shows a closed note, a
 suspended store shows "not available", and an address with no store shows a page saying so.
