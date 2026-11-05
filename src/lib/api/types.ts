@@ -665,6 +665,8 @@ export interface Product {
   priceRange: { minMinor: number; maxMinor: number };
   stock: { tracked: boolean; total: number; lowVariants: number | null };
   soldCount: number;
+  /** Set when the product comes from a catalog source (Shopify, WooCommerce, a sheet). */
+  sync: { sourceId: string; syncedAt: IsoDate; archivedBySync: boolean } | null;
   createdAt: IsoDate;
   updatedAt: IsoDate;
 }
@@ -685,7 +687,8 @@ export type StockReason =
   | 'order'
   | 'order_cancel'
   | 'order_edit'
-  | 'return';
+  | 'return'
+  | 'sync';
 
 export interface StockMovement {
   id: string;
@@ -2560,3 +2563,109 @@ export interface TelegramMessage {
   createdAt: IsoDate;
   sentAt: IsoDate | null;
 }
+
+// ------------------------------------------------------------------ catalog sync
+
+export type CatalogSourceKind = 'shopify' | 'woocommerce' | 'sheet' | 'csv';
+export type SyncRunStatus = 'queued' | 'running' | 'succeeded' | 'partial' | 'failed';
+export type SyncRunTrigger = 'first' | 'schedule' | 'manual' | 'upload';
+
+export interface SyncCounts {
+  seen: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  archived: number;
+  restored: number;
+  failed: number;
+}
+
+export interface SyncProblem {
+  ref: string;
+  message: string;
+}
+
+export interface CatalogSource {
+  id: string;
+  kind: CatalogSourceKind;
+  kindLabel: string;
+  name: string;
+  status: 'active' | 'paused';
+  url: string | null;
+  title: string | null;
+  credentialsHint: string | null;
+  /** 0: only when asked (or uploaded). */
+  intervalMinutes: number;
+  newProductStatus: 'active' | 'draft';
+  syncStock: boolean;
+  archiveMissing: boolean;
+  nextSyncAt: IsoDate | null;
+  running: boolean;
+  lastRun: {
+    id: string;
+    status: SyncRunStatus;
+    finishedAt: IsoDate;
+    counts: SyncCounts;
+    error: string | null;
+  } | null;
+  lastSuccessAt: IsoDate | null;
+  failures: number;
+  productCount: number;
+  createdAt: IsoDate;
+}
+
+export interface SyncRun {
+  id: string;
+  sourceId: string;
+  trigger: SyncRunTrigger;
+  status: SyncRunStatus;
+  counts: SyncCounts;
+  problems: SyncProblem[];
+  moreProblems: number;
+  error: string | null;
+  startedAt: IsoDate | null;
+  finishedAt: IsoDate | null;
+  createdAt: IsoDate;
+}
+
+export interface SourceSampleProduct {
+  externalId: string;
+  name: string;
+  description: string;
+  active: boolean;
+  tags: string[];
+  category?: string;
+  images: { url: string; alt?: string }[];
+  options: { name: string; values: string[] }[];
+  variants: {
+    externalId: string;
+    optionValues: string[];
+    sku?: string;
+    priceMinor: number;
+    compareAtPriceMinor?: number;
+    trackStock: boolean;
+    stock: number;
+  }[];
+}
+
+export interface SourceCheckResult {
+  title: string | null;
+  currency: string | null;
+  productCount: number | null;
+  sample: SourceSampleProduct[];
+  problems: SyncProblem[];
+  columns?: { field: string; header: string }[];
+  unusedColumns?: string[];
+  currencyOk: boolean;
+  businessCurrency: string;
+}
+
+export type CatalogSourceInput =
+  | { kind: 'shopify'; url: string; credentials: { accessToken: string } }
+  | {
+      kind: 'woocommerce';
+      url: string;
+      credentials: { consumerKey: string; consumerSecret: string };
+    }
+  | { kind: 'sheet'; url: string }
+  | { kind: 'csv'; filename: string; csv: string };

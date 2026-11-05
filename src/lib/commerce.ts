@@ -69,6 +69,7 @@ export const STOCK_REASON: Record<StockReason, string> = {
   order_cancel: 'Order cancelled',
   order_edit: 'Order edited',
   return: 'Returned',
+  sync: 'Synced from source',
 };
 
 /** One line per address part, empty parts left out. */

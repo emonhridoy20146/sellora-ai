@@ -401,6 +401,25 @@ is not `redis://127.0.0.1:6379/0`. Screenshots go to `smoke-output/telegram/`.
 REDIS_URL=redis://127.0.0.1:6379/0 node scripts/telegram-flow.mjs
 ```
 
+### Catalog sync browser flow
+
+`scripts/catalog-sync-flow.mjs` needs the API and the worker (the worker runs every sync) and
+the shop stand-in (`node scripts/shop-stand-in.mjs` in sellora-api, with
+`SYNC_ALLOW_PRIVATE_NETWORK=true` in the API's `.env`; it is not Shopify, WooCommerce or
+Google). On Products › Import and sync it tries a wrong Shopify token (it must be explained),
+checks and adds Shopify (the draft is not imported), opens a synced product, changes a price
+and a stock count at the stand-in and presses Sync now (the new price must show and stock
+history must say "Synced from source"), adds WooCommerce, a sheet (its bad row must be named
+before importing and the source must end "Done with problems") and a CSV file with a second
+version, opens the history, makes the stand-in answer 500 (the sync must fail and say why),
+pauses and resumes a source, checks a phone width for sideways scrolling, and removes a
+source (its products must stay). It removes the sources and products it made, before and
+after. Screenshots go to `smoke-output/catalog-sync/`.
+
+```bash
+node scripts/catalog-sync-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -459,6 +478,8 @@ the business's own Settings › Backups with downloads, restore points and Googl
 with Google Drive tried only against a stand-in. Owner reports and alerts on Telegram work
 (Admin › Telegram: linked chats, scheduled reports, alert settings and what was sent), but only
 against a stand-in for the Telegram Bot API; no message has reached real Telegram yet.
+Products › Import and sync brings products in from Shopify, WooCommerce, a Google Sheet or a
+CSV file and keeps them up to date, tried only against a stand-in for those shops.
 Analytics appears in the merchant
 sidebar as a disabled "Soon" item. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.
