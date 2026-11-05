@@ -1,11 +1,13 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { FileSpreadsheet, Globe, ShoppingBag, Store, Upload } from 'lucide-react';
 import { api } from '@/lib/api/client';
 import type {
   CatalogSource,
   CatalogSourceKind,
   SyncCounts,
+  SyncPageCounts,
   SyncRunStatus,
   SyncRunTrigger,
 } from '@/lib/api/types';
@@ -16,6 +18,10 @@ export const syncKeys = {
     ['org', orgId, 'catalog-sync', 'sources', sourceId, 'runs'] as const,
   run: (orgId: string, sourceId: string, runId: string) =>
     ['org', orgId, 'catalog-sync', 'sources', sourceId, 'runs', runId] as const,
+  pages: (orgId: string, sourceId: string) =>
+    ['org', orgId, 'catalog-sync', 'sources', sourceId, 'pages'] as const,
+  page: (orgId: string, sourceId: string, pageId: string) =>
+    ['org', orgId, 'catalog-sync', 'sources', sourceId, 'pages', pageId] as const,
 };
 
 /** Sources of the business. Refreshes often while one is syncing. */
@@ -53,7 +59,21 @@ export const KIND_INFO: Record<
     blurb: 'A file exported from Excel, Google Sheets or another shop. Upload new versions.',
     scheduled: false,
   },
+  website: {
+    label: 'Your website',
+    blurb:
+      'Your own site: products from its product pages, and its pages (delivery, returns, FAQ) for the AI to answer from.',
+    scheduled: true,
+  },
 };
+
+export const KIND_ICON = {
+  shopify: ShoppingBag,
+  woocommerce: Store,
+  sheet: FileSpreadsheet,
+  csv: Upload,
+  website: Globe,
+} as const satisfies Record<CatalogSourceKind, unknown>;
 
 export const INTERVALS: { value: number; label: string }[] = [
   { value: 0, label: 'Only when I ask' },
@@ -62,6 +82,14 @@ export const INTERVALS: { value: number; label: string }[] = [
   { value: 360, label: 'Every 6 hours' },
   { value: 1440, label: 'Once a day' },
 ];
+
+/** A website is read at most hourly: each crawl reads many pages (ADR 0024). */
+const WEBSITE_INTERVALS = new Set([0, 60, 360, 1440]);
+
+export const intervalsFor = (kind: CatalogSourceKind) =>
+  kind === 'website' ? INTERVALS.filter((i) => WEBSITE_INTERVALS.has(i.value)) : INTERVALS;
+
+export const defaultInterval = (kind: CatalogSourceKind) => (kind === 'website' ? 1440 : 60);
 
 export function intervalLabel(minutes: number): string {
   return INTERVALS.find((i) => i.value === minutes)?.label ?? `Every ${minutes} minutes`;
@@ -96,7 +124,27 @@ export function countsText(c: SyncCounts): string {
   if (c.archived) parts.push(`${c.archived} archived`);
   if (c.unchanged) parts.push(`${c.unchanged} unchanged`);
   if (c.failed) parts.push(`${c.failed} skipped`);
+  if (c.held) parts.push(`${c.held} waiting for you`);
   return parts.length ? parts.join(', ') : 'No products read';
+}
+
+/** "14 pages read (2 new, 1 changed)" for a website crawl. */
+export function pagesText(p: SyncPageCounts): string {
+  const parts: string[] = [];
+  if (p.added) parts.push(`${p.added} new`);
+  if (p.changed) parts.push(`${p.changed} changed`);
+  if (p.removed) parts.push(`${p.removed} removed`);
+  let out = `${p.read} page${p.read === 1 ? '' : 's'} read`;
+  if (parts.length) out += ` (${parts.join(', ')})`;
+  if (p.notRead) out += `, ${p.notRead} more not read`;
+  return out;
+}
+
+/** What one run did, products and (for a website) pages. */
+export function runText(c: SyncCounts, p: SyncPageCounts | null, kind: CatalogSourceKind): string {
+  if (kind !== 'website' || !p) return countsText(c);
+  const products = c.seen || c.archived || c.held ? countsText(c) : null;
+  return products ? `${pagesText(p)}; products: ${products}` : pagesText(p);
 }
 
 export const CSV_MAX_BYTES = 700 * 1024;

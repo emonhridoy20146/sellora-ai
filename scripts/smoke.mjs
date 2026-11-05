@@ -95,6 +95,7 @@ try {
     await check(page, '/', 'public-home');
     await check(page, '/legal/terms', 'public-terms');
     await check(page, '/legal/privacy', 'public-privacy');
+    await check(page, '/bot', 'public-bot');
     await check(page, '/login', 'public-login');
     await check(page, '/signup', 'public-signup');
     await check(page, '/admin/login', 'public-admin-login');

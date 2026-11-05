@@ -1,9 +1,9 @@
 'use client';
 
-import { FileSpreadsheet, Plus, ShoppingBag, Store, Upload } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { AddSourceDialog } from '@/components/catalog-sync/add-source';
-import { KIND_INFO, useCatalogSources } from '@/components/catalog-sync/shared';
+import { KIND_ICON, KIND_INFO, useCatalogSources } from '@/components/catalog-sync/shared';
 import { SourceCard } from '@/components/catalog-sync/source-card';
 import { PageError } from '@/components/commerce/page-error';
 import { ProductsTabs } from '@/components/commerce/products-tabs';
@@ -13,13 +13,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { CatalogSourceKind } from '@/lib/api/types';
-
-const ICON = {
-  shopify: ShoppingBag,
-  woocommerce: Store,
-  sheet: FileSpreadsheet,
-  csv: Upload,
-} as const;
 
 export default function CatalogSyncPage() {
   const { org, can } = useOrg();
@@ -37,7 +30,7 @@ export default function CatalogSyncPage() {
     <>
       <PageHeader
         title="Products"
-        description="Bring products in from Shopify, WooCommerce, a Google Sheet or a CSV file, and keep them up to date."
+        description="Bring products in from Shopify, WooCommerce, a Google Sheet, a CSV file or your own website, and keep them up to date."
         actions={
           manage &&
           list.length > 0 && (
@@ -63,9 +56,9 @@ export default function CatalogSyncPage() {
                 added.
               </p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {(Object.keys(KIND_INFO) as CatalogSourceKind[]).map((k) => {
-                const Icon = ICON[k];
+                const Icon = KIND_ICON[k];
                 return (
                   <button
                     key={k}

@@ -183,10 +183,10 @@ try {
     return t.innerText();
   };
 
-  await step('the empty page offers four kinds of source', async () => {
+  await step('the empty page offers five kinds of source', async () => {
     await staff.goto(`${BASE}${org}/products/sync`);
     await staff.getByText('Already sell somewhere else?').waitFor();
-    for (const k of ['Shopify', 'WooCommerce', 'Google Sheet', 'CSV file'])
+    for (const k of ['Shopify', 'WooCommerce', 'Google Sheet', 'CSV file', 'Your website'])
       await staff.getByRole('button', { name: new RegExp(`^${k}`) }).waitFor();
     await staff.getByRole('link', { name: 'Import and sync' }).waitFor();
     await shot(staff, '01-empty');

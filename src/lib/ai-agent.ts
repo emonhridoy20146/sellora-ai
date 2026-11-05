@@ -214,6 +214,7 @@ export function repliesLeft(
 /** Names of the tools the agent used, in words, for the test chat. */
 export const TOOL_LABEL: Record<string, string> = {
   search_products: 'searched products',
+  search_website: 'read the website',
   get_product: 'checked a product',
   quote_order: 'priced an order',
   create_order: 'placed a test order',

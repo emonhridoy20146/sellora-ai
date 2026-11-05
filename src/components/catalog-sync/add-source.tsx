@@ -1,8 +1,8 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, FileSpreadsheet, Search, ShoppingBag, Store, Upload } from 'lucide-react';
-import { useState } from 'react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Search } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
 import { toast } from 'sonner';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -23,14 +23,14 @@ import type {
 } from '@/lib/api/types';
 import { formatMoney } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { INTERVALS, KIND_INFO, readCsvFile, syncKeys } from './shared';
-
-const KIND_ICON = {
-  shopify: ShoppingBag,
-  woocommerce: Store,
-  sheet: FileSpreadsheet,
-  csv: Upload,
-} as const;
+import {
+  defaultInterval,
+  intervalsFor,
+  KIND_ICON,
+  KIND_INFO,
+  readCsvFile,
+  syncKeys,
+} from './shared';
 
 const FIELD_LABEL: Record<string, string> = {
   handle: 'Handle (groups variants)',
@@ -72,6 +72,12 @@ function HowTo({ kind }: { kind: CatalogSourceKind }) {
       'In Excel: File › Save as › CSV UTF-8. In Google Sheets: File › Download › CSV.',
       'Bangla prices like ৳১,২৫০ or 1,250 টাকা are read as written.',
     ],
+    website: [
+      'Enter your shop’s address, like https://yourshop.com.bd. Sellora reads only that site, as SelloraBot, and follows its robots.txt.',
+      'Product pages are imported from the product data most shop builders add (schema.org Product or OpenGraph tags). Every page’s text is kept for the AI to answer from.',
+      'After adding the site you prove it is yours with a DNS record or a tag on the home page. Nothing else is read until then.',
+      'A site built only in the browser shows a crawler little text. If your shop runs on Shopify or WooCommerce, connect that instead for exact stock.',
+    ],
   };
   return (
     <details className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
@@ -100,7 +106,69 @@ function stockOf(p: SourceSampleProduct): string {
   return String(tracked.reduce((n, v) => n + v.stock, 0));
 }
 
+function CheckRow({ ok, children }: { ok: boolean; children: ReactNode }) {
+  const Icon = ok ? CheckCircle2 : AlertTriangle;
+  return (
+    <li className="flex gap-2">
+      <Icon
+        className={cn('mt-0.5 size-4 shrink-0', ok ? 'text-success' : 'text-warning')}
+        aria-label={ok ? 'Fine' : 'Needs attention'}
+      />
+      <span>{children}</span>
+    </li>
+  );
+}
+
+function Problems({ check, title }: { check: SourceCheckResult; title: string }) {
+  if (!check.problems.length) return null;
+  return (
+    <Alert tone="warning" title={title}>
+      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+        {check.problems.slice(0, 8).map((p, i) => (
+          <li key={i}>
+            <span className="font-medium">{p.ref}:</span> {p.message}
+          </li>
+        ))}
+      </ul>
+      {check.problems.length > 8 && <p className="mt-1">…and {check.problems.length - 8} more.</p>}
+    </Alert>
+  );
+}
+
+/** What the check of a website found: only the home page, robots.txt and sitemap are read. */
+function SitePreview({ check }: { check: SourceCheckResult }) {
+  const site = check.site!;
+  return (
+    <div className="grid gap-3" data-testid="site-check">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="font-medium">{check.title ?? 'Site found'}</span>
+        <Badge tone="outline">{site.address}</Badge>
+      </div>
+      <ul className="grid gap-1.5 text-sm">
+        <CheckRow ok={site.robotsAllowed}>
+          {site.robotsAllowed
+            ? 'robots.txt lets SelloraBot read the site.'
+            : 'robots.txt does not let SelloraBot read the site. Allow it there, or nothing can be read.'}
+        </CheckRow>
+        <CheckRow ok={site.sitemapPages !== null && site.sitemapPages > 0}>
+          {site.sitemapPages === null
+            ? 'No sitemap found. Pages are found by following the links on the site.'
+            : `The sitemap lists ${site.sitemapPages} page${site.sitemapPages === 1 ? '' : 's'}.`}
+        </CheckRow>
+        <CheckRow ok={site.homeWords >= 20}>
+          The home page has {site.homeWords} word{site.homeWords === 1 ? '' : 's'} of text.
+        </CheckRow>
+        {site.hasVerificationTag && (
+          <CheckRow ok>A Sellora verification tag is already on the home page.</CheckRow>
+        )}
+      </ul>
+      <Problems check={check} title="Before you add it" />
+    </div>
+  );
+}
+
 function Preview({ check, kind }: { check: SourceCheckResult; kind: CatalogSourceKind }) {
+  if (kind === 'website' && check.site) return <SitePreview check={check} />;
   const currency = check.businessCurrency;
   return (
     <div className="grid gap-3">
@@ -172,25 +240,15 @@ function Preview({ check, kind }: { check: SourceCheckResult; kind: CatalogSourc
           </div>
         </div>
       )}
-      {check.problems.length > 0 && (
-        <Alert tone="warning" title="Some rows will be skipped">
-          <ul className="mt-1 list-disc space-y-0.5 pl-4">
-            {check.problems.slice(0, 8).map((p, i) => (
-              <li key={i}>
-                <span className="font-medium">{p.ref}:</span> {p.message}
-              </li>
-            ))}
-          </ul>
-          {check.problems.length > 8 && (
-            <p className="mt-1">…and {check.problems.length - 8} more.</p>
-          )}
-        </Alert>
-      )}
+      <Problems check={check} title="Some rows will be skipped" />
     </div>
   );
 }
 
-/** Choose a kind, enter the address and key, check it, then add it (which starts the import). */
+/**
+ * Choose a kind, enter the address and key, check it, then add it (which starts the import).
+ * A website starts reading only after it is verified, on its card.
+ */
 export function AddSourceDialog({
   orgId,
   open,
@@ -202,7 +260,7 @@ export function AddSourceDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialKind?: CatalogSourceKind | null;
-  onAdded: (source: CatalogSource, runId: string) => void;
+  onAdded: (source: CatalogSource, runId: string | null) => void;
 }) {
   const queryClient = useQueryClient();
   const [kind, setKind] = useState<CatalogSourceKind | null>(initialKind ?? null);
@@ -216,10 +274,13 @@ export function AddSourceDialog({
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'check' | 'add' | null>(null);
   const [name, setName] = useState('');
-  const [interval, setIntervalMinutes] = useState(60);
+  const [interval, setIntervalMinutes] = useState(defaultInterval(initialKind ?? 'shopify'));
   const [newStatus, setNewStatus] = useState<'active' | 'draft'>('active');
   const [syncStock, setSyncStock] = useState(true);
   const [archiveMissing, setArchiveMissing] = useState(true);
+  const [holdLarge, setHoldLarge] = useState(initialKind === 'website');
+  const [importProducts, setImportProducts] = useState(true);
+  const [readPages, setReadPages] = useState(true);
 
   const reset = (k: CatalogSourceKind | null) => {
     setKind(k);
@@ -232,10 +293,13 @@ export function AddSourceDialog({
     setErrors({});
     setFormError(null);
     setName('');
-    setIntervalMinutes(60);
+    setIntervalMinutes(defaultInterval(k ?? 'shopify'));
     setNewStatus('active');
     setSyncStock(true);
     setArchiveMissing(true);
+    setHoldLarge(k === 'website');
+    setImportProducts(true);
+    setReadPages(true);
   };
   /** Any change to what is checked asks for a new check. */
   const changed =
@@ -255,7 +319,7 @@ export function AddSourceDialog({
         url,
         credentials: { consumerKey: consumerKey.trim(), consumerSecret: consumerSecret.trim() },
       };
-    if (kind === 'sheet') return { kind, url };
+    if (kind === 'sheet' || kind === 'website') return { kind, url };
     return file ? { kind, filename: file.name, csv: file.text } : null;
   };
 
@@ -290,13 +354,17 @@ export function AddSourceDialog({
     }
   };
 
+  const ready = Boolean(
+    check?.currencyOk && (kind === 'website' ? check.site : check.sample.length > 0),
+  );
+
   const add = async () => {
     const source = input();
     if (!source || !kind) return;
     setBusy('add');
     setFormError(null);
     try {
-      const res = await api<{ source: CatalogSource; runId: string }>(
+      const res = await api<{ source: CatalogSource; runId: string | null }>(
         `/orgs/${orgId}/catalog-sources`,
         {
           body: {
@@ -306,11 +374,17 @@ export function AddSourceDialog({
             newProductStatus: newStatus,
             syncStock,
             archiveMissing,
+            holdLargeChanges: holdLarge,
+            ...(kind === 'website' ? { importProducts, readPages } : {}),
           },
         },
       );
       await queryClient.invalidateQueries({ queryKey: syncKeys.sources(orgId) });
-      toast.success(`${res.source.name} added. The import has started.`);
+      toast.success(
+        res.runId
+          ? `${res.source.name} added. The import has started.`
+          : `${res.source.name} added. Prove the site is yours on its card to start reading it.`,
+      );
       onAdded(res.source, res.runId);
       onOpenChange(false);
       reset(null);
@@ -333,11 +407,19 @@ export function AddSourceDialog({
     >
       <DialogContent
         wide
-        title={kind ? `Add ${KIND_INFO[kind].label}` : 'Add a product source'}
+        title={
+          kind === 'website'
+            ? 'Add your website'
+            : kind
+              ? `Add ${KIND_INFO[kind].label}`
+              : 'Add a product source'
+        }
         description={
-          kind
-            ? 'Check it first: you see what will be imported before anything changes.'
-            : 'Products from the source are added to Sellora and kept up to date. The AI sales agent answers with the new prices and stock straight away.'
+          kind === 'website'
+            ? 'Check it first: Sellora reads the home page, robots.txt and sitemap. Nothing else is read until you prove the site is yours.'
+            : kind
+              ? 'Check it first: you see what will be imported before anything changes.'
+              : 'Products from the source are added to Sellora and kept up to date. The AI sales agent answers with the new prices and stock straight away.'
         }
       >
         {!kind ? (
@@ -367,7 +449,7 @@ export function AddSourceDialog({
             className="grid gap-4"
             onSubmit={(e) => {
               e.preventDefault();
-              void (check?.currencyOk && check.sample.length ? add() : runCheck());
+              void (ready ? add() : runCheck());
             }}
           >
             <Button
@@ -454,6 +536,19 @@ export function AddSourceDialog({
                 </div>
               </>
             )}
+            {kind === 'website' && (
+              <Field label="Website address" htmlFor="src-url" error={errors.url}>
+                <Input
+                  id="src-url"
+                  placeholder="https://yourshop.com.bd"
+                  value={url}
+                  onChange={(e) => changed(setUrl)(e.target.value)}
+                  autoComplete="off"
+                  inputMode="url"
+                  required
+                />
+              </Field>
+            )}
             {kind === 'sheet' && (
               <Field label="Link to the sheet" htmlFor="src-url" error={errors.url}>
                 <Input
@@ -495,7 +590,7 @@ export function AddSourceDialog({
             <HowTo kind={kind} />
             {formError && <Alert tone="danger">{formError}</Alert>}
             {check && <Preview check={check} kind={kind} />}
-            {check?.currencyOk && check.sample.length > 0 && (
+            {ready && (
               <div className="grid gap-4 rounded-lg border p-4">
                 <p className="flex items-center gap-2 text-sm font-medium">
                   {Icon && <Icon className="size-4 text-primary" aria-hidden />} Settings
@@ -516,7 +611,7 @@ export function AddSourceDialog({
                         value={interval}
                         onChange={(e) => setIntervalMinutes(Number(e.target.value))}
                       >
-                        {INTERVALS.map((i) => (
+                        {intervalsFor(kind).map((i) => (
                           <option key={i.value} value={i.value}>
                             {i.label}
                           </option>
@@ -535,10 +630,35 @@ export function AddSourceDialog({
                     </NativeSelect>
                   </Field>
                 </div>
+                {kind === 'website' && (
+                  <>
+                    <ToggleRow
+                      id="src-pages"
+                      label="Let the AI read the site’s pages"
+                      hint="Delivery, returns, size guides and FAQs: the AI answers customers from them."
+                      checked={readPages}
+                      onChange={setReadPages}
+                    />
+                    <ToggleRow
+                      id="src-products"
+                      label="Import products from product pages"
+                      checked={importProducts}
+                      onChange={setImportProducts}
+                    />
+                  </>
+                )}
                 <ToggleRow
                   id="src-stock"
-                  label="Take stock counts from the source"
-                  hint="Changes are written to stock history as “Synced from source”."
+                  label={
+                    kind === 'website'
+                      ? 'Take “sold out” from the pages'
+                      : 'Take stock counts from the source'
+                  }
+                  hint={
+                    kind === 'website'
+                      ? 'A page that says sold out sets stock to 0. Websites do not show counts, so stock is not counted otherwise.'
+                      : 'Changes are written to stock history as “Synced from source”.'
+                  }
                   checked={syncStock}
                   onChange={setSyncStock}
                 />
@@ -549,15 +669,26 @@ export function AddSourceDialog({
                   checked={archiveMissing}
                   onChange={setArchiveMissing}
                 />
+                <ToggleRow
+                  id="src-hold"
+                  label="Hold large changes for me"
+                  hint="A price that moves by more than half, or more than half of the products disappearing at once, waits for you to apply or keep it."
+                  checked={holdLarge}
+                  onChange={setHoldLarge}
+                />
               </div>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
-              {check?.currencyOk && check.sample.length > 0 ? (
+              {ready ? (
                 <Button type="submit" disabled={busy !== null}>
-                  {busy === 'add' ? 'Adding…' : 'Add and import'}
+                  {busy === 'add'
+                    ? 'Adding…'
+                    : kind === 'website'
+                      ? 'Add website'
+                      : 'Add and import'}
                 </Button>
               ) : (
                 <Button type="submit" disabled={busy !== null || (kind === 'csv' && !file)}>
