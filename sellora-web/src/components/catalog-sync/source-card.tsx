@@ -1,20 +1,12 @@
 'use client';
 
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  FileSpreadsheet,
-  History,
-  RefreshCw,
-  Settings2,
-  ShoppingBag,
-  Store,
-  Trash2,
-  Upload,
-} from 'lucide-react';
+import { AlertTriangle, History, RefreshCw, Settings2, Trash2, Upload } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { commerceKeys } from '@/components/commerce/hooks';
+import { useOrg } from '@/components/org-context';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -30,24 +22,22 @@ import { api } from '@/lib/api/client';
 import { ApiError, errorMessage } from '@/lib/api/errors';
 import type { CatalogSource, Page, SyncRun } from '@/lib/api/types';
 import { formatDateTime, formatRelative } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { ToggleRow } from './add-source';
 import {
-  countsText,
-  INTERVALS,
   intervalLabel,
+  intervalsFor,
   isFinished,
+  KIND_ICON,
   readCsvFile,
   RUN_STATUS,
+  runText,
   syncKeys,
   TRIGGER_LABEL,
 } from './shared';
+import { HeldDialog, PagesDialog, VerifyPanel } from './website-panels';
 
-const ICON = {
-  shopify: ShoppingBag,
-  woocommerce: Store,
-  sheet: FileSpreadsheet,
-  csv: Upload,
-} as const;
+const unverified = (s: CatalogSource) => s.kind === 'website' && !s.website?.verified;
 
 function SourceStatus({ s, watching }: { s: CatalogSource; watching: boolean }) {
   if (s.running || watching)
@@ -56,6 +46,7 @@ function SourceStatus({ s, watching }: { s: CatalogSource; watching: boolean }) 
         <RefreshCw className="animate-spin" aria-hidden /> Syncing
       </Badge>
     );
+  if (unverified(s)) return <Badge tone="warning">Not verified</Badge>;
   if (s.status === 'paused') return <Badge>Paused</Badge>;
   if (s.lastRun?.status === 'failed')
     return <Badge tone="danger">{s.failures > 1 ? `Failed ${s.failures} times` : 'Failed'}</Badge>;
@@ -138,7 +129,11 @@ function HistoryDialog({
       <DialogContent
         wide
         title={`Sync history: ${source.name}`}
-        description="The last 90 days. Each sync lists the products it could not import and why."
+        description={
+          source.kind === 'website'
+            ? 'The last 90 days. Each sync lists what it could not read or import, and why.'
+            : 'The last 90 days. Each sync lists the products it could not import and why.'
+        }
       >
         {runs.isPending ? (
           <Skeleton className="h-32" />
@@ -160,7 +155,9 @@ function HistoryDialog({
                   <Badge tone={RUN_STATUS[r.status].tone}>{RUN_STATUS[r.status].label}</Badge>
                 </div>
                 {isFinished(r.status) && r.status !== 'failed' && (
-                  <p className="text-[13px] text-muted-foreground">{countsText(r.counts)}</p>
+                  <p className="text-[13px] text-muted-foreground">
+                    {runText(r.counts, r.pages, source.kind)}
+                  </p>
                 )}
                 {r.error && <p className="text-[13px] text-destructive">{r.error}</p>}
                 <RunProblems run={r} />
@@ -195,6 +192,9 @@ function SettingsDialog({
   const [newStatus, setNewStatus] = useState(source.newProductStatus);
   const [syncStock, setSyncStock] = useState(source.syncStock);
   const [archiveMissing, setArchiveMissing] = useState(source.archiveMissing);
+  const [holdLarge, setHoldLarge] = useState(source.holdLargeChanges);
+  const [readPages, setReadPages] = useState(source.website?.readPages ?? true);
+  const [importProducts, setImportProducts] = useState(source.website?.importProducts ?? true);
   const [paused, setPaused] = useState(source.status === 'paused');
   const [url, setUrl] = useState(source.url ?? '');
   const [token, setToken] = useState('');
@@ -211,8 +211,14 @@ function SettingsDialog({
     if (newStatus !== source.newProductStatus) body.newProductStatus = newStatus;
     if (syncStock !== source.syncStock) body.syncStock = syncStock;
     if (archiveMissing !== source.archiveMissing) body.archiveMissing = archiveMissing;
+    if (holdLarge !== source.holdLargeChanges) body.holdLargeChanges = holdLarge;
+    if (source.website) {
+      if (readPages !== source.website.readPages) body.readPages = readPages;
+      if (importProducts !== source.website.importProducts) body.importProducts = importProducts;
+    }
     if (paused !== (source.status === 'paused')) body.status = paused ? 'paused' : 'active';
-    if (source.kind !== 'csv' && url.trim() && url.trim() !== source.url) body.url = url.trim();
+    const movable = source.kind !== 'csv' && source.kind !== 'website';
+    if (movable && url.trim() && url.trim() !== source.url) body.url = url.trim();
     if (source.kind === 'shopify' && token.trim()) body.credentials = { accessToken: token.trim() };
     if (source.kind === 'woocommerce' && (ck.trim() || cs.trim()))
       body.credentials = { consumerKey: ck.trim(), consumerSecret: cs.trim() };
@@ -264,13 +270,34 @@ function SettingsDialog({
                 value={interval}
                 onChange={(e) => setIntervalMinutes(Number(e.target.value))}
               >
-                {INTERVALS.map((i) => (
+                {intervalsFor(source.kind).map((i) => (
                   <option key={i.value} value={i.value}>
                     {i.label}
                   </option>
                 ))}
               </NativeSelect>
             </Field>
+          )}
+          {source.website && (
+            <>
+              <ToggleRow
+                id="set-pages"
+                label="Let the AI read the site’s pages"
+                hint={
+                  source.website.readPages
+                    ? `Turning this off deletes the ${source.website.pageCount} saved pages.`
+                    : 'Pages are read on the next sync.'
+                }
+                checked={readPages}
+                onChange={setReadPages}
+              />
+              <ToggleRow
+                id="set-products"
+                label="Import products from product pages"
+                checked={importProducts}
+                onChange={setImportProducts}
+              />
+            </>
           )}
           <Field label="New products are" htmlFor="set-status">
             <NativeSelect
@@ -284,7 +311,11 @@ function SettingsDialog({
           </Field>
           <ToggleRow
             id="set-stock"
-            label="Take stock counts from the source"
+            label={
+              source.kind === 'website'
+                ? 'Take “sold out” from the pages'
+                : 'Take stock counts from the source'
+            }
             checked={syncStock}
             onChange={setSyncStock}
           />
@@ -293,6 +324,13 @@ function SettingsDialog({
             label="Archive products that are removed at the source"
             checked={archiveMissing}
             onChange={setArchiveMissing}
+          />
+          <ToggleRow
+            id="set-hold"
+            label="Hold large changes for me"
+            hint="A price that moves by more than half, or more than half of the products disappearing at once, waits for you."
+            checked={holdLarge}
+            onChange={setHoldLarge}
           />
           {source.kind !== 'csv' && (
             <ToggleRow
@@ -303,7 +341,13 @@ function SettingsDialog({
               onChange={setPaused}
             />
           )}
-          {source.kind !== 'csv' && (
+          {source.kind === 'website' && (
+            <p className="text-[13px] text-muted-foreground">
+              The address cannot be changed, since it is the site you proved is yours. To read
+              another site, add it as a new source.
+            </p>
+          )}
+          {source.kind !== 'csv' && source.kind !== 'website' && (
             <details className="rounded-lg border px-3 py-2 text-sm">
               <summary className="cursor-pointer font-medium">Change address or key</summary>
               <div className="mt-3 grid gap-3">
@@ -391,17 +435,24 @@ export function SourceCard({
   onWatch: (runId: string | null) => void;
 }) {
   const queryClient = useQueryClient();
-  const [dialog, setDialog] = useState<'settings' | 'history' | 'remove' | null>(null);
+  const { org } = useOrg();
+  const [dialog, setDialog] = useState<'settings' | 'history' | 'remove' | 'held' | 'pages' | null>(
+    null,
+  );
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-  const Icon = ICON[s.kind];
+  const Icon = KIND_ICON[s.kind];
+  const waiting = s.held.filter((h) => h.decision === 'pending').length;
 
   const run = useRunWatcher(orgId, s.id, watchRunId, (r) => {
     onWatch(null);
+    const what = runText(r.counts, r.pages, s.kind);
     if (r.status === 'failed') toast.error(`${s.name}: ${r.error ?? 'the sync failed.'}`);
     else if (r.status === 'partial')
-      toast.warning(`${s.name}: ${countsText(r.counts)}. Some products were skipped.`);
-    else toast.success(`${s.name}: ${countsText(r.counts)}.`);
+      toast.warning(
+        `${s.name}: ${what}. ${r.counts.held ? 'Some changes wait for you.' : 'See History for what was skipped.'}`,
+      );
+    else toast.success(`${s.name}: ${what}.`);
   });
   const watching = Boolean(watchRunId && (!run || !isFinished(run.status)));
 
@@ -492,7 +543,7 @@ export function SourceCard({
                     <Upload /> Upload new version
                   </Button>
                 </>
-              ) : (
+              ) : unverified(s) ? null : (
                 <Button
                   size="sm"
                   disabled={busy || watching || s.running}
@@ -528,7 +579,45 @@ export function SourceCard({
             </Button>
           )}
         </div>
-        <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
+        {unverified(s) && (
+          <VerifyPanel orgId={orgId} source={s} manage={manage} onStarted={onWatch} />
+        )}
+        {waiting > 0 && (
+          <div
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/40 bg-warning-soft/40 px-3 py-2"
+            data-testid="held-banner"
+          >
+            <p className="flex items-center gap-2 text-sm">
+              <AlertTriangle className="size-4 shrink-0 text-warning" aria-hidden />
+              {waiting === 1
+                ? '1 large change waits for you'
+                : `${waiting} large changes wait for you`}
+            </p>
+            <Button size="sm" variant="outline" onClick={() => setDialog('held')}>
+              Review
+            </Button>
+          </div>
+        )}
+        <dl
+          className={cn(
+            'grid gap-x-6 gap-y-1 text-sm',
+            s.website ? 'sm:grid-cols-4' : 'sm:grid-cols-3',
+          )}
+        >
+          {s.website && (
+            <div>
+              <dt className="text-[13px] text-muted-foreground">Pages for the AI</dt>
+              <dd>
+                <button
+                  type="button"
+                  className="tabular font-medium underline-offset-2 hover:underline"
+                  onClick={() => setDialog('pages')}
+                >
+                  {s.website.readPages ? s.website.pageCount : 'Off'}
+                </button>
+              </dd>
+            </div>
+          )}
           <div>
             <dt className="text-[13px] text-muted-foreground">Products</dt>
             <dd>
@@ -557,20 +646,22 @@ export function SourceCard({
             <dd>
               {s.kind === 'csv'
                 ? 'When you upload a new version'
-                : s.status === 'paused'
-                  ? 'Paused'
-                  : s.nextSyncAt
-                    ? `${formatRelative(s.nextSyncAt)} (${intervalLabel(s.intervalMinutes).toLowerCase()})`
-                    : 'Only when you press Sync now'}
+                : unverified(s)
+                  ? 'After you verify the site'
+                  : s.status === 'paused'
+                    ? 'Paused'
+                    : s.nextSyncAt
+                      ? `${formatRelative(s.nextSyncAt)} (${intervalLabel(s.intervalMinutes).toLowerCase()})`
+                      : 'Only when you press Sync now'}
             </dd>
           </div>
         </dl>
-        {s.lastRun && !watching && (
+        {s.lastRun && !watching && !unverified(s) && (
           <p className="text-[13px] text-muted-foreground">
             {s.lastRun.status === 'failed' ? (
               <span className="text-destructive">{s.lastRun.error}</span>
             ) : (
-              <>Last sync: {countsText(s.lastRun.counts)}.</>
+              <>Last sync: {runText(s.lastRun.counts, s.lastRun.pages, s.kind)}.</>
             )}
             {s.failures > 1 && s.status === 'active' && s.nextSyncAt && (
               <> Trying again {formatRelative(s.nextSyncAt)}.</>
@@ -579,7 +670,11 @@ export function SourceCard({
         )}
         {watching && (
           <p className="text-[13px] text-muted-foreground" aria-live="polite">
-            {run?.status === 'running' ? 'Reading products…' : 'Waiting to start…'}
+            {run?.status !== 'running'
+              ? 'Waiting to start…'
+              : s.kind === 'website'
+                ? 'Reading your website…'
+                : 'Reading products…'}
           </p>
         )}
       </CardContent>
@@ -589,6 +684,25 @@ export function SourceCard({
         open={dialog === 'history'}
         onOpenChange={(o) => setDialog(o ? 'history' : null)}
       />
+      {s.website && (
+        <PagesDialog
+          orgId={orgId}
+          source={s}
+          open={dialog === 'pages'}
+          onOpenChange={(o) => setDialog(o ? 'pages' : null)}
+        />
+      )}
+      {s.held.length > 0 && (
+        <HeldDialog
+          orgId={orgId}
+          currency={org.currency}
+          source={s}
+          manage={manage}
+          open={dialog === 'held'}
+          onOpenChange={(o) => setDialog(o ? 'held' : null)}
+          onStarted={onWatch}
+        />
+      )}
       {manage && (
         <>
           {dialog === 'settings' && (
@@ -603,7 +717,11 @@ export function SourceCard({
             open={dialog === 'remove'}
             onOpenChange={(o) => setDialog(o ? 'remove' : null)}
             title={`Remove ${s.name}?`}
-            description={`Its ${s.productCount} product${s.productCount === 1 ? '' : 's'} stay in Sellora as ordinary products and stop updating. The saved key is deleted.`}
+            description={
+              s.website
+                ? `Its ${s.productCount} product${s.productCount === 1 ? '' : 's'} stay in Sellora as ordinary products and stop updating. Its ${s.website.pageCount} saved page${s.website.pageCount === 1 ? '' : 's'} are deleted, so the AI stops answering from them.`
+                : `Its ${s.productCount} product${s.productCount === 1 ? '' : 's'} stay in Sellora as ordinary products and stop updating. The saved key is deleted.`
+            }
             confirmLabel="Remove source"
             destructive
             onConfirm={remove}

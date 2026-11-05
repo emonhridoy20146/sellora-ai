@@ -18,6 +18,7 @@ const LIMIT_COPY: Partial<Record<keyof PlanLimits, (n: number) => string>> = {
   ordersPerMonth: (n) => `${formatNumber(n)} orders a month`,
   products: (n) => `${formatNumber(n)} products`,
   storageMb: (n) => `${formatStorage(n * 1024 * 1024)} photo storage`,
+  websitePages: (n) => `AI reads ${formatNumber(n)} pages of your website`,
 };
 
 const UNLIMITED_COPY: Partial<Record<keyof PlanLimits, string>> = {

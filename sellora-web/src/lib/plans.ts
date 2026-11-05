@@ -8,6 +8,7 @@ const LIMIT_MODULE: Partial<Record<keyof PlanLimits, string>> = {
   products: 'commerce',
   ordersPerMonth: 'commerce',
   storageMb: 'commerce',
+  websitePages: 'commerce',
   stores: 'storefront',
   customDomains: 'storefront',
   landingPages: 'landing_pages',

@@ -166,6 +166,8 @@ export interface PlanLimits {
   conversationsPerMonth: number | null;
   landingPages: number | null;
   storageMb: number | null;
+  /** Website pages read per crawl. */
+  websitePages: number | null;
 }
 
 export interface PlanPrice {
@@ -2566,7 +2568,7 @@ export interface TelegramMessage {
 
 // ------------------------------------------------------------------ catalog sync
 
-export type CatalogSourceKind = 'shopify' | 'woocommerce' | 'sheet' | 'csv';
+export type CatalogSourceKind = 'shopify' | 'woocommerce' | 'sheet' | 'csv' | 'website';
 export type SyncRunStatus = 'queued' | 'running' | 'succeeded' | 'partial' | 'failed';
 export type SyncRunTrigger = 'first' | 'schedule' | 'manual' | 'upload';
 
@@ -2578,6 +2580,64 @@ export interface SyncCounts {
   archived: number;
   restored: number;
   failed: number;
+  /** Large changes waiting for the merchant (ADR 0024). */
+  held: number;
+}
+
+/** What a website crawl read (ADR 0024). */
+export interface SyncPageCounts {
+  read: number;
+  added: number;
+  changed: number;
+  removed: number;
+  notRead: number;
+}
+
+/** A large change at the source that waits for the merchant. */
+export interface HeldChange {
+  /** The product's id at the source, or "archive". */
+  ref: string;
+  kind: 'price' | 'archive';
+  label: string;
+  productId: string | null;
+  prices: { variant: string; fromMinor: number; toMinor: number }[];
+  names: string[];
+  decision: 'pending' | 'apply' | 'keep';
+  seenAt: IsoDate;
+  decidedAt: IsoDate | null;
+}
+
+export interface WebsiteSourceInfo {
+  host: string;
+  verified: boolean;
+  verifiedAt: IsoDate | null;
+  verifiedBy: 'dns' | 'meta' | null;
+  verifyError: string | null;
+  checkedAt: IsoDate | null;
+  token: string;
+  dnsName: string;
+  dnsValue: string;
+  metaTag: string;
+  importProducts: boolean;
+  readPages: boolean;
+  pageCount: number;
+}
+
+export interface WebsitePage {
+  id: string;
+  url: string;
+  title: string;
+  description: string;
+  words: number;
+  crawledAt: IsoDate;
+  changedAt: IsoDate;
+  text?: string;
+}
+
+export interface WebsiteSearchHit {
+  url: string;
+  title: string;
+  passages: string;
 }
 
 export interface SyncProblem {
@@ -2599,6 +2659,9 @@ export interface CatalogSource {
   newProductStatus: 'active' | 'draft';
   syncStock: boolean;
   archiveMissing: boolean;
+  holdLargeChanges: boolean;
+  held: HeldChange[];
+  website: WebsiteSourceInfo | null;
   nextSyncAt: IsoDate | null;
   running: boolean;
   lastRun: {
@@ -2606,6 +2669,7 @@ export interface CatalogSource {
     status: SyncRunStatus;
     finishedAt: IsoDate;
     counts: SyncCounts;
+    pages: SyncPageCounts | null;
     error: string | null;
   } | null;
   lastSuccessAt: IsoDate | null;
@@ -2620,6 +2684,7 @@ export interface SyncRun {
   trigger: SyncRunTrigger;
   status: SyncRunStatus;
   counts: SyncCounts;
+  pages: SyncPageCounts | null;
   problems: SyncProblem[];
   moreProblems: number;
   error: string | null;
@@ -2656,6 +2721,14 @@ export interface SourceCheckResult {
   problems: SyncProblem[];
   columns?: { field: string; header: string }[];
   unusedColumns?: string[];
+  /** Websites. */
+  site?: {
+    address: string;
+    robotsAllowed: boolean;
+    sitemapPages: number | null;
+    hasVerificationTag: boolean;
+    homeWords: number;
+  };
   currencyOk: boolean;
   businessCurrency: string;
 }
@@ -2668,4 +2741,5 @@ export type CatalogSourceInput =
       credentials: { consumerKey: string; consumerSecret: string };
     }
   | { kind: 'sheet'; url: string }
+  | { kind: 'website'; url: string }
   | { kind: 'csv'; filename: string; csv: string };

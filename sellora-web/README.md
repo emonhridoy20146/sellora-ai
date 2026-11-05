@@ -420,6 +420,28 @@ after. Screenshots go to `smoke-output/catalog-sync/`.
 node scripts/catalog-sync-flow.mjs
 ```
 
+### Website crawl browser flow
+
+`scripts/website-crawl-flow.mjs` needs the API and the worker, the website stand-in
+(`node scripts/site-stand-in.mjs` in sellora-api, a demo shop site on :4095 that is not a real
+shop), the DNS stand-in (`node scripts/dns-stand-in.mjs`, with `DNS_SERVERS=127.0.0.1:5300`)
+and the Claude stand-in (with `AI_ANTHROPIC_BASE_URL` pointing at it), and
+`SYNC_ALLOW_PRIVATE_NETWORK=true` in the API's `.env`. It adds "Your website" (the check must
+read only robots.txt, the sitemap and the home page), presses Verify before the tag is there
+(it must say what was not found), puts the tag on the stand-in and verifies (the first crawl
+must import 5 products, a sold-out one with stock 0, and keep the pages), opens the pages and
+asks "ডেলিভারি চার্জ কত?" (the delivery page must be found), asks the AI test chat the same
+(it must answer from the website), drops a price by more than half (it must wait; "Keep" must
+keep Sellora's price) then changes it a little (it must go through), hides a product page (its
+product and page must go), checks every request named SelloraBot and none went where
+robots.txt forbids, removes the tag (reading must stop) and verifies again with a DNS record,
+checks the settings, dark mode and a phone, and removes the source (its pages must go).
+Screenshots go to `smoke-output/website-crawl/`.
+
+```bash
+node scripts/website-crawl-flow.mjs
+```
+
 ## How it fits together
 
 - **Sessions.** The API sets httpOnly cookies. `lib/api/client.ts` sends the CSRF header from
@@ -479,7 +501,10 @@ with Google Drive tried only against a stand-in. Owner reports and alerts on Tel
 (Admin › Telegram: linked chats, scheduled reports, alert settings and what was sent), but only
 against a stand-in for the Telegram Bot API; no message has reached real Telegram yet.
 Products › Import and sync brings products in from Shopify, WooCommerce, a Google Sheet or a
-CSV file and keeps them up to date, tried only against a stand-in for those shops.
+CSV file and keeps them up to date, tried only against a stand-in for those shops. "Your
+website" reads the business's own site once it proves ownership (DNS record or meta tag):
+products from its product pages, and its pages for the AI sales agent to answer from, tried
+only against a demo site stand-in and the DNS and Claude stand-ins.
 Analytics appears in the merchant
 sidebar as a disabled "Soon" item. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.

@@ -40,6 +40,7 @@ const LIMIT_LABEL: Record<keyof PlanLimits, { label: string; unit?: string }> = 
   conversationsPerMonth: { label: 'Conversations per month' },
   landingPages: { label: 'Landing pages' },
   storageMb: { label: 'File storage', unit: 'MB' },
+  websitePages: { label: 'Website pages per crawl' },
 };
 
 const INTERVALS: BillingInterval[] = ['month', 'year', 'lifetime'];
