@@ -160,6 +160,22 @@ export const envSchema = z
 
     WEBCHAT_TOKEN_SECRET: z.string().min(32).optional(),
 
+    /**
+     * Catalog sync (ADR 0023). Shopify Admin API version (YYYY-MM); change it when Shopify
+     * retires the version in use.
+     */
+    SHOPIFY_API_VERSION: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/)
+      .default('2025-10'),
+    /** How long one request to a shop, sheet or photo may take. */
+    SYNC_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
+    /**
+     * Lets syncs reach private and loopback addresses (stand-ins on localhost). Only for local
+     * development and tests; refused in production.
+     */
+    SYNC_ALLOW_PRIVATE_NETWORK: bool.default(false),
+
     AI_ANTHROPIC_API_KEY: z.string().optional(),
     /** Only for a gateway or proxy in front of the Anthropic API. Empty: the public API. */
     AI_ANTHROPIC_BASE_URL: z.union([z.url(), z.literal('')]).optional(),
@@ -284,6 +300,13 @@ export const envSchema = z
           code: 'custom',
           path: ['BACKUP_ENCRYPTION_KEYS'],
           message: 'required in production (encrypts backups; keep a copy away from them)',
+        });
+      }
+      if (env.SYNC_ALLOW_PRIVATE_NETWORK) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['SYNC_ALLOW_PRIVATE_NETWORK'],
+          message: 'must be false in production (syncs must not reach private addresses)',
         });
       }
       if (env.STORAGE_DRIVER === 'local' && !env.STORAGE_SIGNING_SECRET) {

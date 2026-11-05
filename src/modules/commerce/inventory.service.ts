@@ -175,6 +175,30 @@ export class InventoryService {
     return { stock: result.stock };
   }
 
+  /**
+   * Sets tracked variants to the counts a catalog source has (ADR 0023): one movement each,
+   * reason `sync`. Variants that stopped tracking or are gone are skipped.
+   */
+  async syncTo(
+    productId: Types.ObjectId,
+    targets: { variantId: Types.ObjectId; stock: number }[],
+    note: string,
+  ): Promise<void> {
+    await this.tx.runOrJoin(async () => {
+      const product = await this.products.findById(productId, { variants: 1 });
+      for (const t of targets) {
+        const variant = product?.variants.find((v) => v._id.equals(t.variantId));
+        if (!variant?.trackStock) continue;
+        const delta = Math.max(0, t.stock) - variant.stock;
+        if (delta !== 0)
+          await this.change({ productId, variantId: t.variantId, delta }, 'sync', {
+            note,
+            allowNegative: true,
+          });
+      }
+    });
+  }
+
   /** Records the opening stock of a new variant (the product insert already set it). */
   async recordInitial(
     productId: Types.ObjectId,
