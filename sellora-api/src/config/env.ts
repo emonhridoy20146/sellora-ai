@@ -175,6 +175,14 @@ export const envSchema = z
      * development and tests; refused in production.
      */
     SYNC_ALLOW_PRIVATE_NETWORK: bool.default(false),
+    /**
+     * Website crawl (ADR 0024). Most pages one crawl reads, whatever the plan allows; the
+     * user agent sites see (empty: "SelloraBot/1.0 (+<WEB_APP_URL>/bot)"); and the least time
+     * between two requests to one site (robots.txt may ask for more).
+     */
+    CRAWL_MAX_PAGES: z.coerce.number().int().min(1).max(20_000).default(1_000),
+    CRAWL_USER_AGENT: z.string().max(200).optional(),
+    CRAWL_MIN_DELAY_MS: z.coerce.number().int().min(0).max(10_000).default(250),
 
     AI_ANTHROPIC_API_KEY: z.string().optional(),
     /** Only for a gateway or proxy in front of the Anthropic API. Empty: the public API. */

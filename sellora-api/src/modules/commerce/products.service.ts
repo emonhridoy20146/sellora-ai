@@ -141,6 +141,11 @@ export interface SourceProductWrite {
     weightGrams?: number;
   }[];
   syncStock: boolean;
+  /**
+   * `availability`: the source says "sold out" or not, never how many (a website, ADR 0024).
+   * A sold-out variant is sent as counted with 0, an available one as not counted.
+   */
+  stockFrom?: 'counts' | 'availability';
   /** Status of a product the sync creates or restores. */
   newStatus: 'active' | 'draft';
   createdBy: Types.ObjectId;
@@ -617,6 +622,37 @@ export class ProductsService {
     });
   }
 
+  /** The external ids of a source's products, archived ones included. */
+  async sourceExternalIds(sourceId: Types.ObjectId): Promise<string[]> {
+    const rows = await this.products.find(
+      { 'sync.sourceId': sourceId },
+      { projection: { 'sync.externalId': 1 }, limit: 20_000 },
+    );
+    return rows.flatMap((r) => (r.sync?.externalId ? [r.sync.externalId] : []));
+  }
+
+  /**
+   * Moves products to the new external id their item has at the source (a website page that
+   * moved), unless a product already has that id. Returns how many moved.
+   */
+  async rekeySource(
+    sourceId: Types.ObjectId,
+    moves: { from: string; to: string }[],
+  ): Promise<number> {
+    let n = 0;
+    for (const m of moves) {
+      if (m.from === m.to) continue;
+      if (await this.products.exists({ 'sync.sourceId': sourceId, 'sync.externalId': m.to }))
+        continue;
+      const r = await this.products.updateOne(
+        { 'sync.sourceId': sourceId, 'sync.externalId': m.from },
+        { $set: { 'sync.externalId': m.to } },
+      );
+      n += r.modified;
+    }
+    return n;
+  }
+
   /** A source's products that are not archived and whose item was not in `seen`. */
   async findBySourceMissing(sourceId: Types.ObjectId, seen: string[]): Promise<ProductDoc[]> {
     return this.products.find(
@@ -770,6 +806,23 @@ export class ProductsService {
         const live = fresh?.variants.find((f) => f._id.equals(v._id));
         if (!live) {
           added.push(v);
+          return;
+        }
+        if (w.stockFrom === 'availability') {
+          if (!w.syncStock || (!sv.trackStock && live.trackStock && live.stock > 0)) {
+            // Sellora's own stock settings, or a count Sellora keeps above 0.
+            v.trackStock = live.trackStock;
+            v.stock = live.stock;
+          } else if (sv.trackStock) {
+            // Sold out at the source.
+            v.trackStock = true;
+            v.stock = live.trackStock ? live.stock : 0;
+            if (live.trackStock && live.stock !== 0) targets.push({ variantId: v._id, stock: 0 });
+          } else {
+            // Back in stock at the source after Sellora held it at 0: no longer counted.
+            v.trackStock = false;
+            v.stock = 0;
+          }
           return;
         }
         if (live.trackStock && !v.trackStock) {

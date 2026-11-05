@@ -35,6 +35,7 @@ import { AgentRunner, type AgentRunResult } from './agent-runner.js';
 import { toAgentHistory } from './agent-history.js';
 import { MAX_AGENT_IMAGES, toVisionImage } from './agent-images.js';
 import { AgentTools, type ToolRunContext } from './agent-tools.js';
+import { WebsitePagesService } from '../../knowledge/website-pages.js';
 import { handoverNotice, matchKeyword, toChatText } from './chat-text.js';
 import { AiReplyQueue, MAX_MEDIA_WAITS, type AiReplyJob } from './reply-queue.js';
 
@@ -144,6 +145,7 @@ export class AiRepliesService {
     private readonly entitlements: EntitlementsService,
     private readonly events: EventEmitter2,
     private readonly files: FilesService,
+    private readonly website: WebsitePagesService,
   ) {}
 
   // ------------------------------------------------------------------ scheduling
@@ -293,12 +295,13 @@ export class AiRepliesService {
       };
       const seesPhotos = (await this.runner.modelFor(settings.tier)).imageInput === true;
       const photos = seesPhotos ? await this.photos(thread.history) : new Map<string, AiImage[]>();
+      const site = await this.website.summary();
       result = await this.runner.run({
         feature: 'ai_agent_reply',
         tier: settings.tier,
-        system: await this.prompt(settings, channel.type, contact, seesPhotos),
+        system: await this.prompt(settings, channel.type, contact, seesPhotos, site),
         messages: toAgentHistory(thread.history, photos),
-        tools: this.tools.specs(settings),
+        tools: this.tools.specs({ takeOrders: settings.takeOrders, websitePages: site.count > 0 }),
         toolContext,
         runId,
         reference: { type: 'conversation', id: conversation._id.toHexString() },
@@ -547,6 +550,7 @@ export class AiRepliesService {
     channelType: ChannelType,
     contact: ContactDoc | null,
     seesPhotos = false,
+    site: { count: number; hosts: string[]; titles: string[] } | null = null,
   ): Promise<string> {
     const orgId = RequestContext.tenant()!.orgId;
     const [org, shop, catalog, customer] = await Promise.all([
@@ -576,6 +580,7 @@ export class AiRepliesService {
       customer,
       now: new Date(),
       seesPhotos,
+      website: site ? { hosts: site.hosts, pageCount: site.count, titles: site.titles } : null,
     });
   }
 
@@ -652,13 +657,14 @@ export class AiRepliesService {
       channelType: null,
     };
     let result: AgentRunResult;
+    const site = await this.website.summary();
     try {
       result = await this.runner.run({
         feature: 'ai_agent_preview',
         tier: settings.tier,
-        system: await this.prompt(settings, 'web_chat', null),
+        system: await this.prompt(settings, 'web_chat', null, false, site),
         messages,
-        tools: this.tools.specs(settings),
+        tools: this.tools.specs({ takeOrders: settings.takeOrders, websitePages: site.count > 0 }),
         toolContext,
         runId: `aip_${randomUUID()}`,
         reference: { type: 'ai_agent_preview', id: userId },

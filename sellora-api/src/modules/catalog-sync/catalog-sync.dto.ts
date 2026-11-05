@@ -44,6 +44,7 @@ export const sourceInput = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('shopify'), url, credentials: shopifyCredentials }).strict(),
   z.object({ kind: z.literal('woocommerce'), url, credentials: wooCredentials }).strict(),
   z.object({ kind: z.literal('sheet'), url }).strict(),
+  z.object({ kind: z.literal('website'), url }).strict(),
   z
     .object({ kind: z.literal('csv'), filename: z.string().trim().min(1).max(200), csv: csvText })
     .strict(),
@@ -56,6 +57,10 @@ const settings = {
   newProductStatus: z.enum(['active', 'draft']).optional(),
   syncStock: z.boolean().optional(),
   archiveMissing: z.boolean().optional(),
+  holdLargeChanges: z.boolean().optional(),
+  /** Websites (ADR 0024). */
+  importProducts: z.boolean().optional(),
+  readPages: z.boolean().optional(),
 };
 
 export const createSourceBody = z.object({ source: sourceInput, ...settings }).strict();
@@ -76,6 +81,13 @@ export type UpdateSourceBody = z.infer<typeof updateSourceBody>;
 export const uploadCsvBody = z
   .object({ filename: z.string().trim().min(1).max(200), csv: csvText })
   .strict();
+
+export const heldDecisionBody = z
+  .object({ ref: z.string().min(1).max(2100), decision: z.enum(['apply', 'keep']) })
+  .strict();
+export type HeldDecisionBody = z.infer<typeof heldDecisionBody>;
+
+export const pageSearchQuery = z.object({ q: z.string().trim().min(1).max(200) }).strict();
 
 export const runsQuery = z
   .object({
