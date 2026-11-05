@@ -1,7 +1,7 @@
 'use client';
 
 import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
-import { Package, Plus, Search } from 'lucide-react';
+import { Package, Plus, RefreshCw, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -191,7 +191,13 @@ export default function ProductsPage() {
                             <span className="block truncate font-medium text-primary hover:underline">
                               {p.name}
                             </span>
-                            <span className="block truncate text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                              {p.sync && (
+                                <RefreshCw
+                                  className="size-3 shrink-0"
+                                  aria-label="Synced from a source"
+                                />
+                              )}
                               {p.variants.length > 1
                                 ? `${p.variants.length} variants`
                                 : (p.variants[0]?.sku ?? 'No SKU')}

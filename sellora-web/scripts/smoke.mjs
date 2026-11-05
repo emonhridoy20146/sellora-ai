@@ -143,6 +143,7 @@ try {
       ['/products', 'products'],
       ['/products/new', 'products-new'],
       ['/products/categories', 'products-categories'],
+      ['/products/sync', 'products-sync'],
       ['/customers', 'customers'],
       ['/couriers', 'couriers'],
       ['/store', 'store'],

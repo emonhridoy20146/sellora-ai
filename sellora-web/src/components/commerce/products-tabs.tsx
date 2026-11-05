@@ -9,6 +9,7 @@ export function ProductsTabs({ orgId }: { orgId: string }) {
       tabs={[
         { href: base, label: 'Products', exact: true },
         { href: `${base}/categories`, label: 'Categories' },
+        { href: `${base}/sync`, label: 'Import and sync' },
       ]}
     />
   );

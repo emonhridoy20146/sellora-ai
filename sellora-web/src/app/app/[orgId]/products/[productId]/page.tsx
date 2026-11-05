@@ -1,17 +1,19 @@
 'use client';
 
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useCatalogSources } from '@/components/catalog-sync/shared';
 import { ProductStatusBadge, StockBadge } from '@/components/commerce/badges';
 import { commerceKeys, useShopSettings } from '@/components/commerce/hooks';
 import { PageError } from '@/components/commerce/page-error';
 import { ProductForm } from '@/components/commerce/product-form';
 import { StockAdjustDialog } from '@/components/commerce/stock-adjust-dialog';
 import { useOrg } from '@/components/org-context';
+import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -22,7 +24,7 @@ import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import type { Page, Product, StockMovement, Variant } from '@/lib/api/types';
 import { STOCK_REASON } from '@/lib/commerce';
-import { formatDateTime } from '@/lib/format';
+import { formatDateTime, formatRelative } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 function StockHistory({
@@ -108,6 +110,37 @@ function StockHistory({
   );
 }
 
+/** Says where a synced product comes from and what the next sync replaces. */
+function SyncedNote({ orgId, product }: { orgId: string; product: Product }) {
+  const sources = useCatalogSources(orgId, Boolean(product.sync));
+  if (!product.sync) return null;
+  const source = sources.data?.find((s) => s.id === product.sync!.sourceId);
+  return (
+    <Alert
+      tone="info"
+      className="mb-4"
+      title={
+        <span className="inline-flex items-center gap-1.5">
+          <RefreshCw className="size-3.5" aria-hidden /> Synced from {source?.name ?? 'a source'}
+        </span>
+      }
+      action={
+        <Button asChild size="sm" variant="outline">
+          <Link href={`/app/${orgId}/products/sync`}>Import and sync</Link>
+        </Button>
+      }
+    >
+      Last synced {formatRelative(product.sync.syncedAt)}. When this product changes at the source,
+      its{' '}
+      {source?.syncStock === false
+        ? 'name, description, prices, options and photos'
+        : 'name, description, prices, options, photos and stock'}{' '}
+      are replaced here. Your costs are kept.
+      {product.sync.archivedBySync && ' It was archived because the source no longer lists it.'}
+    </Alert>
+  );
+}
+
 export default function ProductPage() {
   const { org, can } = useOrg();
   const { productId } = useParams<{ productId: string }>();
@@ -156,6 +189,7 @@ export default function ProductPage() {
           )
         }
       />
+      <SyncedNote orgId={org.id} product={p} />
       <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
         {/* key: reset the form state when the product is saved from another tab of this page */}
         <ProductForm
