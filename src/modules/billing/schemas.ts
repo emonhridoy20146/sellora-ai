@@ -22,6 +22,7 @@ const limitsDefinition = {
   conversationsPerMonth: { type: Number, default: null },
   landingPages: { type: Number, default: null },
   storageMb: { type: Number, default: null },
+  websitePages: { type: Number, default: null },
 };
 const limitsSchema = new Schema(limitsDefinition, { _id: false, strict: 'throw' });
 

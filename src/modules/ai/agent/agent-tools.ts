@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
 import { normalizePhone } from '../../../common/validation/schemas.js';
 import { CustomersService } from '../../commerce/customers.service.js';
+import { WebsitePagesService } from '../../knowledge/website-pages.js';
 import { OrdersService, type OrderDoc } from '../../commerce/orders.service.js';
 import { ProductsService, type ProductDoc } from '../../commerce/products.service.js';
 import type { CustomerSource, Variant } from '../../commerce/schemas.js';
@@ -101,6 +102,7 @@ const inputs = {
   handover_to_human: z
     .object({ reason: z.enum(HANDOVER_REASONS), summary: z.string().trim().min(1).max(500) })
     .strict(),
+  search_website: z.object({ query: z.string().trim().min(1).max(200) }).strict(),
 } as const;
 
 export type AgentToolName = keyof typeof inputs;
@@ -207,6 +209,19 @@ const SPECS: Record<AgentToolName, AiToolSpec> = {
       },
     }),
   },
+  search_website: {
+    name: 'search_website',
+    description:
+      "Search the pages of the business's own website: delivery and return policies, size " +
+      'guides, care instructions, payment options, opening hours, about the business. Call it ' +
+      'when the customer asks something the information above does not answer. Use a few key ' +
+      'words, in the language the website is likely written in (often English), and try ' +
+      'other words if nothing comes back. Answer only from what the pages say. Prices and ' +
+      'stock always come from the catalog and product tools, never from page text.',
+    inputSchema: object({
+      query: { type: 'string', description: 'A few key words, up to 200 characters.' },
+    }),
+  },
   handover_to_human: {
     name: 'handover_to_human',
     description:
@@ -251,11 +266,14 @@ export class AgentTools {
     private readonly shopSettings: ShopSettingsService,
     private readonly contacts: ContactRepository,
     private readonly orgs: OrgsService,
+    private readonly website: WebsitePagesService,
   ) {}
 
-  specs(ctx: Pick<ToolRunContext, 'takeOrders'>): AiToolSpec[] {
+  /** The tools for this business: no create_order without ordering, no search_website without pages. */
+  specs(ctx: { takeOrders: boolean; websitePages?: boolean }): AiToolSpec[] {
     return (Object.keys(SPECS) as AgentToolName[])
       .filter((n) => ctx.takeOrders || n !== 'create_order')
+      .filter((n) => ctx.websitePages || n !== 'search_website')
       .map((n) => SPECS[n]);
   }
 
@@ -287,6 +305,8 @@ export class AgentTools {
         return this.myOrders(ctx);
       case 'save_customer_details':
         return this.saveDetails(input, ctx);
+      case 'search_website':
+        return this.searchWebsite(input);
       case 'handover_to_human': {
         const h = input as z.infer<(typeof inputs)['handover_to_human']>;
         return {
@@ -298,6 +318,22 @@ export class AgentTools {
         };
       }
     }
+  }
+
+  // ---------------------------------------------------------------- website
+
+  private async searchWebsite(
+    input: z.infer<(typeof inputs)['search_website']>,
+  ): Promise<ToolOutcome> {
+    const hits = await this.website.search(input.query, 3);
+    return {
+      result: {
+        results: hits.map((h) => ({ page: h.title, url: h.url, text: h.passages })),
+        ...(hits.length === 0
+          ? { hint: 'No page matched. Try other or fewer words, or say you will check.' }
+          : {}),
+      },
+    };
   }
 
   // ---------------------------------------------------------------- catalog

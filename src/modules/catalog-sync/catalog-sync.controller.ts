@@ -31,9 +31,20 @@ export class CatalogSyncController {
     return this.sync.check(body);
   }
 
+  @Get('website/search')
+  @RequirePermissions('catalog.view')
+  @ApiOperation({
+    summary: 'What the AI agent’s search_website tool finds in the kept website pages (ADR 0024).',
+  })
+  searchPages(@ZodQuery(dto.pageSearchQuery) q: z.infer<typeof dto.pageSearchQuery>) {
+    return this.sync.searchPages(q.q);
+  }
+
   @Post()
   @RequirePermissions('catalog.manage')
-  @ApiOperation({ summary: 'Add a source; its first sync starts at once.' })
+  @ApiOperation({
+    summary: 'Add a source; its first sync starts at once (a website’s after it is verified).',
+  })
   create(@ZodBody(dto.createSourceBody) body: dto.CreateSourceBody) {
     return this.sync.create(body);
   }
@@ -65,6 +76,45 @@ export class CatalogSyncController {
   @RequirePermissions('catalog.manage')
   async syncNow(@ZodParam('sourceId', objectIdSchema) id: string) {
     return toRunDto(await this.sync.syncNow(id));
+  }
+
+  @Post(':sourceId/verify')
+  @HttpCode(200)
+  @RequirePermissions('catalog.manage')
+  @ApiOperation({
+    summary: 'Check a website’s ownership proof (DNS TXT or meta tag); starts a crawl when found.',
+  })
+  verify(@ZodParam('sourceId', objectIdSchema) id: string) {
+    return this.sync.verify(id);
+  }
+
+  @Post(':sourceId/held')
+  @HttpCode(200)
+  @RequirePermissions('catalog.manage')
+  @ApiOperation({ summary: 'Apply or keep a large change waiting for the merchant.' })
+  decide(
+    @ZodParam('sourceId', objectIdSchema) id: string,
+    @ZodBody(dto.heldDecisionBody) body: dto.HeldDecisionBody,
+  ) {
+    return this.sync.decideHeld(id, body);
+  }
+
+  @Get(':sourceId/pages')
+  @RequirePermissions('catalog.view')
+  pages(
+    @ZodParam('sourceId', objectIdSchema) id: string,
+    @ZodQuery(dto.runsQuery) q: z.infer<typeof dto.runsQuery>,
+  ) {
+    return this.sync.listPages(id, q);
+  }
+
+  @Get(':sourceId/pages/:pageId')
+  @RequirePermissions('catalog.view')
+  page(
+    @ZodParam('sourceId', objectIdSchema) id: string,
+    @ZodParam('pageId', objectIdSchema) pageId: string,
+  ) {
+    return this.sync.getPage(id, pageId);
   }
 
   @Post(':sourceId/upload')

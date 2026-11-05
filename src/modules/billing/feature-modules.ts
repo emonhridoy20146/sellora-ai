@@ -62,6 +62,8 @@ export const LIMIT_KEYS = [
   'conversationsPerMonth',
   'landingPages',
   'storageMb',
+  /** Pages one website crawl reads (ADR 0024). */
+  'websitePages',
 ] as const;
 export type LimitKey = (typeof LIMIT_KEYS)[number];
 export type PlanLimits = Record<LimitKey, number | null>;
@@ -76,6 +78,7 @@ export const UNLIMITED: PlanLimits = {
   conversationsPerMonth: null,
   landingPages: null,
   storageMb: null,
+  websitePages: null,
 };
 
 export const BILLING_INTERVALS = ['month', 'year', 'lifetime'] as const;

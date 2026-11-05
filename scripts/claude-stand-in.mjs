@@ -2,7 +2,8 @@
 /**
  * A stand-in for the Claude Messages API, for local demos and browser checks when no real
  * Anthropic key is available. It is NOT an AI: replies follow a few fixed rules (search the
- * catalog when the customer names something, hand over on a complaint, otherwise greet).
+ * website's pages for delivery or return questions, search the catalog when the customer
+ * names something, hand over on a complaint, otherwise greet).
  * It answers in the request and response format of the real API, so the whole Sellora
  * pipeline (tools, credits, handover, live updates) runs exactly as with Claude.
  *
@@ -23,6 +24,9 @@ const STOP = new Set(
     ' ',
   ),
 );
+/** Questions a shop's own pages answer, not its catalog. */
+const SHOP_INFO =
+  /(deliver|shipping|charge|return|exchange|refund policy|size guide|cash on delivery|\bcod\b|ডেলিভারি|চার্জ|ফেরত|এক্সচেঞ্জ|সাইজ)/i;
 const COMPLAINT =
   /(complain|torn|chhera|chera|broken|bhanga|refund|faulty|wrong item|খারাপ|ছেঁড়া|অভিযোগ)/i;
 
@@ -70,6 +74,28 @@ function reply(body) {
     } catch {
       data = {};
     }
+    if (call?.name === 'search_website') {
+      const pages = Array.isArray(data.results) ? data.results : [];
+      if (!pages.length)
+        return [
+          {
+            type: 'text',
+            text: bangla
+              ? 'এটা আমি নিশ্চিত না, টিমের কাছ থেকে জেনে জানাচ্ছি।'
+              : 'Eta ami nishchit na, team theke jene janacchi.',
+          },
+        ];
+      // A real model would answer in its own words; this one quotes the best line it got.
+      const line =
+        pages[0].text.split('\n').find((l) => l.length > 40 && l !== '…') ??
+        pages[0].text.split('\n')[0];
+      return [
+        {
+          type: 'text',
+          text: `${line}\n(${pages[0].page}: ${pages[0].url})`,
+        },
+      ];
+    }
     if (call?.name === 'handover_to_human')
       return [
         {
@@ -116,6 +142,9 @@ function reply(body) {
 
   if (COMPLAINT.test(customer) && tools.has('handover_to_human'))
     return [toolUse('handover_to_human', { reason: 'complaint', summary: customer.slice(0, 120) })];
+
+  if (SHOP_INFO.test(customer) && tools.has('search_website'))
+    return [toolUse('search_website', { query: customer.slice(0, 200) })];
 
   const words = customer
     .toLowerCase()

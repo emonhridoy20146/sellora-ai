@@ -71,6 +71,14 @@ export interface AgentPromptInput {
   now: Date;
   /** The model can look at the photos customers send. */
   seesPhotos?: boolean;
+  /** Pages of the business's website the search_website tool can search (ADR 0024). */
+  website?: PromptWebsite | null;
+}
+
+export interface PromptWebsite {
+  hosts: string[];
+  pageCount: number;
+  titles: string[];
 }
 
 const LANGUAGE_RULES: Record<AiLanguage, string> = {
@@ -204,6 +212,21 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
       [
         '## Frequently asked questions',
         ...settings.faqs.map((f) => `Q: ${f.question.trim()}\nA: ${f.answer.trim()}`),
+      ].join('\n'),
+    );
+
+  if (input.website && input.website.pageCount > 0)
+    parts.push(
+      [
+        '## Website',
+        `${business.name}'s website (${input.website.hosts.join(', ')}) has ${input.website.pageCount} ` +
+          'pages you can search with search_website, for questions the information above does ' +
+          'not answer (policies, delivery, returns, sizes, care, payment, about the business).' +
+          (input.website.titles.length
+            ? ` Some of its pages: ${input.website.titles.join('; ')}.`
+            : ''),
+        'Answer from what the pages say. Quote prices and stock only from the catalog and the ' +
+          'product tools: a page may be older than the catalog.',
       ].join('\n'),
     );
 

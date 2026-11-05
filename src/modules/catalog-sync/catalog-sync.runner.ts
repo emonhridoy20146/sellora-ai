@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import type { Model } from 'mongoose';
@@ -7,12 +8,19 @@ import { AppError } from '../../common/errors/app-error.js';
 import { AppConfig } from '../../config/app-config.js';
 import { CROSS_TENANT } from '../../infra/database/tenant-guard.plugin.js';
 import { SafeHttp } from '../../infra/http/safe-http.js';
+import { chatMoney } from '../ai/agent/chat-text.js';
 import { ProductsService, type ProductDoc } from '../commerce/products.service.js';
 import type { ProductImage } from '../commerce/schemas.js';
 import { FilesService } from '../files/files.service.js';
+import { WebsitePagesService } from '../knowledge/website-pages.js';
 import { OrgsService } from '../orgs/orgs.service.js';
 import { CatalogSyncService } from './catalog-sync.service.js';
-import { SOURCE_LABEL, SourceError, type ConnectorInput } from './connectors/connector.js';
+import {
+  SOURCE_LABEL,
+  SourceError,
+  type ConnectorInput,
+  type SourceErrorKind,
+} from './connectors/connector.js';
 import { fromHttpError } from './connectors/http.js';
 import { CONNECTORS } from './connectors/index.js';
 import {
@@ -20,7 +28,16 @@ import {
   CatalogSyncRunRepository,
   type CatalogSourceDoc,
 } from './repositories.js';
-import { ZERO_COUNTS, type CatalogSource, type RunCounts, type RunStatus } from './schemas.js';
+import {
+  MAX_HELD,
+  ZERO_COUNTS,
+  ZERO_PAGES,
+  type CatalogSource,
+  type HeldChange,
+  type PageCounts,
+  type RunCounts,
+  type RunStatus,
+} from './schemas.js';
 import {
   normalizeSourceProduct,
   productHash,
@@ -38,9 +55,49 @@ const SWEEP_LIMIT = 50;
 const MAX_BACKOFF_MIN = 24 * 60;
 const ACTOR: Actor = { type: 'system', id: 'catalog-sync' };
 const MB = 1024 * 1024;
+/** A large archive: more than half of the source's products, and more than this many. */
+const LARGE_ARCHIVE_MIN = 5;
 
 export type RunOutcome =
-  { status: RunStatus; counts: RunCounts; error?: string } | { status: 'skipped'; reason: string };
+  | { status: RunStatus; counts: RunCounts; pages?: PageCounts; error?: string }
+  | { status: 'skipped'; reason: string };
+
+type PriceChange = HeldChange['prices'][number];
+type PageInputs = Parameters<WebsitePagesService['save']>[2];
+
+/** A price change that moves by more than half of the old price (ADR 0024). */
+export const isLargePriceChange = (c: PriceChange): boolean =>
+  c.fromMinor > 0 && Math.abs(c.toMinor - c.fromMinor) * 2 > c.fromMinor;
+
+/** How each variant's price would change, for variants Sellora already has. */
+export function priceChanges(current: ProductDoc, p: SourceProduct): PriceChange[] {
+  const ids = new Map(
+    (current.sync?.variants ?? []).map((m) => [m.externalId, m.variantId.toHexString()]),
+  );
+  const out: PriceChange[] = [];
+  for (const sv of p.variants) {
+    const id = ids.get(sv.externalId);
+    const v = id ? current.variants.find((x) => x._id.toHexString() === id) : undefined;
+    if (v && v.priceMinor !== sv.priceMinor)
+      out.push({
+        variant: current.options.length ? v.title : '',
+        fromMinor: v.priceMinor,
+        toMinor: sv.priceMinor,
+      });
+  }
+  return out;
+}
+
+/** What a run tracks besides its counts. */
+interface RunState {
+  runId: Types.ObjectId;
+  counts: RunCounts;
+  pages: PageCounts | null;
+  problems: Problems;
+  /** The source's held changes as this run leaves them, by ref. */
+  held: Map<string, HeldChange>;
+  currency: string;
+}
 
 /** Minutes to wait after `failures` failed runs in a row. */
 export function backoffMinutes(interval: number, failures: number): number {
@@ -73,6 +130,7 @@ export class CatalogSyncRunner {
     private readonly products: ProductsService,
     private readonly files: FilesService,
     private readonly orgs: OrgsService,
+    private readonly knowledge: WebsitePagesService,
     private readonly http: SafeHttp,
     private readonly config: AppConfig,
     @InjectModel('CatalogSource') private readonly sourceModel: Model<CatalogSource>,
@@ -157,18 +215,40 @@ export class CatalogSyncRunner {
       { $set: { status: 'running', startedAt: started } },
     );
 
-    const counts: RunCounts = { ...ZERO_COUNTS };
-    const problems = new Problems();
-    let error: string | undefined;
+    const state: RunState = {
+      runId: run._id,
+      counts: { ...ZERO_COUNTS },
+      pages: leased.kind === 'website' ? { ...ZERO_PAGES } : null,
+      problems: new Problems(),
+      held: new Map((leased.held ?? []).map((h) => [h.ref, h])),
+      currency: 'BDT',
+    };
+    let error: { message: string; kind: SourceErrorKind } | undefined;
     try {
       const { currency } = await this.orgs.get(leased.orgId.toHexString());
+      state.currency = currency;
+      const site = leased.website;
+      if (leased.kind === 'website' && !site?.verifiedAt)
+        throw new SourceError('ownership', 'Prove the website is yours first, then press Verify.');
       const input: ConnectorInput = {
         ...(leased.url ? { url: leased.url } : {}),
         ...(leased.credentialsEnc ? { credentials: this.service.credentials(leased) } : {}),
         ...(run.csv !== undefined ? { csv: run.csv } : {}),
         currency,
+        ...(site
+          ? {
+              website: {
+                token: site.token,
+                importProducts: site.importProducts,
+                readPages: site.readPages,
+                productPages: site.importProducts
+                  ? await this.products.sourceExternalIds(leased._id)
+                  : [],
+              },
+            }
+          : {}),
       };
-      await this.read(leased, input, counts, problems, now);
+      await this.read(leased, input, state, now);
     } catch (err) {
       const e =
         err instanceof SourceError
@@ -177,29 +257,39 @@ export class CatalogSyncRunner {
             ? new SourceError('bad_response', err.message)
             : null;
       if (!e) this.logger.error({ err, runId }, 'Catalog sync failed');
-      error = e?.message ?? fromHttpError(err, SOURCE_LABEL[leased.kind]).message;
+      error = e
+        ? { message: e.message, kind: e.kind }
+        : { message: fromHttpError(err, SOURCE_LABEL[leased.kind]).message, kind: 'unavailable' };
     }
-    return this.finish(leased, run._id, { counts, problems, error }, now());
+    return this.finish(leased, run, state, error, now());
   }
 
   /** Reads every batch and writes the products; throws when the source cannot be read to the end. */
   private async read(
     source: CatalogSourceDoc,
     input: ConnectorInput,
-    counts: RunCounts,
-    problems: Problems,
+    state: RunState,
     now: () => Date,
   ): Promise<void> {
+    const { counts, problems } = state;
     const label = SOURCE_LABEL[source.kind];
+    const connector = CONNECTORS[source.kind];
     const seen = new Set<string>();
+    /** Websites: products whose page was read and no longer has them. */
+    const gone = new Set<string>();
     const categories = new Map<string, Types.ObjectId>();
     let limitReached = false;
-    const ctx = this.service.connectorContext();
-    for await (const batch of CONNECTORS[source.kind].read(input, ctx)) {
+    const ctx = await this.service.connectorContext(source.kind);
+    for await (const batch of connector.read(input, ctx)) {
       for (const p of batch.problems) {
         if (p.skipped) counts.failed += 1;
         problems.add(p);
       }
+      if (batch.movedProducts?.length)
+        await this.products.rekeySource(source._id, batch.movedProducts);
+      for (const id of batch.goneProducts ?? []) gone.add(id);
+      if (state.pages) await this.pages(source, state, batch);
+
       // Duplicates (the same item twice at the source) are reported, never written twice.
       const fresh: SourceProduct[] = [];
       for (const raw of batch.products) {
@@ -220,6 +310,7 @@ export class CatalogSyncRunner {
           continue;
         }
         seen.add(n.product.externalId);
+        gone.delete(n.product.externalId);
         fresh.push(n.product);
       }
       const existing = new Map(
@@ -234,6 +325,7 @@ export class CatalogSyncRunner {
       for (const p of fresh) {
         const current = existing.get(p.externalId) ?? null;
         if (!p.active) {
+          state.held.delete(p.externalId);
           if (current && source.archiveMissing && current.status !== 'archived')
             archive.push(current._id);
           else counts.unchanged += 1;
@@ -247,10 +339,13 @@ export class CatalogSyncRunner {
         const restoring = current?.status === 'archived' && current.sync?.archivedBySync;
         if (current && current.sync?.hash === hash && !restoring) {
           counts.unchanged += 1;
+          state.held.delete(p.externalId);
           continue;
         }
+        if (current && !restoring && this.holdPrice(source, state, current, p, hash, now()))
+          continue;
         try {
-          const images = await this.photos(p, current, problems);
+          const images = await this.photos(p, current, problems, ctx.crawl?.userAgent);
           let categoryId: Types.ObjectId | null = null;
           if (p.category) {
             const key = p.category.toLowerCase();
@@ -270,10 +365,12 @@ export class CatalogSyncRunner {
             options: p.options,
             variants: p.variants,
             syncStock: source.syncStock,
+            stockFrom: source.kind === 'website' ? 'availability' : 'counts',
             newStatus: source.newProductStatus,
             createdBy: source.createdBy,
           });
           counts[outcome] += 1;
+          state.held.delete(p.externalId);
         } catch (err) {
           counts.failed += 1;
           if (err instanceof AppError) {
@@ -304,21 +401,156 @@ export class CatalogSyncRunner {
       if (!renewed.matched) {
         // Removed while running: what this run wrote must not point at a source that is gone.
         await this.products.detachSource(source._id);
+        await this.knowledge.removeSource(source._id);
         throw new SourceError('not_found', 'The source was removed during the sync.');
       }
     }
 
+    const importsProducts = source.kind !== 'website' || source.website?.importProducts !== false;
     // Everything was read: products the source no longer has are archived, unless the source
     // answered with nothing at all where it used to have products.
-    if (counts.seen === 0 && source.lastSeen > 0)
+    if (importsProducts && counts.seen === 0 && source.lastSeen > 0)
       throw new SourceError(
         'bad_response',
         `${label} answered with no products (it had ${source.lastSeen} last time), so nothing was archived. If the catalog really is empty, archive the products in Sellora.`,
       );
-    if (source.archiveMissing) {
-      const gone = await this.products.findBySourceMissing(source._id, [...seen]);
-      counts.archived += await this.products.archiveFromSource(gone.map((p) => p._id));
+    if (state.pages) await this.finishPages(source, state);
+    if (!source.archiveMissing) return;
+    // A crawl may not reach every page: only products confirmed gone are archived.
+    const missing = connector.partialReads
+      ? (await this.products.findBySource(source._id, [...gone])).filter(
+          (p) => p.status !== 'archived',
+        )
+      : await this.products.findBySourceMissing(source._id, [...seen]);
+    counts.archived += await this.archiveGone(source, state, missing, now());
+  }
+
+  /** Website pages in a batch: saved for the AI, or removed when gone. */
+  private async pages(
+    source: CatalogSourceDoc,
+    state: RunState,
+    batch: {
+      pages?: PageInputs;
+      gonePages?: string[];
+      crawlEnd?: { read: number; notRead: number };
+    },
+  ): Promise<void> {
+    const pages = state.pages!;
+    if (batch.pages?.length && source.website?.readPages) {
+      const c = await this.knowledge.save(source._id, state.runId, batch.pages);
+      pages.added += c.added;
+      pages.changed += c.changed;
     }
+    if (batch.gonePages?.length)
+      pages.removed += await this.knowledge.remove(source._id, batch.gonePages);
+    if (batch.crawlEnd) {
+      pages.read = batch.crawlEnd.read;
+      pages.notRead = batch.crawlEnd.notRead;
+    }
+  }
+
+  /** After a crawl: pages it did not see go when it read the whole site (or pages are off). */
+  private async finishPages(source: CatalogSourceDoc, state: RunState): Promise<void> {
+    const pages = state.pages!;
+    if (!source.website?.readPages) pages.removed += await this.knowledge.removeSource(source._id);
+    else if (pages.notRead === 0)
+      pages.removed += await this.knowledge.removeUnseen(source._id, state.runId);
+    if (pages.notRead > 0)
+      state.problems.add({
+        ref: 'Pages',
+        message: `Read ${pages.read} pages, the most one crawl may read on this plan; ${pages.notRead} more were found but not read.`,
+      });
+  }
+
+  /**
+   * Holds a change that moves a price by more than half, unless the merchant chose to apply
+   * this version (ADR 0024). Returns true when the product is not to be written now.
+   */
+  private holdPrice(
+    source: CatalogSourceDoc,
+    state: RunState,
+    current: ProductDoc,
+    p: SourceProduct,
+    hash: string,
+    at: Date,
+  ): boolean {
+    if (!source.holdLargeChanges) return false;
+    const changes = priceChanges(current, p);
+    if (!changes.some(isLargePriceChange)) return false;
+    const entry = state.held.get(p.externalId);
+    if (entry?.hash === hash && entry.decision === 'apply') return false;
+    if (entry?.hash === hash && entry.decision === 'keep') {
+      state.counts.unchanged += 1;
+      return true;
+    }
+    state.held.set(p.externalId, {
+      ref: p.externalId,
+      kind: 'price',
+      label: p.name,
+      productId: current._id,
+      prices: changes,
+      names: [],
+      hash,
+      decision: 'pending',
+      seenAt: at,
+    });
+    state.counts.held += 1;
+    const what = changes
+      .filter(isLargePriceChange)
+      .slice(0, 3)
+      .map(
+        (c) =>
+          `${c.variant ? `${c.variant}: ` : ''}${chatMoney(c.fromMinor, state.currency)} → ${chatMoney(c.toMinor, state.currency)}`,
+      )
+      .join(', ');
+    state.problems.add({
+      ref: p.name,
+      message: `The price changed by more than half (${what}), so it waits for you to apply or keep it.`,
+    });
+    return true;
+  }
+
+  /** Archives products gone from the source; a large archive waits for the merchant. */
+  private async archiveGone(
+    source: CatalogSourceDoc,
+    state: RunState,
+    gone: ProductDoc[],
+    at: Date,
+  ): Promise<number> {
+    if (!gone.length) {
+      state.held.delete('archive');
+      return 0;
+    }
+    if (source.holdLargeChanges && gone.length > LARGE_ARCHIVE_MIN) {
+      const live = (await this.products.findBySourceMissing(source._id, [])).length;
+      if (gone.length * 2 > live) {
+        const ids = gone.map((g) => g.sync?.externalId ?? g._id.toHexString()).sort();
+        const hash = createHash('sha256').update(ids.join('\n')).digest('base64url').slice(0, 32);
+        const entry = state.held.get('archive');
+        if (!(entry?.hash === hash && entry.decision === 'apply')) {
+          if (!(entry?.hash === hash && entry.decision === 'keep')) {
+            state.held.set('archive', {
+              ref: 'archive',
+              kind: 'archive',
+              label: `${gone.length} products`,
+              prices: [],
+              names: gone.slice(0, 20).map((g) => g.name),
+              hash,
+              decision: 'pending',
+              seenAt: at,
+            });
+            state.counts.held += 1;
+            state.problems.add({
+              ref: `${gone.length} products`,
+              message: `They are gone from the source: more than half of its ${live} products at once, so none were archived. They wait for you to apply or keep it.`,
+            });
+          }
+          return 0;
+        }
+      }
+    }
+    state.held.delete('archive');
+    return this.products.archiveFromSource(gone.map((g) => g._id));
   }
 
   /**
@@ -330,6 +562,7 @@ export class CatalogSyncRunner {
     p: SourceProduct,
     current: ProductDoc | null,
     problems: Problems,
+    userAgent?: string,
   ): Promise<ProductImage[]> {
     const known = new Map(
       (current?.images ?? []).filter((i) => i.sourceUrl).map((i) => [i.sourceUrl!, i]),
@@ -345,7 +578,10 @@ export class CatalogSyncRunner {
       try {
         const res = await this.http.request(img.url, {
           maxBytes,
-          headers: { accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8' },
+          headers: {
+            accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8',
+            ...(userAgent ? { 'user-agent': userAgent } : {}),
+          },
         });
         if (res.status < 200 || res.status >= 300)
           throw new SourceError('not_found', `HTTP ${res.status}`);
@@ -375,51 +611,94 @@ export class CatalogSyncRunner {
 
   private async finish(
     source: CatalogSourceDoc,
-    runId: Types.ObjectId,
-    r: { counts: RunCounts; problems: Problems; error?: string },
+    run: { _id: Types.ObjectId; startedAt?: Date },
+    state: RunState,
+    error: { message: string; kind: SourceErrorKind } | undefined,
     at: Date,
   ): Promise<RunOutcome> {
-    const status: RunStatus = r.error ? 'failed' : r.counts.failed > 0 ? 'partial' : 'succeeded';
+    const runId = run._id;
+    const { counts, pages, problems } = state;
+    const status: RunStatus = error
+      ? 'failed'
+      : counts.failed > 0 || counts.held > 0 || (pages?.notRead ?? 0) > 0
+        ? 'partial'
+        : 'succeeded';
     await this.runs.updateOne(
       { _id: runId },
       {
         $set: {
           status,
-          counts: r.counts,
-          problems: r.problems.list,
-          moreProblems: r.problems.more,
+          counts,
+          ...(pages ? { pages } : {}),
+          problems: problems.list,
+          moreProblems: problems.more,
           finishedAt: at,
-          ...(r.error ? { error: r.error } : {}),
+          ...(error ? { error: error.message } : {}),
         },
         $unset: { csv: '' },
       },
     );
-    const failures = r.error ? source.failures + 1 : 0;
+    const failures = error ? source.failures + 1 : 0;
+    const lostOwnership = error?.kind === 'ownership';
     const interval = source.intervalMinutes;
+    // Decisions the merchant made while this run was going are kept.
+    const now = await this.sources.findById(source._id, { held: 1 });
+    const decided = new Map((now?.held ?? []).map((h) => [h.ref, h]));
+    const held = [...state.held.values()]
+      .map((h) => {
+        const d = decided.get(h.ref);
+        return d && d.hash === h.hash && d.decision !== h.decision ? { ...h, ...d } : h;
+      })
+      .slice(0, MAX_HELD);
     const set: Record<string, unknown> = {
       lastRun: {
         runId,
         status,
         finishedAt: at,
-        counts: r.counts,
-        ...(r.error ? { error: r.error } : {}),
+        counts,
+        ...(pages ? { pages } : {}),
+        ...(error ? { error: error.message } : {}),
       },
       failures,
+      held,
     };
-    if (!r.error) {
-      set.lastSuccessAt = at;
-      set.lastSeen = r.counts.seen;
-    }
     const unset: Record<string, ''> = { lease: '' };
-    if (interval > 0 && source.status === 'active')
+    if (!error) {
+      set.lastSuccessAt = at;
+      set.lastSeen = counts.seen;
+    }
+    if (source.website) {
+      set['website.checkedAt'] = at;
+      if (lostOwnership) {
+        set['website.verifyError'] = error.message;
+        unset['website.verifiedAt'] = '';
+        unset['website.verifiedBy'] = '';
+      } else if (!error) unset['website.verifyError'] = '';
+    }
+    if (interval > 0 && source.status === 'active' && !lostOwnership)
       set.nextSyncAt = new Date(
-        at.getTime() + (r.error ? backoffMinutes(interval, failures) : interval) * 60_000,
+        at.getTime() + (error ? backoffMinutes(interval, failures) : interval) * 60_000,
       );
     else unset.nextSyncAt = '';
     await this.sources.updateOne(
       { _id: source._id, 'lease.runId': runId },
       { $set: set, $unset: unset },
     );
-    return { status, counts: r.counts, ...(r.error ? { error: r.error } : {}) };
+    // "Apply" pressed while this run was going: the next run applies it now.
+    const startedAt = run.startedAt ?? at;
+    if (
+      !error &&
+      held.some((h) => h.decision === 'apply' && h.decidedAt && h.decidedAt > startedAt)
+    ) {
+      const fresh = await this.sources.findById(source._id);
+      if (fresh && !(await this.runs.exists({ sourceId: fresh._id, status: 'queued' })))
+        await this.service.queueRun(fresh, 'manual');
+    }
+    return {
+      status,
+      counts,
+      ...(pages ? { pages } : {}),
+      ...(error ? { error: error.message } : {}),
+    };
   }
 }

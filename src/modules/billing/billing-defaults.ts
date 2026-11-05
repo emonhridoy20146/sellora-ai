@@ -28,6 +28,7 @@ export const DEFAULT_PLANS: SeedPlan[] = [
       conversationsPerMonth: 100,
       landingPages: 0,
       storageMb: 200,
+      websitePages: 25,
     }),
     prices: [{ interval: 'month', currency: 'BDT', amountMinor: 0 }],
     includedCreditsPerMonth: 0,
@@ -49,6 +50,7 @@ export const DEFAULT_PLANS: SeedPlan[] = [
       channels: 4,
       landingPages: 0,
       storageMb: 2_000,
+      websitePages: 100,
     }),
     prices: [
       { interval: 'month', currency: 'BDT', amountMinor: 149_900 },
@@ -76,7 +78,14 @@ export const DEFAULT_PLANS: SeedPlan[] = [
       'landing_pages',
       'backups_drive',
     ],
-    limits: limits({ seats: 5, stores: 1, customDomains: 1, landingPages: 10, storageMb: 10_000 }),
+    limits: limits({
+      seats: 5,
+      stores: 1,
+      customDomains: 1,
+      landingPages: 10,
+      storageMb: 10_000,
+      websitePages: 200,
+    }),
     prices: [
       { interval: 'month', currency: 'BDT', amountMinor: 299_900 },
       { interval: 'year', currency: 'BDT', amountMinor: 2_999_000 },
@@ -106,7 +115,14 @@ export const DEFAULT_PLANS: SeedPlan[] = [
       'seo',
       'marketing',
     ],
-    limits: limits({ seats: 10, stores: 3, customDomains: 3, landingPages: 50, storageMb: 30_000 }),
+    limits: limits({
+      seats: 10,
+      stores: 3,
+      customDomains: 3,
+      landingPages: 50,
+      storageMb: 30_000,
+      websitePages: 500,
+    }),
     prices: [
       { interval: 'month', currency: 'BDT', amountMinor: 499_900 },
       { interval: 'year', currency: 'BDT', amountMinor: 4_999_000 },

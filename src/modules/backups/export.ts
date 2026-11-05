@@ -42,6 +42,7 @@ export const EXPORT_COLLECTIONS: { name: string; file?: string; omit?: string[] 
   { name: 'fraudsettings', file: 'fraud_settings' },
   { name: 'catalog_sources', omit: ['lease'] },
   { name: 'catalog_sync_runs', omit: ['csv'] },
+  { name: 'website_pages' },
   { name: 'storedfiles', file: 'files' },
   { name: 'subscriptions' },
   { name: 'invoices' },
