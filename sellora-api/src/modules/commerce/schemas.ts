@@ -29,6 +29,22 @@ export interface ProductImage {
   url: string;
   fileId?: Types.ObjectId;
   alt?: string;
+  /** Where a synced photo was copied from, so the next sync does not fetch it again. */
+  sourceUrl?: string;
+}
+
+/** The catalog source a product comes from (ADR 0023). */
+export interface ProductSync {
+  sourceId: Types.ObjectId;
+  /** The product's id at the source. */
+  externalId: string;
+  /** Fingerprint of what was imported last; an equal one means nothing changed. */
+  hash: string;
+  /** Source variant ids to Sellora variant ids, so variants keep their ids. */
+  variants: { externalId: string; variantId: Types.ObjectId }[];
+  /** The sync archived it (gone from the source); a later sync may restore it. */
+  archivedBySync: boolean;
+  syncedAt: Date;
 }
 
 /**
@@ -66,6 +82,7 @@ export interface Product {
   searchText: string;
   soldCount: number;
   createdBy: Types.ObjectId;
+  sync?: ProductSync;
 }
 
 const variantSchema = new Schema<Variant>(
@@ -95,7 +112,12 @@ export const productSchema = tenantSchema<Product>({
   images: {
     type: [
       new Schema(
-        { url: { type: String, required: true }, fileId: Schema.Types.ObjectId, alt: String },
+        {
+          url: { type: String, required: true },
+          fileId: Schema.Types.ObjectId,
+          alt: String,
+          sourceUrl: String,
+        },
         { _id: false, strict: 'throw' },
       ),
     ],
@@ -114,8 +136,35 @@ export const productSchema = tenantSchema<Product>({
   searchText: { type: String, default: '' },
   soldCount: { type: Number, default: 0 },
   createdBy: { type: Schema.Types.ObjectId, required: true },
+  sync: new Schema(
+    {
+      sourceId: { type: Schema.Types.ObjectId, required: true },
+      externalId: { type: String, required: true },
+      hash: { type: String, required: true },
+      variants: {
+        type: [
+          new Schema(
+            {
+              externalId: { type: String, required: true },
+              variantId: { type: Schema.Types.ObjectId, required: true },
+            },
+            { _id: false, strict: 'throw' },
+          ),
+        ],
+        default: [],
+      },
+      archivedBySync: { type: Boolean, default: false },
+      syncedAt: { type: Date, required: true },
+    },
+    { _id: false, strict: 'throw' },
+  ),
 });
 productSchema.index({ orgId: 1, slug: 1 }, { unique: true });
+// One product per item at a source (ADR 0023).
+productSchema.index(
+  { orgId: 1, 'sync.sourceId': 1, 'sync.externalId': 1 },
+  { unique: true, partialFilterExpression: { 'sync.sourceId': { $exists: true } } },
+);
 productSchema.index({ orgId: 1, status: 1, updatedAt: -1 });
 productSchema.index({ orgId: 1, categoryId: 1 });
 // Online store listings: newest, best sellers, and one category's newest.
@@ -135,6 +184,8 @@ export const STOCK_REASONS = [
   'order_cancel',
   'order_edit',
   'return',
+  /** Set to the count at a catalog source (ADR 0023). */
+  'sync',
 ] as const;
 export type StockReason = (typeof STOCK_REASONS)[number];
 

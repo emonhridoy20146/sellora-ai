@@ -11,7 +11,14 @@ import { FilesService } from '../files/files.service.js';
 import { OrgsService } from '../orgs/orgs.service.js';
 import { InventoryService } from './inventory.service.js';
 import { CategoryRepository, OrderRepository, ProductRepository } from './repositories.js';
-import type { Category, Product, ProductImage, ProductStatus, Variant } from './schemas.js';
+import type {
+  Category,
+  Product,
+  ProductImage,
+  ProductStatus,
+  ProductSync,
+  Variant,
+} from './schemas.js';
 import { escapeRegex, searchText, slugify } from './text.js';
 
 export type ProductDoc = WithId<Product>;
@@ -84,6 +91,13 @@ export function toProductDto(p: ProductDoc, lowStockThreshold?: number) {
           : tracked.filter((v) => v.stock <= lowStockThreshold).length,
     },
     soldCount: p.soldCount,
+    sync: p.sync
+      ? {
+          sourceId: p.sync.sourceId.toHexString(),
+          syncedAt: p.sync.syncedAt.toISOString(),
+          archivedBySync: p.sync.archivedBySync,
+        }
+      : null,
     createdAt: p.createdAt.toISOString(),
     updatedAt: p.updatedAt.toISOString(),
   };
@@ -100,6 +114,39 @@ export function toCategoryDto(c: CategoryDoc, productCount?: number) {
 }
 
 const DEFAULT_TITLE = 'Default';
+
+/** A product as a catalog source has it, ready to write (ADR 0023). */
+export interface SourceProductWrite {
+  sourceId: Types.ObjectId;
+  externalId: string;
+  hash: string;
+  /** "Shopify": used in stock notes. */
+  sourceLabel: string;
+  name: string;
+  description: string;
+  tags: string[];
+  categoryId: Types.ObjectId | null;
+  /** Photos already saved to storage (or kept as links). */
+  images: ProductImage[];
+  options: { name: string; values: string[] }[];
+  variants: {
+    externalId: string;
+    optionValues: string[];
+    sku?: string;
+    barcode?: string;
+    priceMinor: number;
+    compareAtPriceMinor?: number;
+    trackStock: boolean;
+    stock: number;
+    weightGrams?: number;
+  }[];
+  syncStock: boolean;
+  /** Status of a product the sync creates or restores. */
+  newStatus: 'active' | 'draft';
+  createdBy: Types.ObjectId;
+}
+
+export type SourceWriteOutcome = 'created' | 'updated' | 'restored' | 'unchanged';
 
 @Injectable()
 export class ProductsService {
@@ -557,6 +604,246 @@ export class ProductsService {
       target: { type: 'product', id, label: p.name },
     });
     return { deleted: !sold, archived: sold };
+  }
+
+  // ---------------------------------------------------------------- catalog sync (ADR 0023)
+
+  /** The product a source item became, if any. */
+  async findBySource(sourceId: Types.ObjectId, externalIds: string[]): Promise<ProductDoc[]> {
+    if (!externalIds.length) return [];
+    return this.products.find({
+      'sync.sourceId': sourceId,
+      'sync.externalId': { $in: externalIds },
+    });
+  }
+
+  /** A source's products that are not archived and whose item was not in `seen`. */
+  async findBySourceMissing(sourceId: Types.ObjectId, seen: string[]): Promise<ProductDoc[]> {
+    return this.products.find(
+      { 'sync.sourceId': sourceId, 'sync.externalId': { $nin: seen }, status: { $ne: 'archived' } },
+      { _id: 1 },
+    );
+  }
+
+  /** A category by name (any case), created when missing. */
+  async categoryFor(name: string): Promise<Types.ObjectId> {
+    const slug = slugify(name);
+    const found = await this.categories.findOne({ slug });
+    if (found) return found._id;
+    try {
+      return (await this.categories.create({ name, slug, sortOrder: 0 }))._id;
+    } catch (err) {
+      if (!isDuplicateKey(err)) throw err;
+      const again = await this.categories.findOne({ slug });
+      if (!again) throw err;
+      return again._id;
+    }
+  }
+
+  /**
+   * Creates or updates the product for one item at a catalog source. The source owns the
+   * name, description, tags, category, photos, options, variants and prices; stock follows it
+   * when `syncStock` (through the inventory ledger). Variants keep their ids by the source's
+   * variant id. A product the sync archived comes back. Throws AppError for an SKU used by
+   * another product, a broken shape or the plan's product limit.
+   */
+  async applySourceProduct(
+    existing: ProductDoc | null,
+    w: SourceProductWrite,
+  ): Promise<{ outcome: SourceWriteOutcome; product: ProductDoc }> {
+    const restoring = Boolean(
+      existing && existing.status === 'archived' && existing.sync?.archivedBySync,
+    );
+    if (existing && existing.sync?.hash === w.hash && !restoring)
+      return { outcome: 'unchanged', product: existing };
+
+    const map = new Map(
+      (existing?.sync?.variants ?? []).map((m) => [m.externalId, m.variantId.toHexString()]),
+    );
+    const variants: Variant[] = w.variants.map((sv) => {
+      const oldId = map.get(sv.externalId);
+      const old = oldId ? existing?.variants.find((v) => v._id.toHexString() === oldId) : undefined;
+      const weight = sv.weightGrams ?? old?.weightGrams;
+      return {
+        _id: old?._id ?? new Types.ObjectId(),
+        title: sv.optionValues.length ? sv.optionValues.join(' / ') : DEFAULT_TITLE,
+        optionValues: sv.optionValues,
+        ...(sv.sku ? { sku: sv.sku } : {}),
+        ...(sv.barcode ? { barcode: sv.barcode } : {}),
+        priceMinor: sv.priceMinor,
+        ...(sv.compareAtPriceMinor !== undefined
+          ? { compareAtPriceMinor: sv.compareAtPriceMinor }
+          : {}),
+        // Cost is Sellora's own (for profit); the sources do not send it.
+        ...(old?.costMinor !== undefined ? { costMinor: old.costMinor } : {}),
+        trackStock: sv.trackStock,
+        stock: old ? old.stock : sv.trackStock ? sv.stock : 0,
+        ...(weight !== undefined ? { weightGrams: weight } : {}),
+      };
+    });
+    this.validateShape({
+      options: w.options,
+      variants: variants.map((v) => ({
+        optionValues: v.optionValues,
+        sku: v.sku,
+        priceMinor: v.priceMinor,
+        compareAtPriceMinor: v.compareAtPriceMinor,
+        trackStock: v.trackStock,
+      })),
+    });
+    await this.assertSkusFree(
+      variants.flatMap((v) => (v.sku ? [v.sku] : [])),
+      existing?._id,
+    );
+    const orgId = this.orgId();
+    if (!existing || restoring)
+      await this.entitlements.assertWithinLimit(
+        orgId,
+        'products',
+        await this.products.count({ status: { $ne: 'archived' } }),
+      );
+
+    const sync: ProductSync = {
+      sourceId: w.sourceId,
+      externalId: w.externalId,
+      hash: w.hash,
+      variants: w.variants.map((sv, i) => ({
+        externalId: sv.externalId,
+        variantId: variants[i]!._id,
+      })),
+      archivedBySync: false,
+      syncedAt: new Date(),
+    };
+    const note = `Synced from ${w.sourceLabel}`;
+    const searchText = this.search(w.name, w.tags, variants);
+
+    if (!existing) {
+      const org = await this.orgs.get(orgId);
+      const productId = new Types.ObjectId();
+      const product = await this.tx.run(async () => {
+        await this.attachSyncedImages(productId, w.images);
+        const created = await this.products.create({
+          _id: productId,
+          name: w.name,
+          slug: await this.uniqueSlug(w.name),
+          description: w.description,
+          ...(w.categoryId ? { categoryId: w.categoryId } : {}),
+          tags: w.tags,
+          status: w.newStatus,
+          currency: org.currency,
+          images: w.images,
+          options: w.options,
+          variants,
+          searchText,
+          soldCount: 0,
+          createdBy: w.createdBy,
+          sync,
+        });
+        await this.inventory.recordInitial(created._id, created.variants);
+        return created;
+      });
+      return { outcome: 'created', product };
+    }
+
+    const set: Record<string, unknown> = {
+      description: w.description,
+      tags: w.tags,
+      images: w.images,
+      options: w.options,
+      searchText,
+      sync,
+    };
+    if (w.name !== existing.name) {
+      set.name = w.name;
+      set.slug = await this.uniqueSlug(w.name, existing._id);
+    }
+    if (w.categoryId) set.categoryId = w.categoryId;
+    if (restoring) set.status = w.newStatus;
+    const after = await this.tx.run(async () => {
+      // Stock read inside the transaction: orders may have changed it since.
+      const fresh = await this.products.findById(existing._id, { variants: 1 });
+      const writeOffs: { variantId: Types.ObjectId; stock: number; note: string }[] = [];
+      const targets: { variantId: Types.ObjectId; stock: number }[] = [];
+      const added: Variant[] = [];
+      w.variants.forEach((sv, i) => {
+        const v = variants[i]!;
+        const live = fresh?.variants.find((f) => f._id.equals(v._id));
+        if (!live) {
+          added.push(v);
+          return;
+        }
+        if (live.trackStock && !v.trackStock) {
+          writeOffs.push({ variantId: v._id, stock: live.stock, note });
+          v.stock = 0;
+        } else if (!live.trackStock && v.trackStock) {
+          v.stock = 0;
+          if (w.syncStock || sv.stock > 0) targets.push({ variantId: v._id, stock: sv.stock });
+        } else {
+          v.stock = live.stock;
+          if (v.trackStock && w.syncStock && live.stock !== sv.stock)
+            targets.push({ variantId: v._id, stock: sv.stock });
+        }
+      });
+      for (const live of fresh?.variants ?? [])
+        if (live.trackStock && !variants.some((v) => v._id.equals(live._id)))
+          writeOffs.push({
+            variantId: live._id,
+            stock: live.stock,
+            note: `Removed at ${w.sourceLabel}`,
+          });
+      set.variants = variants;
+      await this.attachSyncedImages(existing._id, w.images);
+      // A source without categories leaves the one set in Sellora.
+      const updated = await this.products.findOneAndUpdate({ _id: existing._id }, { $set: set });
+      if (added.length) await this.inventory.recordInitial(existing._id, added);
+      if (writeOffs.length) await this.inventory.recordWriteOff(existing._id, writeOffs);
+      if (targets.length) await this.inventory.syncTo(existing._id, targets, note);
+      const kept = new Set(w.images.flatMap((i) => (i.fileId ? [i.fileId.toHexString()] : [])));
+      await this.files.detach(
+        existing.images.flatMap((i) =>
+          i.fileId && !kept.has(i.fileId.toHexString()) ? [i.fileId.toHexString()] : [],
+        ),
+        { type: 'product', id: existing._id.toHexString() },
+      );
+      return targets.length ? ((await this.products.findById(existing._id)) ?? updated!) : updated!;
+    });
+    const now = new Set(after.images.flatMap((i) => (i.fileId ? [i.fileId.toHexString()] : [])));
+    await this.releaseImages(
+      existing._id,
+      existing.images.filter((i) => i.fileId && !now.has(i.fileId.toHexString())),
+    );
+    return { outcome: restoring ? 'restored' : 'updated', product: after };
+  }
+
+  /** Marks the photos a sync saved as used by the product (saved unattached first). */
+  private async attachSyncedImages(
+    productId: Types.ObjectId,
+    images: ProductImage[],
+  ): Promise<void> {
+    const ids = images.flatMap((i) => (i.fileId ? [i.fileId.toHexString()] : []));
+    await this.files.attach(
+      ids,
+      { type: 'product', id: productId.toHexString() },
+      'product_image',
+      (i) => `images.${i}`,
+    );
+  }
+
+  /**
+   * Archives the products of a source that the last complete read did not find (or found
+   * inactive), and marks them so a later sync may restore them. Returns how many.
+   */
+  async archiveFromSource(productIds: Types.ObjectId[]): Promise<number> {
+    if (!productIds.length) return 0;
+    return this.products.updateMany(
+      { _id: { $in: productIds }, status: { $ne: 'archived' } },
+      { $set: { status: 'archived', 'sync.archivedBySync': true } },
+    );
+  }
+
+  /** Forgets a removed source: its products stay, as ordinary products. */
+  async detachSource(sourceId: Types.ObjectId): Promise<number> {
+    return this.products.updateMany({ 'sync.sourceId': sourceId }, { $unset: { sync: '' } });
   }
 
   // ---------------------------------------------------------------- categories

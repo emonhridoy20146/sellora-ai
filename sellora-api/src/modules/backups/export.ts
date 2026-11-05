@@ -40,6 +40,8 @@ export const EXPORT_COLLECTIONS: { name: string; file?: string; omit?: string[] 
   { name: 'smsoptouts', file: 'sms_opt_outs' },
   { name: 'smssettings', file: 'sms_settings' },
   { name: 'fraudsettings', file: 'fraud_settings' },
+  { name: 'catalog_sources', omit: ['lease'] },
+  { name: 'catalog_sync_runs', omit: ['csv'] },
   { name: 'storedfiles', file: 'files' },
   { name: 'subscriptions' },
   { name: 'invoices' },

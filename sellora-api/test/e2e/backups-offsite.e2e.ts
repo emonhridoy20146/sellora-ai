@@ -82,8 +82,13 @@ describe.skipIf(!MINIO)('off-site backup copies (real MinIO)', () => {
 
   afterAll(async () => {
     await t?.close();
-    minio?.kill();
-    await rm(dataDir, { recursive: true, force: true });
+    // Wait for MinIO to exit before removing its folder; it writes there until it stops.
+    if (minio && minio.exitCode === null) {
+      const exited = new Promise<void>((resolve) => minio!.once('exit', () => resolve()));
+      minio.kill();
+      await exited;
+    }
+    await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   });
 
   const head = async (key: string) => {

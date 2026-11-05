@@ -20,6 +20,8 @@ export const QUEUES = {
   campaigns: 'campaigns',
   /** Owner reports and alerts on Telegram, and the bot's command replies (ADR 0022). */
   telegram: 'telegram',
+  /** Catalog sync from Shopify, WooCommerce, sheets and CSV files: a sweep every minute (ADR 0023). */
+  catalogSync: 'catalog-sync',
   maintenance: 'maintenance',
 } as const;
 
