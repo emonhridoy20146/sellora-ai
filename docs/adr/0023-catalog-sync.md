@@ -32,6 +32,9 @@ at the source reaches the AI's answers within the sync window.
   or only when asked. The worker sweeps every minute for due sources, takes a lease on the
   source (one run at a time; a crashed run's lease expires after 30 minutes) and writes a run
   record (kept 90 days) with counts and up to 50 problems. "Sync now" queues a run at once.
+  Anything left out at the source (a product, a variant, a sheet row) counts as skipped, and a
+  run with skipped items ends "partial" ("Done with problems"); notes such as "only the first
+  8 photos" do not.
   After a failed run the next try waits twice as long (up to a day), and the source shows the
   error; a successful run resets it.
 - **What a sync does.** Each source product is mapped to one Sellora product, remembered on

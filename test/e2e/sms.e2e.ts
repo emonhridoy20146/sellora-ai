@@ -87,9 +87,18 @@ describe('SMS: providers, order messages, Sellora SMS and opt-outs', () => {
     RequestContext.withTenant(org, fn, { type: 'system', id: 'test' });
 
   /** Runs queued SMS jobs the way the worker does. `final` plays the last attempt. */
-  const runJobs = async (opts: { final?: boolean } = {}) => {
+  const runJobs = async (opts: { final?: boolean; waitFor?: string[] } = {}) => {
     const processor = new SmsProcessor(sms(), queue());
     const done: { result?: unknown; error?: string }[] = [];
+    // A message row is written before its job is added: wait for the jobs of the messages
+    // the test has just seen.
+    if (opts.waitFor?.length)
+      await vi.waitFor(
+        async () => {
+          for (const id of opts.waitFor!) expect(await queue().getJob(`sms-${id}`)).toBeTruthy();
+        },
+        { timeout: 3000, interval: 25 },
+      );
     const jobs = await queue().getJobs(['waiting', 'delayed', 'prioritized']);
     for (const job of jobs) {
       if (job.name !== 'send') continue;
@@ -384,7 +393,7 @@ describe('SMS: providers, order messages, Sellora SMS and opt-outs', () => {
       expect(placed!.body).toBe(
         `Hi Rahim Uddin, we got your order ${order.number} (Tk 2,500). We will call you to confirm. ${shopName}`,
       );
-      await runJobs();
+      await runJobs({ waitFor: [placed!.id] });
       expect(fake.sent.map((m) => m.text)).toEqual([placed!.body]);
 
       await setStatus(order.id, 'confirmed');
@@ -393,7 +402,7 @@ describe('SMS: providers, order messages, Sellora SMS and opt-outs', () => {
       await orderMessages(order.id, 3);
       await setStatus(order.id, 'delivered');
       const all = await orderMessages(order.id, 4);
-      await runJobs();
+      await runJobs({ waitFor: all.filter((m) => m.status === 'queued').map((m) => m.id) });
       expect(all.map((m) => m.purpose).sort()).toEqual([
         'order_confirmed',
         'order_delivered',

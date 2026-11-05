@@ -149,6 +149,7 @@ export class WooCommerceConnector implements CatalogConnector {
       problems.push({
         ref: p.name,
         message: `${p.type === 'grouped' ? 'Grouped' : 'External'} products are not imported.`,
+        skipped: true,
       });
       return null;
     }
@@ -166,7 +167,7 @@ export class WooCommerceConnector implements CatalogConnector {
     if (p.type !== 'variable') {
       const price = prices(p, input.currency);
       if (!price) {
-        problems.push({ ref: p.name, message: 'It has no price.' });
+        problems.push({ ref: p.name, message: 'It has no price.', skipped: true });
         return null;
       }
       return {
@@ -205,6 +206,7 @@ export class WooCommerceConnector implements CatalogConnector {
         problems.push({
           ref: p.name,
           message: 'A variation set to "any" value was skipped; give it a value in WooCommerce.',
+          skipped: true,
         });
         continue;
       }
@@ -213,6 +215,7 @@ export class WooCommerceConnector implements CatalogConnector {
         problems.push({
           ref: p.name,
           message: `The variation ${values.join(' / ')} has no price.`,
+          skipped: true,
         });
         continue;
       }

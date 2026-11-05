@@ -325,9 +325,9 @@ describe('sheetProducts', () => {
     const r = read(['Name,Price,Stock', 'Lungi,abc,1', 'Mat,100,lots', ',50,1'].join('\n'));
     expect(r.products).toEqual([]);
     expect(r.problems).toEqual([
-      { ref: 'Row 2 (Lungi)', message: 'The price "abc" is not a number.' },
-      { ref: 'Row 3 (Mat)', message: 'The stock "lots" is not a whole number.' },
-      { ref: 'Row 4', message: 'It has no name.' },
+      { ref: 'Row 2 (Lungi)', message: 'The price "abc" is not a number.', skipped: true },
+      { ref: 'Row 3 (Mat)', message: 'The stock "lots" is not a whole number.', skipped: true },
+      { ref: 'Row 4', message: 'It has no name.', skipped: true },
     ]);
   });
 

@@ -36,6 +36,11 @@ export interface SourceProblem {
   /** What the merchant recognises: a product name, a row number, a photo address. */
   ref: string;
   message: string;
+  /**
+   * Something at the source was left out (a product, variant or sheet row): the run counts
+   * it as skipped and ends "partial". Notes such as "only the first 8 photos" leave it unset.
+   */
+  skipped?: true;
 }
 
 /** Limits match the product API (commerce.dto.ts) so imported products can be edited. */

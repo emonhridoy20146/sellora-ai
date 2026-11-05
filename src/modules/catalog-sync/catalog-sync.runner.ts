@@ -50,8 +50,9 @@ export function backoffMinutes(interval: number, failures: number): number {
 class Problems {
   readonly list: SourceProblem[] = [];
   more = 0;
+  /** Records a problem (without its flag; runs store what the merchant reads). */
   add(p: SourceProblem) {
-    if (this.list.length < MAX_PROBLEMS) this.list.push(p);
+    if (this.list.length < MAX_PROBLEMS) this.list.push({ ref: p.ref, message: p.message });
     else this.more += 1;
   }
 }
@@ -195,7 +196,10 @@ export class CatalogSyncRunner {
     let limitReached = false;
     const ctx = this.service.connectorContext();
     for await (const batch of CONNECTORS[source.kind].read(input, ctx)) {
-      for (const p of batch.problems) problems.add(p);
+      for (const p of batch.problems) {
+        if (p.skipped) counts.failed += 1;
+        problems.add(p);
+      }
       // Duplicates (the same item twice at the source) are reported, never written twice.
       const fresh: SourceProduct[] = [];
       for (const raw of batch.products) {

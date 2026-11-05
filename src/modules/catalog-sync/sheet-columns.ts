@@ -293,7 +293,7 @@ export function sheetProducts(table: CsvTable, currency: string): SheetResult {
         ? `name:${name.normalize('NFC').toLowerCase().replace(/\s+/g, ' ')}`
         : '';
     if (!key) {
-      report(line, { ref: `Row ${line}`, message: 'It has no name.' });
+      report(line, { ref: `Row ${line}`, message: 'It has no name.', skipped: true });
       return;
     }
     const group = groups.get(key) ?? { key, firstLine: line, rows: [] };
@@ -312,7 +312,11 @@ export function sheetProducts(table: CsvTable, currency: string): SheetResult {
     };
     const name = first('name');
     if (!name) {
-      report(group.firstLine, { ref: `Row ${group.firstLine}`, message: 'It has no name.' });
+      report(group.firstLine, {
+        ref: `Row ${group.firstLine}`,
+        message: 'It has no name.',
+        skipped: true,
+      });
       continue;
     }
     const optionNames = columns.options.map((o) =>
@@ -336,6 +340,7 @@ export function sheetProducts(table: CsvTable, currency: string): SheetResult {
         report(r.line, {
           ref: `Row ${r.line} (${name})`,
           message: priceText ? `The price "${priceText}" is not a number.` : 'It has no price.',
+          skipped: true,
         });
         failed = true;
         continue;
@@ -353,6 +358,7 @@ export function sheetProducts(table: CsvTable, currency: string): SheetResult {
           report(r.line, {
             ref: `Row ${r.line} (${name})`,
             message: `The stock "${stockText}" is not a whole number.`,
+            skipped: true,
           });
           failed = true;
           continue;
@@ -380,6 +386,7 @@ export function sheetProducts(table: CsvTable, currency: string): SheetResult {
       report(group.firstLine, {
         ref: `Row ${group.firstLine} (${name})`,
         message: 'It has no price.',
+        skipped: true,
       });
       continue;
     }

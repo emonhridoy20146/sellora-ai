@@ -147,6 +147,13 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
   token the page says it is not set up and alerts are emailed to the platform owners. To try
   it locally, run `node scripts/telegram-stand-in.mjs` and set the two `TELEGRAM_*` lines in its
   header (it is not Telegram).
+- Catalog sync (ADR 0023, Products › Import and sync): needs no keys of ours. Each business
+  enters its own Shopify Admin API token or WooCommerce key, which are stored encrypted with
+  the `DATA_ENCRYPTION_KEYS`. Optional: `SHOPIFY_API_VERSION` (default `2025-10`) and
+  `SYNC_HTTP_TIMEOUT_MS` (default 30000). Requests to the addresses merchants type in never go
+  to private or local addresses; `SYNC_ALLOW_PRIVATE_NETWORK=true` lifts that for local tries
+  and is refused in production. To try it locally, run `node scripts/shop-stand-in.mjs` (it is
+  not Shopify, WooCommerce or Google) and set `SYNC_ALLOW_PRIVATE_NETWORK=true`.
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -173,6 +180,7 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
 | `node scripts/sms-stand-in.mjs`                               | Stand-in for the BulkSMSBD and Alpha SMS APIs with an inbox page, for local demos without SMS accounts (not an SMS gateway).                                                                                                 |
 | `node scripts/google-stand-in.mjs`                            | Stand-in for Google's sign-in and Google Drive with a consent page and a Drive page, for trying Drive backups without a Google client (not Google).                                                                          |
 | `node scripts/telegram-stand-in.mjs`                          | Stand-in for the Telegram Bot API with a page of chats you can type in, for trying owner reports, alerts and commands without a bot (not Telegram).                                                                          |
+| `node scripts/shop-stand-in.mjs`                              | Stand-in for Shopify's GraphQL Admin API, WooCommerce's REST API and a published sheet on :4090, with a page to change prices and stock, for trying catalog sync (not Shopify, WooCommerce or Google).                       |
 
 ## Tests
 

@@ -187,7 +187,11 @@ function toSourceProduct(
   for (const v of variants) {
     const price = parsePrice(v.price, currency);
     if (price === null) {
-      problems.push({ ref: p.title, message: `A variant has no usable price (${v.price}).` });
+      problems.push({
+        ref: p.title,
+        message: `A variant has no usable price (${v.price}).`,
+        skipped: true,
+      });
       continue;
     }
     const compare = v.compareAtPrice ? parsePrice(v.compareAtPrice, currency) : null;

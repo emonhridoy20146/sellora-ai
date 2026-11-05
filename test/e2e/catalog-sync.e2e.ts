@@ -697,9 +697,10 @@ describe('Catalog sync: Shopify, WooCommerce, sheets and CSV into products (ADR 
       });
       expect(source).toMatchObject({ name: 'Nakshi Woo', url: `${shops.base}/woo` });
       const result = await run(runId);
+      // The external product is left out, so the run ends "partial" and says why.
       expect(result).toMatchObject({
-        status: 'succeeded',
-        counts: { seen: 2, created: 2 },
+        status: 'partial',
+        counts: { seen: 2, created: 2, failed: 1 },
       });
       expect(result.problems).toContainEqual({
         ref: 'Affiliate Book',
@@ -774,7 +775,8 @@ describe('Catalog sync: Shopify, WooCommerce, sheets and CSV into products (ADR 
         intervalMinutes: 15,
       });
       const result = await run(runId);
-      expect(result).toMatchObject({ status: 'succeeded', counts: { created: 2 } });
+      // The Lungi row's price is not a number: skipped, so the run ends "partial".
+      expect(result).toMatchObject({ status: 'partial', counts: { created: 2, failed: 1 } });
       const panjabi = await byName('Eid Panjabi');
       expect(panjabi.options).toEqual([{ name: 'Size', values: ['M', 'L', 'XL'] }]);
       expect(panjabi.variants).toMatchObject([

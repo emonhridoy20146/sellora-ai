@@ -168,7 +168,12 @@ export class CatalogSyncService {
       throw AppError.unprocessable(`source_${e.kind}`, e.message);
     }
     const currencyOk = !result.currency || result.currency.toUpperCase() === input.currency;
-    return { ...result, currencyOk, businessCurrency: input.currency };
+    return {
+      ...result,
+      problems: result.problems.map((p) => ({ ref: p.ref, message: p.message })),
+      currencyOk,
+      businessCurrency: input.currency,
+    };
   }
 
   async list() {
