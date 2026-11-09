@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { startOfDayInZone, startOfMonthInZone, zonedParts, zonedTimeToUtc } from './zoned.js';
+import {
+  dayKey,
+  lastDayKeys,
+  startOfDayInZone,
+  startOfMonthInZone,
+  zonedParts,
+  zonedTimeToUtc,
+} from './zoned.js';
 
 describe('zoned time helpers', () => {
   it('reads the wall clock in a time zone', () => {
@@ -32,5 +39,13 @@ describe('zoned time helpers', () => {
     expect(
       startOfMonthInZone(new Date('2026-07-15T12:00:00Z'), 'Europe/London').toISOString(),
     ).toBe('2026-06-30T23:00:00.000Z');
+  });
+
+  it('names days by the merchant calendar and lists the last few, oldest first', () => {
+    const at = new Date('2026-10-31T20:30:00Z'); // 1 November in Dhaka
+    expect(dayKey(at, 'Asia/Dhaka')).toBe('2026-11-01');
+    expect(dayKey(at, 'UTC')).toBe('2026-10-31');
+    expect(dayKey(at, 'Not/AZone')).toBe('2026-10-31');
+    expect(lastDayKeys(3, 'Asia/Dhaka', at)).toEqual(['2026-10-30', '2026-10-31', '2026-11-01']);
   });
 });

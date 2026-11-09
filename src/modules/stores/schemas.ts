@@ -2,6 +2,7 @@ import { Schema, type Types } from 'mongoose';
 import { tenantSchema } from '../../infra/database/schema-helpers.js';
 import { BUSINESS_CATEGORY_KEYS, type BusinessCategory } from '../orgs/business-categories.js';
 import type { ThemeSettings } from './themes.js';
+import { TRAFFIC_SOURCES, type TrafficSource } from './traffic-source.js';
 
 /**
  * draft: being set up · pending: waiting for a super-admin · live: open to shoppers ·
@@ -244,3 +245,77 @@ storeDomainSchema.index({ orgId: 1, storeId: 1, createdAt: 1 });
 // The worker's due checks and the super-admin's queue.
 storeDomainSchema.index({ nextCheckAt: 1 }, { sparse: true });
 storeDomainSchema.index({ status: 1, verifiedAt: 1 });
+
+// ---------------------------------------------------------------- visits and sales
+
+/** Visitors counted per traffic source (see traffic-source.ts). */
+export type SourceCounts = Partial<Record<TrafficSource, number>>;
+
+/**
+ * One store's shoppers on one day (in the business's time zone), ADR 0027. Each visitor
+ * counts once a day at each step: visited, looked at a product, added to the cart, opened
+ * the checkout. Orders and their value come from the orders themselves.
+ */
+export interface StoreStat {
+  orgId: Types.ObjectId;
+  storeId: Types.ObjectId;
+  day: string;
+  visitors: number;
+  productViewers: number;
+  cartVisitors: number;
+  checkoutVisitors: number;
+  orders: number;
+  revenueMinor: number;
+  sources: SourceCounts;
+  orderSources: SourceCounts;
+}
+
+/** One product's lookers and buyers in one store on one day. */
+export interface StoreProductStat {
+  orgId: Types.ObjectId;
+  storeId: Types.ObjectId;
+  productId: Types.ObjectId;
+  day: string;
+  viewers: number;
+  orders: number;
+  units: number;
+  revenueMinor: number;
+}
+
+const sourceCounts = new Schema(
+  Object.fromEntries(TRAFFIC_SOURCES.map((s) => [s, { type: Number, default: 0 }])),
+  { _id: false, strict: 'throw' },
+);
+
+export const storeStatSchema = tenantSchema<StoreStat>(
+  {
+    storeId: { type: Schema.Types.ObjectId, required: true },
+    day: { type: String, required: true },
+    visitors: { type: Number, default: 0 },
+    productViewers: { type: Number, default: 0 },
+    cartVisitors: { type: Number, default: 0 },
+    checkoutVisitors: { type: Number, default: 0 },
+    orders: { type: Number, default: 0 },
+    revenueMinor: { type: Number, default: 0 },
+    sources: { type: sourceCounts, default: () => ({}) },
+    orderSources: { type: sourceCounts, default: () => ({}) },
+  },
+  { collection: 'store_stats' },
+);
+storeStatSchema.index({ storeId: 1, day: 1 }, { unique: true });
+storeStatSchema.index({ orgId: 1, day: 1 });
+
+export const storeProductStatSchema = tenantSchema<StoreProductStat>(
+  {
+    storeId: { type: Schema.Types.ObjectId, required: true },
+    productId: { type: Schema.Types.ObjectId, required: true },
+    day: { type: String, required: true },
+    viewers: { type: Number, default: 0 },
+    orders: { type: Number, default: 0 },
+    units: { type: Number, default: 0 },
+    revenueMinor: { type: Number, default: 0 },
+  },
+  { collection: 'store_product_stats' },
+);
+storeProductStatSchema.index({ storeId: 1, productId: 1, day: 1 }, { unique: true });
+storeProductStatSchema.index({ storeId: 1, day: 1 });

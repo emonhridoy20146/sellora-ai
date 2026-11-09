@@ -49,6 +49,8 @@ export class RateLimitService {
       'domain-check:domain': { points: 6, durationSec: 60 },
       // Landing page visit counts (one beacon per page view at most).
       'landing-visit:ip': { points: 60, durationSec: 60 },
+      // Store visit and step counts (ADR 0027): a visit, product views, the cart, the checkout.
+      'store-event:ip': { points: 120, durationSec: 60 },
       // Test SMS from Settings › SMS (each one costs money) and the public opt-out page.
       'sms-test:org': { points: 10, durationSec: 3600 },
       'sms-optout:ip': { points: 30, durationSec: 600 },

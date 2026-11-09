@@ -26,6 +26,7 @@ import * as cartsDto from '../carts/carts.dto.js';
 import { STORE_PAGE_KEYS } from './schemas.js';
 import { StoreDomainsService } from './store-domains.service.js';
 import { StoreReviewService } from './store-review.service.js';
+import { StoreStatsService } from './store-stats.service.js';
 import { StorefrontKeyGuard } from './storefront-key.guard.js';
 import { StorefrontService, type ResolvedStore } from './storefront.service.js';
 import * as dto from './stores.dto.js';
@@ -38,7 +39,10 @@ import { StoresService } from './stores.service.js';
 @RequireModule('storefront')
 @Controller({ path: 'orgs/:orgId/stores', version: '1' })
 export class StoresController {
-  constructor(private readonly stores: StoresService) {}
+  constructor(
+    private readonly stores: StoresService,
+    private readonly storeStats: StoreStatsService,
+  ) {}
 
   @Get('themes')
   @RequirePermissions('stores.view')
@@ -74,6 +78,17 @@ export class StoresController {
   async get(@ZodParam('storeId', dto.storeIdParam) id: string) {
     const store = await this.stores.get(id);
     return this.stores.toDto(store, await this.stores.readiness(store));
+  }
+
+  @Get(':storeId/stats')
+  @RequirePermissions('stores.view')
+  @ApiOperation({ summary: 'Visitors, their steps, orders, sources and top products per day' })
+  async numbers(
+    @ZodParam('storeId', dto.storeIdParam) id: string,
+    @ZodQuery(dto.storeStatsQuery) q: z.infer<typeof dto.storeStatsQuery>,
+  ) {
+    const store = await this.stores.get(id);
+    return this.storeStats.summary(store._id, q.days);
   }
 
   @Patch(':storeId')
@@ -328,7 +343,10 @@ const PREVIEW_HEADER = 'x-store-preview';
 @UseGuards(StorefrontKeyGuard)
 @Controller({ path: 'storefront', version: '1' })
 export class StorefrontController {
-  constructor(private readonly storefront: StorefrontService) {}
+  constructor(
+    private readonly storefront: StorefrontService,
+    private readonly stats: StoreStatsService,
+  ) {}
 
   private host(raw: string | undefined): string {
     const parsed = dto.resolveQuery.safeParse({ host: raw ?? '' });
@@ -442,6 +460,17 @@ export class StorefrontController {
     const r = await this.storefront.resolve(this.host(host));
     if (!r || r.state === 'unavailable') throw AppError.notFound('cart', 'This link is not valid.');
     return this.storefront.inStore(r, () => this.storefront.restoreCart(r, code));
+  }
+
+  @Post('events')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Count a shopper step (once per browser, step and day)' })
+  event(
+    @Headers(STORE_HOST_HEADER) host: string | undefined,
+    @ZodBody(dto.storeEventBody) body: z.infer<typeof dto.storeEventBody>,
+  ) {
+    // Previews never count: the business and the reviewer are not shoppers.
+    return this.open(host, undefined, (r) => this.stats.record(r, body));
   }
 
   @Post('checkout')

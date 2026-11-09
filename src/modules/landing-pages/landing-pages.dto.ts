@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { objectIdSchema } from '../../common/validation/schemas.js';
 import { cartToken } from '../carts/carts.dto.js';
-import { ATTRIBUTION_KEYS } from '../commerce/schemas.js';
+import { attribution } from '../stores/stores.dto.js';
 import { LANDING_LANGUAGES, landingContentSchema, MAX_FREE_QUANTITY } from './blocks.js';
 import { REVIEW_FILTERS } from './landing-review.service.js';
 import { TEMPLATE_KEYS } from './templates.js';
@@ -86,17 +86,6 @@ export const visitBody = z
       .optional(),
   })
   .strict();
-
-/** Where the shopper came from; every value is plain text, kept short. */
-const attribution = z
-  .object(
-    Object.fromEntries(ATTRIBUTION_KEYS.map((k) => [k, text(200).optional()])) as Record<
-      (typeof ATTRIBUTION_KEYS)[number],
-      z.ZodOptional<z.ZodString>
-    >,
-  )
-  .strict()
-  .transform((a) => Object.fromEntries(Object.entries(a).filter(([, v]) => Boolean(v))));
 
 export const orderBody = z
   .object({

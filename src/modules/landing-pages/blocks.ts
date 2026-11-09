@@ -678,15 +678,4 @@ export function packageCharge(
 }
 
 /** The calendar day (YYYY-MM-DD) of `at` in the business's time zone. */
-export function dayKey(at: Date, timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(at);
-  } catch {
-    return at.toISOString().slice(0, 10);
-  }
-}
+export { dayKey } from '../../common/time/zoned.js';

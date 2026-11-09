@@ -18,7 +18,7 @@ import {
   OrderRepository,
   ProductRepository,
 } from '../commerce/repositories.js';
-import type { Category, Product } from '../commerce/schemas.js';
+import type { Category, OrderAttribution, Product } from '../commerce/schemas.js';
 import { ShopSettingsService } from '../commerce/shop-settings.service.js';
 import { escapeRegex } from '../commerce/text.js';
 import { CourierAccountsService } from '../couriers/courier-accounts.service.js';
@@ -29,6 +29,7 @@ import { runIdempotent } from './idempotency.js';
 import { StoreDomainsService } from './store-domains.service.js';
 import { parseStoreHost } from './store-hosts.js';
 import { StoreLinksService } from './store-links.service.js';
+import { StoreStatsService } from './store-stats.service.js';
 import type { StoreSection } from './themes.js';
 
 type StoreDoc = WithId<Store>;
@@ -63,6 +64,8 @@ export interface CheckoutInput {
   website?: string;
   /** The saved cart this checkout came from (ADR 0018), closed when the order is made. */
   cartToken?: string;
+  /** Where the shopper came from (ADR 0027), kept on the order. */
+  attribution?: OrderAttribution;
 }
 
 /** Products shown per home page section, at most. */
@@ -103,6 +106,7 @@ export class StorefrontService {
     private readonly couriers: CourierAccountsService,
     private readonly limits: RateLimitService,
     private readonly carts: CartsService,
+    private readonly stats: StoreStatsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -451,7 +455,14 @@ export class StorefrontService {
       redis: this.redis,
       scope: `sf:idem:${r.store._id.toHexString()}`,
       key: idempotencyKey,
-      fingerprint: sha256(canonicalJson({ ...input, website: undefined, cartToken: undefined })),
+      fingerprint: sha256(
+        canonicalJson({
+          ...input,
+          website: undefined,
+          cartToken: undefined,
+          attribution: undefined,
+        }),
+      ),
       before: async () => {
         const ip = RequestContext.current()?.ip;
         if (ip) await this.limits.consume('checkout:ip', ip);
@@ -527,6 +538,9 @@ export class StorefrontService {
         source: 'store',
         customerSource: 'store',
         storeId: r.store._id.toHexString(),
+        ...(input.attribution && Object.keys(input.attribution).length
+          ? { attribution: input.attribution }
+          : {}),
       });
     } catch (err) {
       // A blocked customer gets the same answer as anyone the shop cannot serve online.
@@ -548,6 +562,7 @@ export class StorefrontService {
       throw err;
     }
     await this.closeCart(input.cartToken, order);
+    await this.stats.orderPlaced(r, order, input.attribution);
     return {
       orderNumber: order.number,
       totalMinor: order.totalMinor,

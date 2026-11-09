@@ -1,11 +1,24 @@
 import { z } from 'zod';
 import { emailSchema, moneyMinorSchema, objectIdSchema } from '../../common/validation/schemas.js';
 import { cartToken } from '../carts/carts.dto.js';
+import { ATTRIBUTION_KEYS } from '../commerce/schemas.js';
 import { BUSINESS_CATEGORY_KEYS } from '../orgs/business-categories.js';
 import { DOMAIN_STATUSES, STORE_STATUSES } from './schemas.js';
+import { STORE_EVENTS } from './store-stats.service.js';
 import { THEME_KEYS, themeSettingsSchema } from './themes.js';
 
 const text = (max: number) => z.string().trim().max(max);
+
+/** Where the shopper came from: UTM tags, ad click ids, the referring host; short plain text. */
+export const attribution = z
+  .object(
+    Object.fromEntries(ATTRIBUTION_KEYS.map((k) => [k, text(200).optional()])) as Record<
+      (typeof ATTRIBUTION_KEYS)[number],
+      z.ZodOptional<z.ZodString>
+    >,
+  )
+  .strict()
+  .transform((a) => Object.fromEntries(Object.entries(a).filter(([, v]) => Boolean(v))));
 /** Optional text: an empty string clears it. */
 const optText = (max: number) => text(max).optional();
 const httpUrl = z
@@ -168,8 +181,27 @@ export const checkoutBody = z
     website: z.string().max(200).optional(),
     /** The saved cart this order comes from (abandoned cart reminders). */
     cartToken: cartToken.optional(),
+    /** Where the shopper came from (the ad's tags or the referring site), ADR 0027. */
+    attribution: attribution.optional(),
   })
   .strict();
+
+/** One shopper step for the store's numbers (ADR 0027). */
+export const storeEventBody = z
+  .object({
+    type: z.enum(STORE_EVENTS),
+    visitorId: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{8,64}$/)
+      .optional(),
+    productId: objectIdSchema.optional(),
+    attribution: attribution.optional(),
+  })
+  .strict();
+
+export const storeStatsQuery = z.object({
+  days: z.coerce.number().int().min(7).max(90).default(30),
+});
 
 export const idempotencyKey = z
   .string()
