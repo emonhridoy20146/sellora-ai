@@ -17,8 +17,9 @@ import { useDebounced } from '@/hooks/use-debounced';
 import { api } from '@/lib/api/client';
 import type { PlatformStoreList, StoreStatus } from '@/lib/api/types';
 import { formatDateTime, formatRelative } from '@/lib/format';
+import { CHANGE_AREA_LABEL } from '@/lib/stores';
 
-type Filter = StoreStatus | 'all';
+type Filter = StoreStatus | 'changed' | 'all';
 const PAGE_SIZE = 25;
 
 export default function PlatformStoresPage() {
@@ -31,7 +32,8 @@ export default function PlatformStoresPage() {
     queryFn: () =>
       api<PlatformStoreList>('/platform/stores', {
         query: {
-          status: status === 'all' ? undefined : status,
+          status: status === 'all' || status === 'changed' ? undefined : status,
+          changed: status === 'changed' ? 'true' : undefined,
           q: q || undefined,
           page,
           pageSize: PAGE_SIZE,
@@ -40,12 +42,17 @@ export default function PlatformStoresPage() {
     placeholderData: (prev) => prev,
   });
   const pending = list.data?.pending;
+  const changed = list.data?.changed;
+  const changedView = status === 'changed';
+
+  const when = (s: PlatformStoreList['items'][number]) =>
+    status === 'pending' ? s.submittedAt : changedView && s.changes ? s.changes.since : s.updatedAt;
 
   return (
     <>
       <PageHeader
         title="Online stores"
-        description="Stores wait here after a business sends them for review. Oldest first: check the preview and the automatic warnings, then approve or ask for changes."
+        description="Stores wait here after a business sends them for review, and come back when an open store changes its words or design. Oldest first: check the preview and the automatic warnings, then decide."
         actions={
           <Link href="/admin/stores/domains" className="text-sm text-primary hover:underline">
             Custom domains
@@ -63,6 +70,10 @@ export default function PlatformStoresPage() {
             }}
             options={[
               { value: 'pending', label: pending ? `To review (${pending})` : 'To review' },
+              {
+                value: 'changed',
+                label: changed ? `Changed since approval (${changed})` : 'Changed since approval',
+              },
               { value: 'live', label: 'Open' },
               { value: 'rejected', label: 'Changes asked' },
               { value: 'suspended', label: 'Suspended' },
@@ -92,7 +103,11 @@ export default function PlatformStoresPage() {
           ) : list.data.items.length === 0 ? (
             <EmptyState
               icon={Store}
-              title={status === 'pending' && !q ? 'Nothing waiting for review' : 'No stores match'}
+              title={
+                (status === 'pending' || changedView) && !q
+                  ? 'Nothing waiting for review'
+                  : 'No stores match'
+              }
             />
           ) : (
             <Table>
@@ -101,8 +116,10 @@ export default function PlatformStoresPage() {
                   <TH>Store</TH>
                   <TH>Business</TH>
                   <TH>Status</TH>
-                  <TH>Warnings</TH>
-                  <TH>{status === 'pending' ? 'Sent' : 'Last change'}</TH>
+                  <TH>{changedView ? 'What changed' : 'Warnings'}</TH>
+                  <TH>
+                    {status === 'pending' ? 'Sent' : changedView ? 'First change' : 'Last change'}
+                  </TH>
                 </TR>
               </THead>
               <TBody>
@@ -130,7 +147,24 @@ export default function PlatformStoresPage() {
                       <StoreStatusBadge status={s.status} />
                     </TD>
                     <TD>
-                      {s.flagCount > 0 ? (
+                      {changedView && s.changes ? (
+                        <span className="grid gap-0.5">
+                          <span>{s.changes.areas.map((a) => CHANGE_AREA_LABEL[a]).join(', ')}</span>
+                          {(s.changes.flagCount > 0 || s.changes.asked) && (
+                            <span className="inline-flex flex-wrap items-center gap-2 text-xs">
+                              {s.changes.flagCount > 0 && (
+                                <span className="inline-flex items-center gap-1 text-warning">
+                                  <Flag className="size-3" aria-hidden /> {s.changes.flagCount}{' '}
+                                  {s.changes.flagCount === 1 ? 'warning' : 'warnings'}
+                                </span>
+                              )}
+                              {s.changes.asked && (
+                                <span className="text-muted-foreground">Fix asked</span>
+                              )}
+                            </span>
+                          )}
+                        </span>
+                      ) : s.flagCount > 0 ? (
                         <span className="inline-flex items-center gap-1 text-warning">
                           <Flag className="size-3.5" aria-hidden /> {s.flagCount}
                         </span>
@@ -140,9 +174,9 @@ export default function PlatformStoresPage() {
                     </TD>
                     <TD
                       className="whitespace-nowrap text-muted-foreground"
-                      title={formatDateTime(status === 'pending' ? s.submittedAt : s.updatedAt)}
+                      title={formatDateTime(when(s))}
                     >
-                      {formatRelative(status === 'pending' ? s.submittedAt : s.updatedAt)}
+                      {formatRelative(when(s))}
                     </TD>
                   </TR>
                 ))}

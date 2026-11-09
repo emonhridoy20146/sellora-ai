@@ -1,4 +1,5 @@
 import type {
+  StoreChangeArea,
   DomainStatus,
   StoreDomain,
   FeatureIcon,
@@ -102,6 +103,17 @@ export function handleFormatOk(handle: string): boolean {
 }
 
 // ---------------------------------------------------------------- sections
+
+/** The parts of an open store whose changes Sellora looks at again (ADR 0028). */
+export const CHANGE_AREA_LABEL: Record<StoreChangeArea, string> = {
+  name: 'Name',
+  design: 'Design',
+  pages: 'Pages',
+  seo: 'Search text',
+  social: 'Social links',
+  checkout: 'Checkout note',
+  products: 'Products',
+};
 
 export const SECTION_LABEL: Record<SectionType, string> = {
   hero: 'Hero',
