@@ -1,0 +1,138 @@
+# Try Sellora on your own computer with Docker Desktop (no MongoDB or Redis to install).
+# Development mode: emails go to Mailpit (http://localhost:8025), files to a local volume.
+# See TRY-LOCALLY.md for the steps. Not for production: use DEPLOY.md for that.
+#
+#   docker compose run --rm keys > local-secrets.env     # once: fresh secrets
+#   docker compose up --build -d                         # http://localhost:3000
+#   docker compose run --rm tools                        # demo data + super-admin link
+#
+# Optional keys go in a file named .env next to this one (never commit it):
+#   AI_ANTHROPIC_API_KEY=...   the AI sales agent (Claude)
+#   AI_OPENAI_API_KEY=...      voice notes to text
+#   TELEGRAM_BOT_TOKEN=...     owner reports on Telegram
+
+name: sellora
+
+x-api-env: &api-env
+  env_file:
+    - path: ./local-secrets.env
+      required: true
+  environment:
+    NODE_ENV: development
+    PORT: "4000"
+    MONGODB_URI: mongodb://mongo:27017/?replicaSet=rs0
+    MONGODB_DB_NAME: sellora
+    REDIS_URL: redis://redis:6379/0
+    WEB_APP_URL: http://localhost:3000
+    API_PUBLIC_URL: http://localhost:3000
+    CORS_ORIGINS: http://localhost:3000
+    MAIL_TRANSPORT: smtp
+    SMTP_URL: smtp://mailpit:1025
+    MAIL_FROM: Sellora AI <no-reply@sellora.local>
+    STORAGE_DRIVER: local
+    STORAGE_LOCAL_DIR: /app/storage
+    AI_ANTHROPIC_API_KEY: ${AI_ANTHROPIC_API_KEY:-}
+    AI_OPENAI_API_KEY: ${AI_OPENAI_API_KEY:-}
+    TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+
+services:
+  mongo:
+    image: mongo:8
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo-data:/data/db
+    # Sellora needs a replica set (transactions): start one with this single member.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet --eval "try { rs.status() } catch (e) { rs.initiate({ _id: 'rs0',
+          members: [{ _id: 0, host: 'mongo:27017' }] }) }; if (!db.hello().isWritablePrimary)
+          quit(1)"
+      interval: 5s
+      timeout: 10s
+      retries: 30
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "8025:8025"
+
+  api:
+    <<: *api-env
+    build: ./sellora-api
+    image: sellora-local/api
+    volumes:
+      - files:/app/storage
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    restart: unless-stopped
+
+  worker:
+    <<: *api-env
+    # The API's image (built by the api service), started as the worker.
+    image: sellora-local/api
+    pull_policy: never
+    command: ["node", "dist/worker.js"]
+    volumes:
+      - files:/app/storage
+    depends_on:
+      api: { condition: service_started }
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./sellora-web
+      args:
+        API_INTERNAL_URL: http://api:4000
+        NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    image: sellora-local/web
+    ports:
+      - "3000:3000"
+    depends_on:
+      api: { condition: service_started }
+    restart: unless-stopped
+
+  # docker compose run --rm keys > local-secrets.env
+  keys:
+    image: node:22-bookworm-slim
+    profiles: ["tools"]
+    volumes:
+      - ./sellora-api/scripts/generate-keys.mjs:/generate-keys.mjs:ro
+    command: ["node", "/generate-keys.mjs"]
+
+  # docker compose run --rm tools                 demo data and the super-admin setup link
+  # docker compose run --rm tools npm run platform:bootstrap -- you@example.com "Your Name"
+  tools:
+    <<: *api-env
+    build:
+      context: ./sellora-api
+      target: build
+    image: sellora-local/api-tools
+    profiles: ["tools"]
+    # Same user as the API, so files it saves stay writable by the API.
+    user: node
+    volumes:
+      - files:/app/storage
+    depends_on:
+      mongo: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    command: ["npm", "run", "dev:seed"]
+
+volumes:
+  mongo-data:
+  redis-data:
+  files:
