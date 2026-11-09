@@ -155,6 +155,7 @@ try {
       ['/marketing/campaigns/new', 'marketing-campaign-new'],
       ['/marketing/automations', 'marketing-automations'],
       ['/marketing/carts', 'marketing-carts'],
+      ['/analytics', 'analytics'],
       ['/activity', 'activity'],
     ])
       await check(page, orgPath + sub, `merchant-${name}`);

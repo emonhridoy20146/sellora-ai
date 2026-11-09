@@ -30,6 +30,16 @@ cookies are first-party and `SameSite=Strict` works.
 No secrets live in this app. Payment gateway keys, AI keys and so on are set by the
 super-admin in the panel and stored encrypted by the API.
 
+## Deploying
+
+`Dockerfile` builds the standalone Next.js server (`node server.js`, port 3000). Pass
+`API_INTERNAL_URL` (where this server reaches the API; a bare `host:port` is read as http) and
+`NEXT_PUBLIC_SITE_URL` as build arguments: Next.js fixes the `/v1` and `/socket.io` forwarding
+at build time, so rebuild after changing them. Railway and Render pass service variables to
+the build by themselves. Browsers, Meta webhooks and OAuth callbacks all reach the API through
+this app's `/v1`, so only this app needs a public address. See `DEPLOY.md` at the root of the
+GitHub repository.
+
 ## Scripts
 
 | Command                           | What it does                                                                                                   |
