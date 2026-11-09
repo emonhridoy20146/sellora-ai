@@ -1,10 +1,11 @@
 import 'server-only';
 import { cookies, headers } from 'next/headers';
 import { cache } from 'react';
+import { internalApiUrl } from './internal-url';
 import { clientIp } from './request';
 import type { Problem, Store } from './types';
 
-const API_URL = (process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:4000').replace(/\/+$/, '');
+const API_URL = internalApiUrl(process.env.API_INTERNAL_URL) ?? 'http://127.0.0.1:4000';
 /** Proxies in front of this app (Caddy: 1). The shopper's address is that many from the right. */
 const PROXY_HOPS = Math.max(0, Number(process.env.TRUST_PROXY_HOPS ?? '1') || 0);
 
