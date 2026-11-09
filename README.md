@@ -121,8 +121,8 @@ suspended store shows "not available", and an address with no store shows a page
   and refuses it unless it is open (or the request carries a valid preview token). This app
   never decides which store or which business data a shopper may see.
 - **The key stays on the server.** Pages call the API from the server with
-  `X-Storefront-Key`. The browser only calls this app's own `/api/cart`, `/api/checkout` and
-  `/api/track` routes (`lib/forward.ts`), which accept same-site JSON only and pass the
+  `X-Storefront-Key`. The browser only calls this app's own `/api/cart`, `/api/checkout`, `/api/track`
+  and `/api/events` routes (`lib/forward.ts`), which accept same-site JSON only and pass the
   shopper's address and browser along for the API's rate limits.
 - **Checkout.** The API prices the cart and checks stock again, places the order through the
   same engine as manual orders, and returns the receipt token. Each checkout carries an
@@ -169,6 +169,13 @@ suspended store shows "not available", and an address with no store shows a page
   click) and redirects there with `utm_source=sms&utm_medium=sms&utm_campaign=<name>`; the
   landing page and store already keep those tags with the order. A code that is not this
   store's goes to the home page; `lib/short-link.ts` never sends the shopper off the store.
+- **Store numbers** (ADR 0027 in sellora-api). On an open store (never in a preview),
+  `components/shop-beacon.tsx` and `lib/shop-steps.ts` send four steps to `/api/events`:
+  a visit (once per tab and day, with the ad tags, click ids or referring site kept for the
+  tab), a product view, an add to cart and the checkout opening. Each carries a random
+  browser id from local storage (`sl_vid`, shared with landing pages); the API counts a
+  shopper once per step and day and stores only counts. The checkout sends the kept tags with
+  the order. `/api/events` answers without counting when the browser holds a preview link.
 - **Security headers.** No framing, no referrer beyond the origin, no camera, microphone or
   location (`next.config.ts`).
 
@@ -208,7 +215,6 @@ src/
 ## Not built yet
 
 - Online payments at checkout: cash on delivery only.
-- Visit and conversion numbers for the store (landing pages have them).
 - Landing page videos were checked only by the player address: YouTube is not reachable from
   the build machine, so a stand-in answered the player in the browser test.
 - Tested only on development addresses (`*.sellora.localhost` and made-up custom domains
