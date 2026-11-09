@@ -212,6 +212,23 @@ SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
 META_APP_SECRET=stand-in-app-secret-0123456789 node scripts/voice-notes-flow.mjs
 ```
 
+### Analytics browser flow
+
+`scripts/analytics-flow.mjs` signs in to a business with orders and chats in the last 30 days
+(Dhaka Fashion House after the Meta and commerce flows) and checks the overview's "What Sellora
+did for you in the last 30 days" tiles against the API, the API's order, sales and AI reply
+counts against MongoDB (read only, connection from sellora-api/.env), the Analytics page's
+value, sales and chats parts, a chart's table view (one row a day, adding up to the order
+count), switching to 7 days, a plan without Reports (a super-admin override, put back at the
+end), and the phone and dark layouts. Screenshots go to `smoke-output/analytics/`. The chats
+and AI replies it counts were made by the stand-ins, not real customers.
+
+```bash
+SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
+SMOKE_ADMIN_EMAIL=… SMOKE_ADMIN_PASSWORD=… SMOKE_ADMIN_TOTP_SECRET=… \
+node scripts/analytics-flow.mjs
+```
+
 ### Couriers browser flow
 
 `scripts/couriers-flow.mjs` connects Steadfast (after a wrong secret is refused), Pathao and

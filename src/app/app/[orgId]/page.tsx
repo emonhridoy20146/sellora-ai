@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Check, Circle, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { useAnalytics, ValueTiles } from '@/components/analytics/value-tiles';
 import { UsageChart } from '@/components/billing/usage-chart';
 import { commerceKeys, useShopSettings } from '@/components/commerce/hooks';
 import { useCourierChoices } from '@/components/couriers/data';
@@ -71,6 +72,8 @@ export default function OverviewPage() {
     queryFn: () => api<AiAgentView>(`/orgs/${org.id}/ai-agent`),
     enabled: can('ai.settings.manage') && aiInPlan,
   });
+  const analyticsInPlan = modules === null || modules.includes('analytics');
+  const value = useAnalytics(org.id, 30, can('analytics.view') && analyticsInPlan);
   const user = me.data!.user;
   const b = billing.data;
   const s = b?.subscription;
@@ -179,6 +182,21 @@ export default function OverviewPage() {
         title={`${greeting(org.timezone)}, ${user.name.split(' ')[0]}`}
         description={`Here is how ${org.name} is doing.`}
       />
+
+      {value.data &&
+        (value.data.value.ai || value.data.value.carts || value.data.value.riskyOrders) && (
+          <section aria-labelledby="value-heading" className="mb-6">
+            <div className="mb-2 flex items-baseline justify-between gap-2">
+              <h2 id="value-heading" className="text-sm font-medium">
+                What Sellora did for you in the last 30 days
+              </h2>
+              <Link href={`${base}/analytics`} className="text-[13px] text-primary hover:underline">
+                Analytics
+              </Link>
+            </div>
+            <ValueTiles o={value.data} compact />
+          </section>
+        )}
 
       {can('orders.view') && !commerceOff && (
         <section aria-labelledby="orders-heading" className="mb-6">

@@ -181,8 +181,7 @@ function rowLabel(r: ProfitRow, groupBy: GroupBy): React.ReactNode {
       </Link>
     );
   if (groupBy === 'tier') return TIER_LABEL[r.key as ModelTier]?.name ?? humanize(r.key);
-  if (groupBy === 'feature')
-    return FEATURE_LABEL[r.key] ?? humanize(r.key.replace(/\./g, ' '));
+  if (groupBy === 'feature') return FEATURE_LABEL[r.key] ?? humanize(r.key.replace(/\./g, ' '));
   if (groupBy === 'model') return <span className="font-mono text-xs">{r.key || 'Unknown'}</span>;
   return longDay(r.key);
 }

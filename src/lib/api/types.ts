@@ -2781,3 +2781,51 @@ export type CatalogSourceInput =
   | { kind: 'sheet'; url: string }
   | { kind: 'website'; url: string }
   | { kind: 'csv'; filename: string; csv: string };
+
+interface CountAndValue {
+  count: number;
+  valueMinor: number;
+}
+
+/** Reports › Analytics (ADR 0026): what Sellora did, and the period's sales and chats. */
+export interface AnalyticsOverview {
+  range: { from: IsoDate; to: IsoDate; timezone: string; currency: string };
+  /** A part is null when the plan does not include it. */
+  value: {
+    ai: {
+      replies: number;
+      conversations: number;
+      /** Chats no one from the team had to answer. */
+      answeredByAiOnly: number;
+      voiceNotes: number;
+      /** replies × minutesPerReply: an estimate. */
+      minutesSaved: number;
+      minutesPerReply: number;
+      /** AI credits charged in the period, in the wallet currency. */
+      spentMinor: number;
+      orders: CountAndValue | null;
+    } | null;
+    carts: CountAndValue | null;
+    riskyOrders: { stopped: number; deliveryChargeMinor: number; checked: number } | null;
+  };
+  inbox: {
+    conversations: number;
+    customerMessages: number;
+    aiReplies: number;
+    teamReplies: number;
+    replySeconds: { ai: number | null; team: number | null };
+    byChannel: { channelType: ChannelType; conversations: number }[];
+    byDay: { date: string; customerMessages: number; aiReplies: number; teamReplies: number }[];
+  } | null;
+  sales: {
+    orders: number;
+    valueMinor: number;
+    averageMinor: number;
+    cancelled: number;
+    returned: number;
+    delivered: number;
+    bySource: { source: string; orders: number; valueMinor: number }[];
+    byDay: { date: string; orders: number; valueMinor: number; aiOrders: number }[];
+    topProducts: { productId: string; name: string; quantity: number; valueMinor: number }[];
+  } | null;
+}
