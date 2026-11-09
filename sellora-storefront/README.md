@@ -72,6 +72,15 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test STOREFRONT_DOMAIN_IPS=127.0.0.1`. Cus
 then use this app's port too (`http://www.nakshi-shop.test:3100`); point the made-up name at
 127.0.0.1 in `/etc/hosts` or with Chromium's `--host-resolver-rules`.
 
+## Deploying
+
+`Dockerfile` builds a standalone server on port 3100. Its settings (`API_INTERNAL_URL`,
+`STOREFRONT_API_KEY`, `TRUST_PROXY_HOPS`) are read when it starts, so one image fits every
+setup; a bare `host:port` API address is read as `http://`. `/api/health` answers without
+calling the API, for the host's health check. `DEPLOY.md` at the root of the GitHub repository
+puts it on Railway behind a wildcard domain (`*.shops.yourdomain.com`), and `compose.yaml` there
+runs it locally at `http://<shop>.sellora.localhost:3100`.
+
 ## Scripts
 
 | Command                           | What it does                                                                                                                                |
