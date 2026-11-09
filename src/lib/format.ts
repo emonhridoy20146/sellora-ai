@@ -71,6 +71,12 @@ export function formatCredits(n: number): string {
   return `${formatNumber(n, { digits: 2 })} credit${n === 1 ? '' : 's'}`;
 }
 
+/** "0:07", "1:05": a recording's length the way phones show it. */
+export function formatClock(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
 export function formatPercent(n: number | null | undefined, digits = 1): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '–';
   return `${n.toFixed(digits)}%`;

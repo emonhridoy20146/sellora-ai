@@ -194,6 +194,24 @@ SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
 META_APP_SECRET=stand-in-app-secret-0123456789 node scripts/photos-flow.mjs
 ```
 
+### Voice notes browser flow
+
+`scripts/voice-notes-flow.mjs` (same set-up as the photos flow, plus the speech stand-in:
+`node scripts/speech-stand-in.mjs` in sellora-api, and the API and worker started with
+`AI_OPENAI_API_KEY=<any>` and `AI_OPENAI_BASE_URL=http://127.0.0.1:4100/v1`) checks the
+"Turn voice notes into text" switch and its price, sends a WhatsApp voice note and a Messenger
+voice clip as webhooks and checks that each is saved, plays with its length and shows what was
+heard, that the AI agent answers those words, that recordings load only with a staff session,
+that a recording the service cannot read shows why and "Try again" fixes it, and that with the
+switch off a voice note stays audio only; then a phone and dark mode. The recordings are tones
+(no speech) and the speech stand-in answers a scripted sentence without listening: it proves
+Sellora's handling of voice notes, not a real service's understanding of Bangla.
+
+```bash
+SMOKE_MERCHANT_EMAIL=owner@demo.sellora.test SMOKE_MERCHANT_PASSWORD='…' \
+META_APP_SECRET=stand-in-app-secret-0123456789 node scripts/voice-notes-flow.mjs
+```
+
 ### Couriers browser flow
 
 `scripts/couriers-flow.mjs` connects Steadfast (after a wrong secret is refused), Pathao and

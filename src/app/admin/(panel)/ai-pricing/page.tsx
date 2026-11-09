@@ -22,8 +22,13 @@ import { Switch } from '@/components/ui/switch';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { api } from '@/lib/api/client';
 import { ApiError, errorMessage } from '@/lib/api/errors';
-import type { AiModel, ModelTier, PlatformCreditRate } from '@/lib/api/types';
-import { estimateCall, tierEconomics, type RateDraft } from '@/lib/credit-economics';
+import type { AiModel, ModelPurpose, ModelTier, PlatformCreditRate } from '@/lib/api/types';
+import {
+  estimateCall,
+  tierEconomics,
+  voiceEconomics,
+  type RateDraft,
+} from '@/lib/credit-economics';
 import {
   formatCredits,
   formatDateTime,
@@ -115,8 +120,13 @@ export default function AiPricingPage() {
               sub={`Version ${current.version}`}
             />
             <Stat
-              label="Minimum per AI reply"
+              label="Minimum per AI request"
               value={formatCredits(current.minimumCreditsPerRequest)}
+              sub={
+                current.transcriptionCreditsPerMinute === null
+                  ? 'No voice note price: voice notes stay audio only'
+                  : `Voice notes: ${formatCredits(current.transcriptionCreditsPerMinute)} per minute`
+              }
             />
             <Stat
               label="Exchange rate used"
@@ -153,6 +163,7 @@ export default function AiPricingPage() {
                         {TIER_LABEL[t].name} in / out per 1K
                       </TH>
                     ))}
+                    <TH className="text-right">Voice / min</TH>
                     <TH className="text-right">USD rate</TH>
                     <TH>Note</TH>
                   </TR>
@@ -186,6 +197,11 @@ export default function AiPricingPage() {
                           );
                         })}
                         <TD className="tabular text-right">
+                          {r.transcriptionCreditsPerMinute === null
+                            ? '–'
+                            : formatNumber(r.transcriptionCreditsPerMinute)}
+                        </TD>
+                        <TD className="tabular text-right">
                           {formatNumber(r.usdRate, { digits: 4 })}
                         </TD>
                         <TD
@@ -209,8 +225,9 @@ export default function AiPricingPage() {
           <div>
             <CardTitle>Provider models</CardTitle>
             <CardDescription>
-              Prices are what the provider charges per million tokens. The AI agent uses the default
-              model of each tier.
+              Prices are what the provider charges per million tokens, or per minute for
+              speech-to-text. The AI agent uses the default model of each tier; voice notes use the
+              default speech-to-text model.
             </CardDescription>
           </div>
           {manage && (
@@ -233,7 +250,7 @@ export default function AiPricingPage() {
               <THead>
                 <TR>
                   <TH>Model</TH>
-                  <TH>Tier</TH>
+                  <TH>Used for</TH>
                   <TH className="text-right">Input $/M</TH>
                   <TH className="text-right">Cached $/M</TH>
                   <TH className="text-right">Output $/M</TH>
@@ -253,25 +270,36 @@ export default function AiPricingPage() {
                         {m.provider} · {m.model}
                       </span>
                     </TD>
-                    <TD>{TIER_LABEL[m.tier].name}</TD>
-                    <TD className="tabular text-right">{usd(m.inputUsdPerMTok)}</TD>
-                    <TD className="tabular text-right">
-                      {usd(m.cachedInputUsdPerMTok)}
-                      <span className="block text-xs text-muted-foreground">
-                        write {usd(m.cacheWriteUsdPerMTok ?? m.inputUsdPerMTok * 1.25)}
-                      </span>
-                    </TD>
-                    <TD className="tabular text-right">{usd(m.outputUsdPerMTok)}</TD>
-                    <TD className="tabular text-right">
-                      {formatNumber(m.contextWindow, { compact: true })}
-                      {m.longContext && (
-                        <span className="block text-xs text-muted-foreground">
-                          over {formatNumber(m.longContext.thresholdTokens, { compact: true })}:{' '}
-                          {usd(m.longContext.inputUsdPerMTok)} /{' '}
-                          {usd(m.longContext.outputUsdPerMTok)}
-                        </span>
-                      )}
-                    </TD>
+                    {m.purpose === 'transcription' ? (
+                      <>
+                        <TD>Voice notes</TD>
+                        <TD colSpan={4} className="tabular text-right">
+                          {usd(m.audioUsdPerMinute ?? 0)} per minute of audio
+                        </TD>
+                      </>
+                    ) : (
+                      <>
+                        <TD>{TIER_LABEL[m.tier].name}</TD>
+                        <TD className="tabular text-right">{usd(m.inputUsdPerMTok)}</TD>
+                        <TD className="tabular text-right">
+                          {usd(m.cachedInputUsdPerMTok)}
+                          <span className="block text-xs text-muted-foreground">
+                            write {usd(m.cacheWriteUsdPerMTok ?? m.inputUsdPerMTok * 1.25)}
+                          </span>
+                        </TD>
+                        <TD className="tabular text-right">{usd(m.outputUsdPerMTok)}</TD>
+                        <TD className="tabular text-right">
+                          {formatNumber(m.contextWindow, { compact: true })}
+                          {m.longContext && (
+                            <span className="block text-xs text-muted-foreground">
+                              over {formatNumber(m.longContext.thresholdTokens, { compact: true })}:{' '}
+                              {usd(m.longContext.inputUsdPerMTok)} /{' '}
+                              {usd(m.longContext.outputUsdPerMTok)}
+                            </span>
+                          )}
+                        </TD>
+                      </>
+                    )}
                     <TD>
                       <span className="inline-flex flex-wrap gap-1">
                         {m.enabled ? <Badge tone="success">On</Badge> : <Badge>Off</Badge>}
@@ -357,10 +385,36 @@ function EconomicsCard({
         {modelsLoading ? (
           <Skeleton className="m-5 h-24" />
         ) : (
-          <EconomicsTable rate={rate} rows={rows} />
+          <>
+            <EconomicsTable rate={rate} rows={rows} />
+            <VoiceMargin rate={rate} models={models} />
+          </>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+/** One line under the tier table: what a minute of voice note earns. */
+function VoiceMargin({ rate, models }: { rate: RateDraft; models: AiModel[] }) {
+  const v = voiceEconomics(rate, models);
+  const m = (n: number | null) => (n === null ? '–' : formatMoney(Math.round(n), rate.currency));
+  return (
+    <p className="border-t px-5 py-3 text-sm">
+      <span className="font-medium">Voice notes to text: </span>
+      {v ? (
+        <>
+          merchant pays {m(v.pricePerMinuteMinor)} per minute, provider cost{' '}
+          {m(v.costPerMinuteMinor)}
+          {v.model ? ` (${v.model.label})` : ' (no enabled speech-to-text model)'}, margin{' '}
+          <span className={marginTone(v.marginPct)}>{formatPercent(v.marginPct, 0)}</span>.
+        </>
+      ) : (
+        <span className="text-muted-foreground">
+          no price in this list, so voice notes stay audio only.
+        </span>
+      )}
+    </p>
   );
 }
 
@@ -452,6 +506,12 @@ function PublishRateDialog({
   );
   const [usdRate, setUsdRate] = useState(base ? String(base.usdRate) : '');
   const [minimum, setMinimum] = useState(String(base?.minimumCreditsPerRequest ?? 1));
+  const [voice, setVoice] = useState(
+    base?.transcriptionCreditsPerMinute === null ||
+      base?.transcriptionCreditsPerMinute === undefined
+      ? ''
+      : String(base.transcriptionCreditsPerMinute),
+  );
   const [tiers, setTiers] = useState<Record<ModelTier, { input: string; output: string }>>(
     () =>
       Object.fromEntries(
@@ -489,6 +549,8 @@ function PublishRateDialog({
   );
   const rateNum = Number(usdRate);
   const minNum = dec(minimum);
+  const voiceNum = voice.trim() === '' ? null : dec(voice);
+  const voiceBad = voice.trim() !== '' && voiceNum === null;
   const valid =
     curValid &&
     priceMinor !== null &&
@@ -496,7 +558,8 @@ function PublishRateDialog({
     rateNum > 0 &&
     minNum !== null &&
     draftTiers.length > 0 &&
-    !partial;
+    !partial &&
+    !voiceBad;
   const draft: RateDraft | null = valid
     ? {
         currency: cur,
@@ -504,6 +567,7 @@ function PublishRateDialog({
         usdRate: rateNum,
         minimumCreditsPerRequest: minNum,
         tiers: draftTiers,
+        transcriptionCreditsPerMinute: voiceNum,
       }
     : null;
 
@@ -517,6 +581,7 @@ function PublishRateDialog({
           usdRate: rateNum,
           minimumCreditsPerRequest: minNum,
           tiers: draftTiers,
+          ...(voiceNum !== null ? { transcriptionCreditsPerMinute: voiceNum } : {}),
           ...(effectiveFrom ? { effectiveFrom: new Date(effectiveFrom).toISOString() } : {}),
           ...(note.trim() ? { note: note.trim() } : {}),
         },
@@ -584,7 +649,7 @@ function PublishRateDialog({
               label="Minimum credits"
               htmlFor="r-min"
               error={errs.minimumCreditsPerRequest}
-              hint="Per AI reply."
+              hint="Per AI request."
             >
               <Input
                 id="r-min"
@@ -637,10 +702,30 @@ function PublishRateDialog({
             {errs.tiers && <p className="mt-2 text-sm text-destructive">{errs.tiers}</p>}
           </fieldset>
 
+          <Field
+            label="Credits per minute of voice note"
+            htmlFor="r-voice"
+            optional
+            error={
+              errs.transcriptionCreditsPerMinute ??
+              (voiceBad ? 'A number with up to 2 decimals.' : undefined)
+            }
+            hint="Turning a customer's voice note into text, charged by the second. Empty: voice notes stay audio only."
+          >
+            <Input
+              id="r-voice"
+              inputMode="decimal"
+              className="sm:max-w-48"
+              value={voice}
+              onChange={(e) => setVoice(e.target.value)}
+            />
+          </Field>
+
           {draft && (
             <div className="rounded-md border">
               <p className="border-b px-4 py-2 text-sm font-medium">Margin with this price</p>
               <EconomicsTable rate={draft} rows={tierEconomics(draft, models)} />
+              <VoiceMargin rate={draft} models={models} />
             </div>
           )}
 
@@ -688,7 +773,14 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
   const [provider, setProvider] = useState<AiModel['provider']>(model?.provider ?? 'anthropic');
   const [modelId, setModelId] = useState(model?.model ?? '');
   const [label, setLabel] = useState(model?.label ?? '');
+  const [purpose, setPurpose] = useState<ModelPurpose>(model?.purpose ?? 'chat');
+  const speech = purpose === 'transcription';
   const [tier, setTier] = useState<ModelTier>(model?.tier ?? 'standard');
+  const [perMinute, setPerMinute] = useState(
+    model?.audioUsdPerMinute === null || model?.audioUsdPerMinute === undefined
+      ? ''
+      : String(model.audioUsdPerMinute),
+  );
   const [input, setInput] = useState(String(model?.inputUsdPerMTok ?? ''));
   const [cached, setCached] = useState(String(model?.cachedInputUsdPerMTok ?? 0));
   const [cacheWrite, setCacheWrite] = useState(
@@ -710,43 +802,56 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
 
   const num = (s: string) =>
     s.trim() !== '' && Number.isFinite(Number(s)) && Number(s) >= 0 ? Number(s) : null;
-  const valid =
-    modelId.trim() &&
-    label.trim() &&
-    num(input) !== null &&
-    num(output) !== null &&
-    num(cached) !== null &&
-    (cacheWrite.trim() === '' || num(cacheWrite) !== null) &&
-    Number.isInteger(num(contextWindow)) &&
-    (!long ||
-      (Number.isInteger(num(longThreshold)) && num(longIn) !== null && num(longOut) !== null));
+  const valid = speech
+    ? Boolean(modelId.trim() && label.trim() && num(perMinute) !== null)
+    : modelId.trim() &&
+      label.trim() &&
+      num(input) !== null &&
+      num(output) !== null &&
+      num(cached) !== null &&
+      (cacheWrite.trim() === '' || num(cacheWrite) !== null) &&
+      Number.isInteger(num(contextWindow)) &&
+      (!long ||
+        (Number.isInteger(num(longThreshold)) && num(longIn) !== null && num(longOut) !== null));
 
   const save = useMutation({
     meta: { silent: true },
     mutationFn: () => {
-      const body = {
-        label: label.trim(),
-        tier,
-        inputUsdPerMTok: num(input),
-        outputUsdPerMTok: num(output),
-        cachedInputUsdPerMTok: num(cached),
-        cacheWriteUsdPerMTok: cacheWrite.trim() === '' ? null : num(cacheWrite),
-        contextWindow: num(contextWindow),
-        longContext: long
-          ? {
-              thresholdTokens: num(longThreshold),
-              inputUsdPerMTok: num(longIn),
-              outputUsdPerMTok: num(longOut),
-            }
-          : null,
-        imageInput,
-        enabled,
-        isDefaultForTier: isDefault,
-      };
+      // Speech-to-text is priced per minute; its token prices stay at zero.
+      const body = speech
+        ? {
+            label: label.trim(),
+            tier: model?.tier ?? 'fast',
+            audioUsdPerMinute: num(perMinute),
+            inputUsdPerMTok: 0,
+            outputUsdPerMTok: 0,
+            cachedInputUsdPerMTok: 0,
+            enabled,
+            isDefaultForTier: isDefault,
+          }
+        : {
+            label: label.trim(),
+            tier,
+            inputUsdPerMTok: num(input),
+            outputUsdPerMTok: num(output),
+            cachedInputUsdPerMTok: num(cached),
+            cacheWriteUsdPerMTok: cacheWrite.trim() === '' ? null : num(cacheWrite),
+            contextWindow: num(contextWindow),
+            longContext: long
+              ? {
+                  thresholdTokens: num(longThreshold),
+                  inputUsdPerMTok: num(longIn),
+                  outputUsdPerMTok: num(longOut),
+                }
+              : null,
+            imageInput,
+            enabled,
+            isDefaultForTier: isDefault,
+          };
       return model
         ? api<AiModel>(`/platform/billing/ai-models/${model.id}`, { method: 'PATCH', body })
         : api<AiModel>('/platform/billing/ai-models', {
-            body: { ...body, provider, model: modelId.trim() },
+            body: { ...body, provider, model: modelId.trim(), purpose },
           });
     },
     onSuccess: async () => {
@@ -811,118 +916,155 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
                 required
               />
             </Field>
-            <Field label="Tier" htmlFor="m-tier">
+            <Field label="Used for" htmlFor="m-purpose" hint={model ? 'Cannot change.' : undefined}>
               <NativeSelect
-                id="m-tier"
-                value={tier}
-                onChange={(e) => setTier(e.target.value as ModelTier)}
+                id="m-purpose"
+                value={purpose}
+                disabled={Boolean(model)}
+                onChange={(e) => setPurpose(e.target.value as ModelPurpose)}
               >
-                {TIERS.map((t) => (
-                  <option key={t} value={t}>
-                    {TIER_LABEL[t].name}
-                  </option>
-                ))}
+                <option value="chat">AI replies and writing</option>
+                <option value="transcription">Voice notes to text</option>
               </NativeSelect>
             </Field>
+            {!speech && (
+              <Field label="Tier" htmlFor="m-tier">
+                <NativeSelect
+                  id="m-tier"
+                  value={tier}
+                  onChange={(e) => setTier(e.target.value as ModelTier)}
+                >
+                  {TIERS.map((t) => (
+                    <option key={t} value={t}>
+                      {TIER_LABEL[t].name}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </Field>
+            )}
           </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Input $ / M tokens" htmlFor="m-in" error={errs.inputUsdPerMTok}>
-              <Input
-                id="m-in"
-                inputMode="decimal"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Cached input $ / M" htmlFor="m-cached" error={errs.cachedInputUsdPerMTok}>
-              <Input
-                id="m-cached"
-                inputMode="decimal"
-                value={cached}
-                onChange={(e) => setCached(e.target.value)}
-              />
-            </Field>
+          {speech ? (
             <Field
-              label="Cache write $ / M"
-              htmlFor="m-cache-write"
-              error={errs.cacheWriteUsdPerMTok}
-              hint="Empty: 1.25 × input"
+              label="$ per minute of audio"
+              htmlFor="m-minute"
+              error={errs.audioUsdPerMinute}
+              hint="What the provider charges to turn one minute of recording into text."
             >
               <Input
-                id="m-cache-write"
+                id="m-minute"
                 inputMode="decimal"
-                value={cacheWrite}
-                placeholder={num(input) !== null ? String(num(input)! * 1.25) : ''}
-                onChange={(e) => setCacheWrite(e.target.value)}
-              />
-            </Field>
-            <Field label="Output $ / M tokens" htmlFor="m-out" error={errs.outputUsdPerMTok}>
-              <Input
-                id="m-out"
-                inputMode="decimal"
-                value={output}
-                onChange={(e) => setOutput(e.target.value)}
+                className="sm:max-w-48"
+                value={perMinute}
+                onChange={(e) => setPerMinute(e.target.value)}
                 required
               />
             </Field>
-            <Field label="Context window" htmlFor="m-ctx" error={errs.contextWindow}>
-              <Input
-                id="m-ctx"
-                inputMode="numeric"
-                value={contextWindow}
-                onChange={(e) => setContextWindow(e.target.value)}
-              />
-            </Field>
-          </div>
-          <div className="rounded-md border p-3">
-            <div className="flex items-center justify-between gap-3">
-              <label htmlFor="m-long" className="text-sm font-medium">
-                Higher price for long prompts
-              </label>
-              <Switch id="m-long" checked={long} onCheckedChange={setLong} />
-            </div>
-            {long && (
-              <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                <Field label="Above (prompt tokens)" htmlFor="m-lt">
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Input $ / M tokens" htmlFor="m-in" error={errs.inputUsdPerMTok}>
                   <Input
-                    id="m-lt"
+                    id="m-in"
+                    inputMode="decimal"
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field
+                  label="Cached input $ / M"
+                  htmlFor="m-cached"
+                  error={errs.cachedInputUsdPerMTok}
+                >
+                  <Input
+                    id="m-cached"
+                    inputMode="decimal"
+                    value={cached}
+                    onChange={(e) => setCached(e.target.value)}
+                  />
+                </Field>
+                <Field
+                  label="Cache write $ / M"
+                  htmlFor="m-cache-write"
+                  error={errs.cacheWriteUsdPerMTok}
+                  hint="Empty: 1.25 × input"
+                >
+                  <Input
+                    id="m-cache-write"
+                    inputMode="decimal"
+                    value={cacheWrite}
+                    placeholder={num(input) !== null ? String(num(input)! * 1.25) : ''}
+                    onChange={(e) => setCacheWrite(e.target.value)}
+                  />
+                </Field>
+                <Field label="Output $ / M tokens" htmlFor="m-out" error={errs.outputUsdPerMTok}>
+                  <Input
+                    id="m-out"
+                    inputMode="decimal"
+                    value={output}
+                    onChange={(e) => setOutput(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field label="Context window" htmlFor="m-ctx" error={errs.contextWindow}>
+                  <Input
+                    id="m-ctx"
                     inputMode="numeric"
-                    value={longThreshold}
-                    onChange={(e) => setLongThreshold(e.target.value)}
-                  />
-                </Field>
-                <Field label="Input $ / M" htmlFor="m-li">
-                  <Input
-                    id="m-li"
-                    inputMode="decimal"
-                    value={longIn}
-                    onChange={(e) => setLongIn(e.target.value)}
-                  />
-                </Field>
-                <Field label="Output $ / M" htmlFor="m-lo">
-                  <Input
-                    id="m-lo"
-                    inputMode="decimal"
-                    value={longOut}
-                    onChange={(e) => setLongOut(e.target.value)}
+                    value={contextWindow}
+                    onChange={(e) => setContextWindow(e.target.value)}
                   />
                 </Field>
               </div>
-            )}
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
-            <span className="text-sm">
-              <label htmlFor="m-images" className="font-medium">
-                Understands photos
-              </label>
-              <span className="block text-xs text-muted-foreground">
-                The AI agent shows it the customer’s newest photos. Turn on only if the provider
-                accepts images for this model; photos are billed as input tokens.
-              </span>
-            </span>
-            <Switch id="m-images" checked={imageInput} onCheckedChange={setImageInput} />
-          </div>
+              <div className="rounded-md border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <label htmlFor="m-long" className="text-sm font-medium">
+                    Higher price for long prompts
+                  </label>
+                  <Switch id="m-long" checked={long} onCheckedChange={setLong} />
+                </div>
+                {long && (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                    <Field label="Above (prompt tokens)" htmlFor="m-lt">
+                      <Input
+                        id="m-lt"
+                        inputMode="numeric"
+                        value={longThreshold}
+                        onChange={(e) => setLongThreshold(e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Input $ / M" htmlFor="m-li">
+                      <Input
+                        id="m-li"
+                        inputMode="decimal"
+                        value={longIn}
+                        onChange={(e) => setLongIn(e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Output $ / M" htmlFor="m-lo">
+                      <Input
+                        id="m-lo"
+                        inputMode="decimal"
+                        value={longOut}
+                        onChange={(e) => setLongOut(e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
+                <span className="text-sm">
+                  <label htmlFor="m-images" className="font-medium">
+                    Understands photos
+                  </label>
+                  <span className="block text-xs text-muted-foreground">
+                    The AI agent shows it the customer’s newest photos. Turn on only if the provider
+                    accepts images for this model; photos are billed as input tokens.
+                  </span>
+                </span>
+                <Switch id="m-images" checked={imageInput} onCheckedChange={setImageInput} />
+              </div>
+            </>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex items-center justify-between gap-3 rounded-md border px-3 py-2">
               <label htmlFor="m-enabled" className="text-sm font-medium">
@@ -935,7 +1077,7 @@ function ModelDialog({ model, onClose }: { model: AiModel | null; onClose: () =>
             >
               <span className="text-sm">
                 <label htmlFor="m-default" className="font-medium">
-                  Default for {TIER_LABEL[tier].name}
+                  {speech ? 'Default for voice notes' : `Default for ${TIER_LABEL[tier].name}`}
                 </label>
                 <span className="block text-xs text-muted-foreground">
                   Replaces the current default.

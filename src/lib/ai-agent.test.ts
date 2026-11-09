@@ -20,6 +20,7 @@ const saved: AiAgentSettings = {
   faqs: [{ question: 'Return?', answer: 'Within 3 days.' }],
   takeOrders: true,
   confirmOrders: false,
+  transcribeVoiceNotes: true,
   handoverKeywords: ['talk to a human'],
   handoverMessage: '',
   replyDelaySeconds: 3,
@@ -41,6 +42,13 @@ describe('AI agent settings form', () => {
       replyDelaySeconds: 5,
       businessInfo: 'Cash on delivery all over Bangladesh.',
     });
+  });
+
+  it('sends the voice note switch as a behaviour setting', () => {
+    const d = toDraft(saved);
+    d.transcribeVoiceNotes = false;
+    expect(changedFields(saved, d, all)).toEqual({ transcribeVoiceNotes: false });
+    expect(changedFields(saved, d, { behaviour: false, knowledge: true })).toEqual({});
   });
 
   it('leaves out fields the member may not change', () => {

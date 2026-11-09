@@ -240,6 +240,8 @@ export interface CreditRate {
   currency: string;
   creditPriceMinor: number;
   minimumCreditsPerRequest: number;
+  /** Credits per minute of voice note turned into text; null: voice notes stay audio only. */
+  transcriptionCreditsPerMinute: number | null;
   tiers: { tier: ModelTier; inputCreditsPer1k: number; outputCreditsPer1k: number }[];
   effectiveFrom: IsoDate;
 }
@@ -343,9 +345,12 @@ export interface UsageRequest {
   id: string;
   requestId: string;
   feature: string;
-  tier: ModelTier;
+  /** Null for voice notes, which are priced by the minute. */
+  tier: ModelTier | null;
   status: 'reserved' | 'settled' | 'released';
   tokens: { input: number; output: number };
+  /** Voice notes: the recording's length. */
+  audioSeconds: number | null;
   credits: number;
   chargedMinor: number;
   reference: { type: string; id: string } | null;
@@ -563,7 +568,8 @@ export interface PlatformUsage {
   orgId: string;
   requestId: string;
   feature: string;
-  tier: ModelTier;
+  tier: ModelTier | null;
+  audioMs: number | null;
   status: string;
   provider: string;
   model: string | null;
@@ -579,11 +585,15 @@ export interface PlatformUsage {
   at: IsoDate;
 }
 
+export type ModelPurpose = 'chat' | 'transcription';
+
 export interface AiModel {
   id: string;
   provider: 'anthropic' | 'openai' | 'google' | 'other';
   model: string;
   label: string;
+  /** chat: answers customers, by tier. transcription: turns voice notes into text. */
+  purpose: ModelPurpose;
   tier: ModelTier;
   inputUsdPerMTok: number;
   outputUsdPerMTok: number;
@@ -598,6 +608,8 @@ export interface AiModel {
   contextWindow: number;
   /** The model can look at photos customers send. */
   imageInput: boolean;
+  /** Speech-to-text models: USD per minute of audio. */
+  audioUsdPerMinute: number | null;
   enabled: boolean;
   isDefaultForTier: boolean;
 }
@@ -1172,7 +1184,7 @@ export interface InboxMessage {
   id: string;
   conversationId: string;
   direction: 'in' | 'out';
-  type: 'text' | 'image' | 'file' | 'note' | 'system';
+  type: 'text' | 'image' | 'audio' | 'file' | 'note' | 'system';
   sender: { type: 'contact' | 'user' | 'ai' | 'system'; id: string | null; name: string | null };
   text: string;
   attachments: MessageAttachment[];
@@ -1187,8 +1199,21 @@ export type DeliveryStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed
 /** A customer's photo is `pending` while Sellora copies it from Meta, then `ready` or `failed`. */
 export type AttachmentStatus = 'pending' | 'ready' | 'failed';
 
+/**
+ * A voice note turned into text: `pending` while it is being transcribed, `done` (the text
+ * may be empty), `failed`, or `skipped` (plan, settings, credits, length), with why.
+ */
+export interface VoiceTranscript {
+  status: 'pending' | 'done' | 'failed' | 'skipped';
+  /** Only when done. */
+  text: string | null;
+  error: string | null;
+  credits: number | null;
+}
+
 export interface MessageAttachment {
-  /** Saved photos: a private inbox link (signed-in staff only). Null while saving or after a failure. */
+  kind: 'image' | 'audio' | 'file';
+  /** Saved photos and voice notes: a private inbox link (signed-in staff only). Null while saving or after a failure. */
   url: string | null;
   contentType: string | null;
   name: string | null;
@@ -1196,6 +1221,9 @@ export interface MessageAttachment {
   status: AttachmentStatus;
   /** Why it could not be saved, in plain words. */
   error: string | null;
+  /** Voice notes: the recording's length, when it could be read. */
+  durationMs: number | null;
+  transcript: VoiceTranscript | null;
 }
 
 export interface TeamMember {
@@ -1250,6 +1278,8 @@ export interface AiAgentSettings {
   handoverMessage: string;
   replyDelaySeconds: number;
   maxRepliesPerDay: number;
+  /** Turn customers' voice notes into text, for the team and the AI (credits per minute). */
+  transcribeVoiceNotes: boolean;
   updatedAt: string;
 }
 
@@ -1267,6 +1297,14 @@ export interface AiAgentView {
       available: boolean;
       perReply: { credits: number; amountMinor: number; currency: string } | null;
     }[];
+    /** Turning customers' voice notes into text on this server. */
+    voiceNotes: {
+      /** A speech-to-text model, its key and a voice note price are all set up. */
+      available: boolean;
+      perMinute: { credits: number; amountMinor: number; currency: string } | null;
+      /** Longer recordings stay audio only. */
+      maxSeconds: number;
+    };
     wallet: { availableMinor: number; currency: string };
     channels: {
       id: string;

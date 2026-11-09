@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AiModel } from '@/lib/api/types';
-import { estimateCall, tierEconomics, type RateDraft } from './credit-economics';
+import { estimateCall, tierEconomics, voiceEconomics, type RateDraft } from './credit-economics';
 
 const rate: RateDraft = {
   currency: 'BDT',
@@ -26,6 +26,8 @@ function model(over: Partial<AiModel>): AiModel {
     imageInput: true,
     enabled: true,
     isDefaultForTier: true,
+    purpose: 'chat',
+    audioUsdPerMinute: null,
     ...over,
   };
 }
@@ -50,6 +52,19 @@ describe('tierEconomics', () => {
     expect(t!.model?.label).toBe('Dear');
   });
 
+  it('leaves speech-to-text models out of the token tiers', () => {
+    const [t] = tierEconomics(rate, [
+      model({ label: 'Chat' }),
+      model({
+        label: 'Speech',
+        purpose: 'transcription',
+        inputUsdPerMTok: 0,
+        outputUsdPerMTok: 99,
+      }),
+    ]);
+    expect(t!.model?.label).toBe('Chat');
+  });
+
   it('reports no margin when the tier has no model', () => {
     const [t] = tierEconomics(rate, []);
     expect(t!.costInputPerMMinor).toBeNull();
@@ -63,5 +78,32 @@ describe('estimateCall', () => {
     // 3000 × 50 + 400 × 250 = 250,000 centi-credit-tokens / 1000 = 250 centi = 2.5 credits
     expect(estimateCall(rate, 'standard', 3000, 400)).toEqual({ credits: 2.5, chargeMinor: 250 });
     expect(estimateCall(rate, 'fast', 1, 1)).toBeNull();
+  });
+});
+
+describe('voiceEconomics', () => {
+  const speech = (over: Partial<AiModel>) =>
+    model({ purpose: 'transcription', label: 'Speech', audioUsdPerMinute: 0.003, ...over });
+
+  it('compares the price per minute with the dearest enabled speech model', () => {
+    const v = voiceEconomics({ ...rate, transcriptionCreditsPerMinute: 1.5 }, [
+      model({}),
+      speech({ label: 'Cheap', audioUsdPerMinute: 0.003 }),
+      speech({ label: 'Dear', audioUsdPerMinute: 0.006 }),
+      speech({ label: 'Off', audioUsdPerMinute: 1, enabled: false }),
+    ])!;
+    // 1.5 credits × 100 minor = 150 minor (৳1.50) per minute
+    expect(v.pricePerMinuteMinor).toBe(150);
+    // $0.006 × 120 × 100 = 72 minor
+    expect(v.costPerMinuteMinor).toBeCloseTo(72, 5);
+    expect(v.marginPct).toBeCloseTo(52, 5);
+    expect(v.model?.label).toBe('Dear');
+  });
+
+  it('is empty without a voice price and has no margin without a model', () => {
+    expect(voiceEconomics(rate, [speech({})])).toBeNull();
+    const v = voiceEconomics({ ...rate, transcriptionCreditsPerMinute: 2 }, [model({})])!;
+    expect(v.costPerMinuteMinor).toBeNull();
+    expect(v.marginPct).toBeNull();
   });
 });

@@ -36,7 +36,7 @@ import {
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import type { AiAgentView, AiLanguage } from '@/lib/api/types';
-import { formatCredits, formatMoney, formatNumber } from '@/lib/format';
+import { formatClock, formatCredits, formatMoney, formatNumber } from '@/lib/format';
 import { CHANNEL_LABEL } from '@/lib/inbox';
 import { cn } from '@/lib/utils';
 
@@ -72,6 +72,48 @@ function SwitchRow({
         <span className="block text-muted-foreground">{children}</span>
       </span>
     </label>
+  );
+}
+
+function VoiceNotesCard({
+  voiceNotes,
+  checked,
+  onChange,
+}: {
+  voiceNotes: AiAgentView['status']['voiceNotes'];
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const price = voiceNotes.perMinute;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Voice notes</CardTitle>
+        <CardDescription>
+          Customers’ voice notes from Facebook, Instagram and WhatsApp are always saved in the inbox
+          so your team can play them.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <SwitchRow checked={checked} onChange={onChange} title="Turn voice notes into text">
+          The text shows under each voice note, and the agent answers it like a typed message.
+          Speech-to-text can mishear names, numbers and addresses, so the agent confirms them before
+          placing an order. Recordings longer than {formatClock(voiceNotes.maxSeconds * 1000)} stay
+          audio only.
+        </SwitchRow>
+        {voiceNotes.available && price ? (
+          <p className="text-sm text-muted-foreground">
+            Costs {formatCredits(price.credits)} per minute of recording (about{' '}
+            {formatMoney(price.amountMinor, price.currency)}), counted by the second, from your AI
+            credit balance.
+          </p>
+        ) : (
+          <Alert tone="info" title="Voice-to-text is not set up on this Sellora server yet">
+            Voice notes are still saved and playable. The platform team turns this on.
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -651,6 +693,12 @@ function AgentEditor({ view: initial }: { view: AiAgentView }) {
                   </SwitchRow>
                 </CardContent>
               </Card>
+
+              <VoiceNotesCard
+                voiceNotes={view.status.voiceNotes}
+                checked={draft.transcribeVoiceNotes}
+                onChange={(v) => set('transcribeVoiceNotes', v)}
+              />
 
               <Card>
                 <CardHeader>
