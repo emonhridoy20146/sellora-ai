@@ -2,17 +2,18 @@
 
 import { Check, Minus, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MAX_QUANTITY, useCart } from '@/lib/cart';
 import { cn } from '@/lib/cn';
 import { formatNumber } from '@/lib/money';
+import { reportStep } from '@/lib/shop-steps';
 import type { ProductDetail } from '@/lib/types';
 import { Price } from './price';
 import { useShop } from './shop-context';
 
 /** Option picker, quantity and the buttons that put the product in the cart. */
 export function AddToCart({ product }: { product: ProductDetail }) {
-  const { storeId, language, currency, t } = useShop();
+  const { storeId, language, currency, state, t } = useShop();
   const cart = useCart(storeId);
   const router = useRouter();
   const firstAvailable = product.variants.find((v) => v.available) ?? product.variants[0]!;
@@ -27,8 +28,14 @@ export function AddToCart({ product }: { product: ProductDetail }) {
   const max = variant?.left ?? MAX_QUANTITY;
   const canBuy = Boolean(variant?.available);
 
+  // The store's numbers: shoppers who looked at this product (once a day, counted by the API).
+  useEffect(() => {
+    if (state === 'open') reportStep('product_view', { productId: product.id });
+  }, [state, product.id]);
+
   const put = () => {
     if (!variant || !canBuy) return false;
+    if (state === 'open') reportStep('cart_add');
     cart.add({
       productId: product.id,
       variantId: variant.id,

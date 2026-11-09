@@ -2,25 +2,8 @@
 
 import { useEffect } from 'react';
 import { attributionKey, readAttribution } from '@/lib/landing-offer';
+import { visitorId } from '@/lib/shop-steps';
 import { save } from '@/lib/shopper';
-
-const VISITOR_KEY = 'sl_vid';
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
-
-/** A random id this browser keeps, so a visitor is counted once a day however often they look. */
-function visitorId(): string | undefined {
-  try {
-    const kept = localStorage.getItem(VISITOR_KEY);
-    if (kept && /^[A-Za-z0-9_-]{8,64}$/.test(kept)) return kept;
-    const bytes = crypto.getRandomValues(new Uint8Array(22));
-    const id = Array.from(bytes, (b) => ALPHABET[b % 64]).join('');
-    localStorage.setItem(VISITOR_KEY, id);
-    return id;
-  } catch {
-    // No storage: the shopper's address stands in on the server.
-    return undefined;
-  }
-}
 
 /**
  * When the page opens: remembers where the shopper came from (the ad's UTM tags and click

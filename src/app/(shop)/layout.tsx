@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
+import { ShopBeacon } from '@/components/shop-beacon';
 import { HoldingPage, NoShopPage } from '@/components/holding-page';
 import { ShopProvider } from '@/components/shop-context';
 import { headers } from 'next/headers';
@@ -89,6 +90,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 {store.theme.announcement}
               </div>
             ) : null}
+            <ShopBeacon />
             <Header store={store} />
             <main id="main" className="min-h-[60vh]">
               {children}
