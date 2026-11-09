@@ -105,3 +105,30 @@ export function maxChargeFor(
     outputTokens: maxOutputTokens,
   });
 }
+
+/**
+ * Credits for turning a voice note into text (ADR 0025): the rate's per-minute price,
+ * charged by the millisecond and rounded up to the next hundredth of a credit, with the
+ * per-request minimum applied. Throws when the rate has no voice note price.
+ */
+export function creditsForAudio(rate: CreditRate, audioMs: number): CreditCharge {
+  if (rate.transcriptionCreditsPerMinute === undefined)
+    throw new Error(`Credit rate v${rate.version} has no voice note price`);
+  const ms = BigInt(Math.max(0, Math.ceil(audioMs)));
+  // ms × (centi-credits per minute) / 60,000 = centi-credits
+  let centiCredits = ceilDiv(ms * BigInt(centi(rate.transcriptionCreditsPerMinute)), 60_000n);
+  const minimum = BigInt(centi(rate.minimumCreditsPerRequest));
+  if (centiCredits < minimum) centiCredits = minimum;
+  const billed = ceilDiv(centiCredits * BigInt(rate.creditPriceMinor), 100n);
+  return {
+    credits: Number(centiCredits) / 100,
+    centiCredits: Number(centiCredits),
+    billedMinor: Number(billed),
+  };
+}
+
+/** What the speech-to-text provider charges for `audioMs` of audio, in micro-USD (rounded up). */
+export function providerAudioCostUsdMicros(model: AiModel, audioMs: number): number {
+  const perMinute = BigInt(model.audioUsdMicrosPerMinute ?? 0);
+  return Number(ceilDiv(BigInt(Math.max(0, Math.ceil(audioMs))) * perMinute, 60_000n));
+}

@@ -1,6 +1,6 @@
 import type { WithId } from '../../infra/database/schema-helpers.js';
 import { replyWindowEndsAt } from './reply-window.js';
-import type { Contact, Conversation, Message } from './schemas.js';
+import { attachmentKind, type Contact, type Conversation, type Message } from './schemas.js';
 
 export type ContactDoc = WithId<Contact>;
 export type ConversationDoc = WithId<Conversation>;
@@ -67,9 +67,9 @@ export function toConversationDto(
 export type ConversationDto = ReturnType<typeof toConversationDto>;
 
 /**
- * Where staff load an attachment from. Saved photos are private and served by the inbox
- * (relative to the API, like every route); a photo still being saved, or one that could
- * not be, has no address yet.
+ * Where staff load an attachment from. Saved photos and voice notes are private and
+ * served by the inbox (relative to the API, like every route); one still being saved, or
+ * one that could not be, has no address yet.
  */
 export function attachmentUrl(m: MessageDoc, index: number): string | null {
   const a = m.attachments[index]!;
@@ -88,12 +88,22 @@ export function toMessageDto(m: MessageDoc) {
     sender: { type: m.sender.type, id: m.sender.id ?? null, name: m.sender.name ?? null },
     text: m.text,
     attachments: m.attachments.map((a, i) => ({
+      kind: attachmentKind(a),
       url: attachmentUrl(m, i),
       contentType: a.contentType ?? null,
       name: a.name ?? null,
       size: a.size ?? null,
       status: a.status ?? ('ready' as const),
       error: a.status === 'failed' ? (a.error ?? 'Could not be saved') : null,
+      durationMs: a.durationMs ?? null,
+      transcript: a.transcript
+        ? {
+            status: a.transcript.status,
+            text: a.transcript.status === 'done' ? (a.transcript.text ?? '') : null,
+            error: a.transcript.error ?? null,
+            credits: a.transcript.credits ?? null,
+          }
+        : null,
     })),
     clientId: m.clientId ?? null,
     delivery: { status: m.delivery.status, error: m.delivery.error ?? null },
@@ -105,7 +115,7 @@ export function toMessageDto(m: MessageDoc) {
 export type MessageDto = ReturnType<typeof toMessageDto>;
 
 /** Message types a customer can see. Notes and system lines are staff-only. */
-export const CUSTOMER_VISIBLE_TYPES = ['text', 'image', 'file'] as const;
+export const CUSTOMER_VISIBLE_TYPES = ['text', 'image', 'audio', 'file'] as const;
 
 /** What a website visitor sees: no staff ids, no internal fields, no AI cost. */
 export function toVisitorMessageDto(m: MessageDoc, businessName: string) {
@@ -135,5 +145,11 @@ export type VisitorMessageDto = ReturnType<typeof toVisitorMessageDto>;
 export function preview(text: string, type: string): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   if (flat) return flat.length > 140 ? `${flat.slice(0, 139)}…` : flat;
-  return type === 'image' ? 'Photo' : type === 'file' ? 'File' : '';
+  return type === 'image'
+    ? 'Photo'
+    : type === 'audio'
+      ? 'Voice note'
+      : type === 'file'
+        ? 'File'
+        : '';
 }

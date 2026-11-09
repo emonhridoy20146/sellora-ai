@@ -4,10 +4,20 @@ import { Types, type Model } from 'mongoose';
 import { RequestContext } from '../../common/context/request-context.js';
 import { AppError, type FieldError } from '../../common/errors/app-error.js';
 import { isDuplicateKey } from '../../common/filters/problem-details.filter.js';
+import type { ByteRange } from '../../common/http/byte-range.js';
 import { AppConfig } from '../../config/app-config.js';
 import { CROSS_TENANT } from '../../infra/database/tenant-guard.plugin.js';
 import type { WithId } from '../../infra/database/schema-helpers.js';
-import { IMAGE_TYPES, SNIFF_BYTES, sniffImageType } from '../../infra/storage/content-types.js';
+import {
+  AUDIO_TYPES,
+  IMAGE_TYPES,
+  MEDIA_EXTENSIONS,
+  MEDIA_TYPES,
+  SNIFF_BYTES,
+  sniffAudioType,
+  sniffImageType,
+  type MediaType,
+} from '../../infra/storage/content-types.js';
 import { StorageDriver, type UploadTarget } from '../../infra/storage/storage.driver.js';
 import type { FeatureModule } from '../billing/feature-modules.js';
 import { EntitlementsService } from '../billing/entitlements.service.js';
@@ -51,10 +61,11 @@ export const FILE_RULES: Record<FilePurpose, PurposeRule> = {
     permission: 'catalog.manage',
     removeWhenUnused: true,
   },
-  // Photos customers send in chats. Private: served only to signed-in staff through the
-  // inbox, never from the public storage route or a public bucket. Kept with the message.
+  // Photos and voice notes customers send in chats. Private: served only to signed-in staff
+  // through the inbox, never from the public storage route or a public bucket. Kept with
+  // the message.
   chat_media: {
-    types: Object.keys(IMAGE_TYPES),
+    types: [...Object.keys(IMAGE_TYPES), ...Object.keys(AUDIO_TYPES)],
     maxBytes: (config) => config.get('CHAT_MEDIA_MAX_MB') * MB,
     visibility: 'private',
     dir: 'chat',
@@ -75,7 +86,14 @@ export const FILE_RULES: Record<FilePurpose, PurposeRule> = {
 };
 
 /** Keys look like o/<orgId>/<dir>/<fileId>.<ext>; the storage route accepts nothing else. */
-export const FILE_KEY = /^o\/([a-f0-9]{24})\/[a-z_-]+\/[a-f0-9]{24}\.(jpg|png|webp|gif|avif)$/;
+export const FILE_KEY = new RegExp(
+  `^o/([a-f0-9]{24})/[a-z_-]+/[a-f0-9]{24}\\.(${MEDIA_EXTENSIONS.join('|')})$`,
+);
+
+/** What the bytes are: an image first, then a recording, or null for anything else. */
+function sniffMediaType(head: Buffer): MediaType | null {
+  return sniffImageType(head) ?? sniffAudioType(head);
+}
 
 export function toFileDto(f: FileDoc, storage: StorageDriver) {
   return {
@@ -270,9 +288,10 @@ export class FilesService {
   }
 
   /**
-   * Saves bytes the server received itself (a photo a customer sent on WhatsApp, for
-   * example). The real type is read from the bytes, the plan's storage limit applies (402
-   * when full), and the file is ready and marked as used by `usedBy` when this returns.
+   * Saves bytes the server received itself (a photo or voice note a customer sent on
+   * WhatsApp, for example). The real type is read from the bytes, the plan's storage limit
+   * applies (402 when full), and the file is ready and marked as used by `usedBy` when this
+   * returns.
    */
   async saveBytes(input: {
     purpose: FilePurpose;
@@ -281,9 +300,14 @@ export class FilesService {
     usedBy?: FileRef;
   }): Promise<FileDoc> {
     const rule = FILE_RULES[input.purpose];
-    const contentType = sniffImageType(input.bytes.subarray(0, SNIFF_BYTES));
+    const contentType = sniffMediaType(input.bytes.subarray(0, SNIFF_BYTES));
     if (!contentType || !rule.types.includes(contentType))
-      throw AppError.unprocessable('unsupported_file_type', 'The file is not a supported image.');
+      throw AppError.unprocessable(
+        'unsupported_file_type',
+        rule.types.some((t) => t.startsWith('audio/'))
+          ? 'The file is not a supported photo or recording.'
+          : 'The file is not a supported image.',
+      );
     const max = rule.maxBytes(this.config);
     if (input.bytes.length > max)
       throw AppError.unprocessable(
@@ -294,7 +318,7 @@ export class FilesService {
     const size = input.bytes.length;
     await this.reserve(size);
     const id = new Types.ObjectId();
-    const key = `o/${this.orgId()}/${rule.dir}/${id.toHexString()}.${IMAGE_TYPES[contentType]}`;
+    const key = `o/${this.orgId()}/${rule.dir}/${id.toHexString()}.${MEDIA_TYPES[contentType]}`;
     const actor = RequestContext.actor();
     let file: FileDoc;
     try {
@@ -348,10 +372,10 @@ export class FilesService {
     return Buffer.concat(chunks);
   }
 
-  /** Streams a ready file for an authorised route, or null when it is missing. */
-  async open(file: FileDoc) {
+  /** Streams a ready file (or `range` of it) for an authorised route; null when missing. */
+  async open(file: FileDoc, range?: ByteRange) {
     if (file.status !== 'ready') return null;
-    return this.storage.open(file.key);
+    return this.storage.open(file.key, range);
   }
 
   publicUrl(file: FileDoc): string {

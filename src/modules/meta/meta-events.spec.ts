@@ -176,6 +176,33 @@ describe('parseMetaWebhook', () => {
     });
   });
 
+  it('reads a Messenger voice clip as audio', () => {
+    const [m] = parseMetaWebhook(
+      page([
+        {
+          sender: { id: PSID },
+          recipient: { id: PAGE },
+          timestamp: 1_761_600_000_123,
+          message: {
+            mid: 'm_voice',
+            attachments: [
+              {
+                type: 'audio',
+                payload: { url: 'https://cdn.fbsbx.com/v/t59.3654-21/clip.mp4?oh=1' },
+              },
+            ],
+          },
+        },
+      ]),
+    );
+    expect(m).toMatchObject({
+      kind: 'message',
+      type: 'audio',
+      text: '',
+      attachments: [{ kind: 'audio', url: 'https://cdn.fbsbx.com/v/t59.3654-21/clip.mp4?oh=1' }],
+    });
+  });
+
   describe('WhatsApp', () => {
     const wa = (value: Record<string, unknown>) => ({
       object: 'whatsapp_business_account',
@@ -310,6 +337,48 @@ describe('parseMetaWebhook', () => {
             { changes: [{ field: 'messages', value: { messages: [{ id: 'x', from: '1' }] } }] },
           ],
         }),
+      ).toEqual([]);
+    });
+
+    it('reads a voice note as audio with its media id, and skips audio with no media', () => {
+      const [m] = parseMetaWebhook(
+        wa({
+          contacts: [{ profile: { name: 'Karim' }, wa_id: '8801711000000' }],
+          messages: [
+            {
+              from: '8801711000000',
+              id: 'wamid.VOICE1',
+              timestamp: '1761600000',
+              type: 'audio',
+              audio: {
+                id: 'MEDIA_VOICE_1',
+                mime_type: 'audio/ogg; codecs=opus',
+                sha256: 'abc',
+                voice: true,
+              },
+            },
+            {
+              from: '8801711000000',
+              id: 'wamid.VOICE2',
+              timestamp: '1761600001',
+              type: 'audio',
+              audio: { mime_type: 'audio/ogg' },
+            },
+          ],
+        }),
+      );
+      expect(m).toMatchObject({
+        kind: 'message',
+        type: 'audio',
+        text: '',
+        attachments: [
+          { kind: 'audio', mediaId: 'MEDIA_VOICE_1', contentType: 'audio/ogg; codecs=opus' },
+        ],
+      });
+      expect(
+        parseMetaWebhook(
+          wa({ messages: [{ from: '1', id: 'x', timestamp: '1', type: 'audio', audio: {} }] }),
+        ),
       ).toEqual([]);
     });
   });

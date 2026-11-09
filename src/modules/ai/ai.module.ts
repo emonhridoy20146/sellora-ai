@@ -17,6 +17,9 @@ import { AiReplyQueue } from './agent/reply-queue.js';
 import { AI_FETCH, AI_PROVIDERS, type AiProvider } from './provider/ai-provider.js';
 import { AiProviders } from './provider/ai-providers.service.js';
 import { AnthropicProvider } from './provider/anthropic.provider.js';
+import { OpenAiTranscriber } from './transcription/openai-transcriber.js';
+import { TRANSCRIBERS, type Transcriber } from './transcription/transcriber.js';
+import { VoiceNotesService } from './voice-notes/voice-notes.service.js';
 
 /**
  * The AI sales agent without HTTP routes: providers, settings, tools and the reply engine.
@@ -41,6 +44,13 @@ import { AnthropicProvider } from './provider/anthropic.provider.js';
       useFactory: (anthropic: AnthropicProvider): AiProvider[] => [anthropic],
     },
     AiProviders,
+    OpenAiTranscriber,
+    {
+      provide: TRANSCRIBERS,
+      inject: [OpenAiTranscriber],
+      useFactory: (openai: OpenAiTranscriber): Transcriber[] => [openai],
+    },
+    VoiceNotesService,
     AiAgentSettingsRepository,
     AiAgentSettingsService,
     AgentTools,
@@ -48,7 +58,7 @@ import { AnthropicProvider } from './provider/anthropic.provider.js';
     AiReplyQueue,
     AiRepliesService,
   ],
-  exports: [AiAgentSettingsService, AiRepliesService, AiProviders],
+  exports: [AiAgentSettingsService, AiRepliesService, AiProviders, VoiceNotesService],
 })
 export class AiCoreModule {}
 

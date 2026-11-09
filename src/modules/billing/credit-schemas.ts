@@ -22,6 +22,12 @@ export interface CreditRate {
   creditPriceMinor: number;
   tiers: TierRate[];
   minimumCreditsPerRequest: number;
+  /**
+   * Credits per minute of a customer's voice note turned into text (ADR 0025), charged by
+   * the second. Unset on price lists published before voice notes: they are not turned
+   * into text until a version with a price is published.
+   */
+  transcriptionCreditsPerMinute?: number;
   /** Platform-only: local currency per USD, scaled by 10,000 (122.5 = 1,225,000). */
   usdRateScaled: number;
   effectiveFrom: Date;
@@ -48,6 +54,7 @@ export const creditRateSchema = platformSchema<CreditRate>(
       required: true,
     },
     minimumCreditsPerRequest: { type: Number, default: 1, min: 0 },
+    transcriptionCreditsPerMinute: { type: Number, min: 0 },
     usdRateScaled: { type: Number, required: true, min: 1 },
     effectiveFrom: { type: Date, required: true },
     createdBy: { type: String, required: true },
@@ -58,13 +65,24 @@ export const creditRateSchema = platformSchema<CreditRate>(
 creditRateSchema.index({ currency: 1, version: -1 }, { unique: true });
 
 /**
+ * What a catalogue model is for: `chat` models answer customers (by tier); a
+ * `transcription` model turns voice notes into text (ADR 0025).
+ */
+export const MODEL_PURPOSES = ['chat', 'transcription'] as const;
+export type ModelPurpose = (typeof MODEL_PURPOSES)[number];
+
+/**
  * AI models the platform may route to, with their real provider prices. Model names live
- * here (data), never in business logic. Prices are in micro-USD per million tokens.
+ * here (data), never in business logic. Prices are in micro-USD per million tokens, and
+ * for speech-to-text per minute of audio.
  */
 export interface AiModel {
   provider: 'anthropic' | 'openai' | 'google' | 'other';
   model: string;
   label: string;
+  /** Absent on models saved before voice notes: chat. */
+  purpose?: ModelPurpose;
+  /** Chat models are chosen by tier; speech-to-text models ignore it. */
   tier: ModelTier;
   inputUsdMicrosPerMTok: number;
   outputUsdMicrosPerMTok: number;
@@ -80,7 +98,10 @@ export interface AiModel {
   contextWindow: number;
   /** The model can look at photos (customers' product photos in chats). */
   imageInput: boolean;
+  /** Speech-to-text models: what the provider charges per minute of audio. */
+  audioUsdMicrosPerMinute?: number;
   enabled: boolean;
+  /** Chat: the tier's default model. Speech-to-text: the one voice notes use. */
   isDefaultForTier: boolean;
 }
 
@@ -89,6 +110,7 @@ export const aiModelSchema = platformSchema<AiModel>(
     provider: { type: String, enum: ['anthropic', 'openai', 'google', 'other'], required: true },
     model: { type: String, required: true },
     label: { type: String, required: true },
+    purpose: { type: String, enum: MODEL_PURPOSES, default: 'chat' },
     tier: { type: String, enum: MODEL_TIERS, required: true },
     inputUsdMicrosPerMTok: { type: Number, required: true, min: 0 },
     outputUsdMicrosPerMTok: { type: Number, required: true, min: 0 },
@@ -107,6 +129,7 @@ export const aiModelSchema = platformSchema<AiModel>(
     },
     contextWindow: { type: Number, default: 200_000 },
     imageInput: { type: Boolean, default: false },
+    audioUsdMicrosPerMinute: { type: Number, min: 0 },
     enabled: { type: Boolean, default: true },
     isDefaultForTier: { type: Boolean, default: false },
   },
@@ -121,7 +144,8 @@ export interface AiUsage {
   orgId: Types.ObjectId;
   requestId: string;
   feature: string;
-  tier: ModelTier;
+  /** Chat calls only; speech-to-text is priced by the minute, not by tier. */
+  tier?: ModelTier;
   status: UsageStatus;
   currency: string;
   reservedMinor: number;
@@ -131,6 +155,8 @@ export interface AiUsage {
   outputTokens: number;
   cachedInputTokens: number;
   cacheWriteInputTokens: number;
+  /** Speech-to-text: length of the audio, in milliseconds. */
+  audioMs?: number;
   credits: number;
   billedMinor: number;
   costUsdMicros: number;
@@ -146,7 +172,7 @@ export const aiUsageSchema = tenantSchema<AiUsage>(
   {
     requestId: { type: String, required: true },
     feature: { type: String, required: true },
-    tier: { type: String, enum: MODEL_TIERS, required: true },
+    tier: { type: String, enum: MODEL_TIERS },
     status: { type: String, enum: ['reserved', 'settled', 'released'], required: true },
     currency: { type: String, required: true },
     reservedMinor: { type: Number, required: true, min: 0 },
@@ -156,6 +182,7 @@ export const aiUsageSchema = tenantSchema<AiUsage>(
     outputTokens: { type: Number, default: 0 },
     cachedInputTokens: { type: Number, default: 0 },
     cacheWriteInputTokens: { type: Number, default: 0 },
+    audioMs: { type: Number, min: 0 },
     credits: { type: Number, default: 0 },
     billedMinor: { type: Number, default: 0 },
     costUsdMicros: { type: Number, default: 0 },

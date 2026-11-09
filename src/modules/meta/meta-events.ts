@@ -1,11 +1,11 @@
 import type { MetaChannelType } from './meta.types.js';
 
 /**
- * A photo or file on an incoming message. Messenger and Instagram send a link to Meta's CDN
- * (it expires); WhatsApp sends a media id that needs an authorised download.
+ * A photo, voice note or file on an incoming message. Messenger and Instagram send a link
+ * to Meta's CDN (it expires); WhatsApp sends a media id that needs an authorised download.
  */
 export interface MetaAttachment {
-  kind: 'image' | 'file';
+  kind: 'image' | 'audio' | 'file';
   url?: string;
   mediaId?: string;
   contentType?: string;
@@ -23,7 +23,7 @@ export type MetaEvent =
       senderId: string;
       messageId: string;
       at: Date;
-      type: 'text' | 'image' | 'file';
+      type: 'text' | 'image' | 'audio' | 'file';
       text: string;
       attachments: MetaAttachment[];
       /** WhatsApp sends the customer's profile name with each message. */
@@ -108,7 +108,7 @@ function parseMessaging(
     // Reactions, unsends and deleted messages are not new messages.
     if (msg.is_deleted === true || msg.is_unsupported === true) return [];
     const attachments: MetaAttachment[] = [];
-    let type: 'text' | 'image' | 'file' = 'text';
+    let type: 'text' | 'image' | 'audio' | 'file' = 'text';
     for (const a of arr(msg.attachments)) {
       if (!isObj(a)) continue;
       const kind = str(a.type);
@@ -117,6 +117,10 @@ function parseMessaging(
       if (kind === 'image') {
         if (type === 'text') type = 'image';
         attachments.push({ kind: 'image', url });
+      } else if (kind === 'audio') {
+        // Voice clips recorded in Messenger or Instagram (ADR 0025).
+        if (type === 'text' || type === 'image') type = 'audio';
+        attachments.push({ kind: 'audio', url });
       } else {
         type = 'file';
         attachments.push({ kind: 'file', url, ...(kind ? { name: kind } : {}) });
@@ -209,7 +213,7 @@ function parseWhatsApp(value: Json): MetaEvent[] {
     if (!from || !id) continue;
     const kind = str(m.type) ?? '';
     let text: string;
-    let type: 'text' | 'image' | 'file' = 'text';
+    let type: 'text' | 'image' | 'audio' | 'file' = 'text';
     const attachments: MetaAttachment[] = [];
     switch (kind) {
       case 'text':
@@ -243,8 +247,21 @@ function parseWhatsApp(value: Json): MetaEvent[] {
           });
         break;
       }
+      case 'audio': {
+        // Voice notes (and shared audio files); fetched later like photos (ADR 0025).
+        type = 'audio';
+        const media = isObj(m.audio) ? m.audio : {};
+        text = '';
+        const mediaId = str(media.id);
+        if (mediaId)
+          attachments.push({
+            kind: 'audio',
+            mediaId,
+            ...(str(media.mime_type) ? { contentType: str(media.mime_type)! } : {}),
+          });
+        break;
+      }
       case 'document':
-      case 'audio':
       case 'video': {
         type = 'file';
         const media = isObj(m[kind]) ? m[kind] : {};
@@ -270,6 +287,7 @@ function parseWhatsApp(value: Json): MetaEvent[] {
         continue;
     }
     if (!text && type === 'text') continue;
+    if (type === 'audio' && !attachments.length) continue;
     events.push({
       kind: 'message',
       channelType: 'whatsapp',

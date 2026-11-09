@@ -6,14 +6,17 @@ import { Types } from 'mongoose';
 import { RequestContext, type Actor } from '../../common/context/request-context.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { AppConfig } from '../../config/app-config.js';
+import { audioLengthMs } from '../../common/media/audio-length.js';
 import { QUEUES } from '../../infra/queue/queue.constants.js';
 import { FilesService } from '../files/files.service.js';
 import { ChannelsService, type ChannelDoc } from '../inbox/channels.service.js';
 import { MessagingService } from '../inbox/messaging.service.js';
 import { MessageRepository } from '../inbox/repositories.js';
+import { attachmentKind, type AttachmentKind } from '../inbox/schemas.js';
+import { VoiceNoteQueue } from '../inbox/voice-note-queue.js';
 import { MetaGraph, MetaGraphError, MetaMediaError } from './meta-graph.js';
 
-/** Save the customer's photos on one message. */
+/** Save the customer's photos and voice notes on one message. */
 export interface MediaJob {
   orgId: string;
   messageId: string;
@@ -60,10 +63,11 @@ interface WhatsAppMediaInfo {
 }
 
 /**
- * Copies customers' photos from Meta into the business's own storage. Meta's CDN links
- * expire and WhatsApp media needs the channel's token, so the inbox and the AI agent only
- * ever use the saved copy. Each attachment ends `ready` or `failed` with a reason staff can
- * understand; retrying stops as soon as it cannot help.
+ * Copies customers' photos and voice notes from Meta into the business's own storage.
+ * Meta's CDN links expire and WhatsApp media needs the channel's token, so the inbox and
+ * the AI agent only ever use the saved copy. Each attachment ends `ready` or `failed` with
+ * a reason staff can understand; retrying stops as soon as it cannot help. A saved voice
+ * note is measured and queued to be turned into text (ADR 0025).
  */
 @Injectable()
 export class MetaMedia {
@@ -76,6 +80,7 @@ export class MetaMedia {
     private readonly messages: MessageRepository,
     private readonly files: FilesService,
     private readonly config: AppConfig,
+    private readonly voiceNotes: VoiceNoteQueue,
   ) {}
 
   private maxBytes(): number {
@@ -104,30 +109,36 @@ export class MetaMedia {
     let failed = 0;
     let retry: Error | null = null;
     for (const { a, index } of pending) {
+      const kind = attachmentKind(a);
       try {
         const bytes = await this.download(channel, a.source!);
         const file = await this.files.saveBytes({
           purpose: 'chat_media',
           bytes,
-          filename: `photo-${message._id.toHexString()}-${index + 1}`,
+          filename: `${kind === 'audio' ? 'voice' : 'photo'}-${message._id.toHexString()}-${index + 1}`,
           usedBy: { type: 'message', id: message._id.toHexString() },
         });
-        await this.messaging.settleAttachment(message._id, index, {
+        const voice = kind === 'audio' && file.contentType.startsWith('audio/');
+        const durationMs = voice ? await audioLengthMs(bytes, file.contentType) : null;
+        const settled = await this.messaging.settleAttachment(message._id, index, {
           status: 'ready',
           fileId: file._id,
           contentType: file.contentType,
           size: file.size,
+          ...(durationMs !== null ? { durationMs } : {}),
+          ...(voice ? { transcribe: true } : {}),
         });
+        if (voice && settled) await this.queueTranscript(job.orgId, message._id, index);
         saved += 1;
       } catch (err) {
-        const reason = this.permanentReason(err);
+        const reason = this.permanentReason(err, kind);
         if (reason === null && !opts.finalAttempt) {
           retry = err instanceof Error ? err : new Error(String(err));
           continue;
         }
         this.logger.warn(
-          { err, messageId: job.messageId, index },
-          'A customer photo could not be saved',
+          { err, messageId: job.messageId, index, kind },
+          'A customer photo or voice note could not be saved',
         );
         await this.messaging.settleAttachment(message._id, index, {
           status: 'failed',
@@ -136,9 +147,22 @@ export class MetaMedia {
         failed += 1;
       }
     }
-    // Saved photos stay saved; the queue retries the rest.
+    // Saved files stay saved; the queue retries the rest.
     if (retry) throw retry;
     return { status: 'done', saved, failed };
+  }
+
+  /** Never leaves a voice note waiting for a transcription that was not queued. */
+  private async queueTranscript(orgId: string, messageId: Types.ObjectId, index: number) {
+    try {
+      await this.voiceNotes.enqueue({ orgId, messageId: messageId.toHexString(), index }, 'auto');
+    } catch (err) {
+      this.logger.warn({ err, messageId, index }, 'Could not queue a voice note for transcription');
+      await this.messaging.finishTranscript(messageId, index, {
+        status: 'failed',
+        error: 'Could not start turning this into text. Try again.',
+      });
+    }
   }
 
   private async download(channel: ChannelDoc | null, source: string): Promise<Buffer> {
@@ -163,14 +187,15 @@ export class MetaMedia {
   }
 
   /** What to tell staff when trying again cannot help, or null when it might. */
-  private permanentReason(err: unknown): string | null {
+  private permanentReason(err: unknown, kind: AttachmentKind): string | null {
     const mb = this.config.get('CHAT_MEDIA_MAX_MB');
+    const what = kind === 'audio' ? 'voice note' : 'photo';
     if (err instanceof MetaMediaError)
       switch (err.reason) {
         case 'too_large':
           return `Not saved: larger than ${mb} MB.`;
         case 'unavailable':
-          return 'Not saved: Meta no longer has this photo.';
+          return `Not saved: Meta no longer has this ${what}.`;
         case 'host_not_allowed':
           return 'Not saved: the link did not come from Meta.';
       }
@@ -178,14 +203,16 @@ export class MetaMedia {
       if (err.kind === 'auth') return 'Not saved: Meta refused access. Reconnect the channel.';
       // Unknown or expired media ids answer with a parameter error.
       if (err.kind === 'bad_request' || err.kind === 'not_configured')
-        return 'Not saved: Meta no longer has this photo.';
+        return `Not saved: Meta no longer has this ${what}.`;
       return null;
     }
     if (err instanceof AppError) {
       if (err.code === 'plan_limit_reached') return 'Not saved: the plan’s storage is full.';
       if (err.code === 'file_too_large') return `Not saved: larger than ${mb} MB.`;
       if (err.code === 'unsupported_file_type')
-        return 'Not saved: not a photo type Sellora can show.';
+        return kind === 'audio'
+          ? 'Not saved: not a recording type Sellora can play.'
+          : 'Not saved: not a photo type Sellora can show.';
     }
     return null;
   }

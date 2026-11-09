@@ -206,7 +206,7 @@ conversationSchema.index({ orgId: 1, status: 1, lastMessageAt: -1 });
 conversationSchema.index({ orgId: 1, assigneeId: 1, lastMessageAt: -1 });
 conversationSchema.index({ orgId: 1, channelId: 1, lastMessageAt: -1 });
 
-export const MESSAGE_TYPES = ['text', 'image', 'file', 'note', 'system'] as const;
+export const MESSAGE_TYPES = ['text', 'image', 'audio', 'file', 'note', 'system'] as const;
 export type MessageType = (typeof MESSAGE_TYPES)[number];
 
 export const SENDER_TYPES = ['contact', 'user', 'ai', 'system'] as const;
@@ -218,13 +218,40 @@ export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 export const ATTACHMENT_STATUSES = ['pending', 'ready', 'failed'] as const;
 export type AttachmentStatus = (typeof ATTACHMENT_STATUSES)[number];
 
+export const ATTACHMENT_KINDS = ['image', 'audio', 'file'] as const;
+export type AttachmentKind = (typeof ATTACHMENT_KINDS)[number];
+
 /**
- * A photo or file on a message. Customers' photos from Messenger, Instagram and WhatsApp
- * arrive `pending` with where to fetch them (`source`, never shown to anyone), and are
- * `ready` once saved to the business's storage (`fileId`), or `failed`. Older attachments
- * and links have only `url`.
+ * A voice note turned into text (ADR 0025). `pending` while it is being transcribed;
+ * `done` (the text may be empty when nobody spoke); `failed` when the service could not;
+ * `skipped` when it was not tried (plan, settings, no credits, too long), with why.
+ */
+export const TRANSCRIPT_STATUSES = ['pending', 'done', 'failed', 'skipped'] as const;
+export type TranscriptStatus = (typeof TRANSCRIPT_STATUSES)[number];
+
+export interface Transcript {
+  status: TranscriptStatus;
+  text?: string;
+  /** The language the service heard, when it says (e.g. "bengali", "bn"). */
+  language?: string;
+  /** Why it was skipped or failed, for staff, in plain words. */
+  error?: string;
+  /** What it cost. */
+  credits?: number;
+  /** Runs so far; each run is metered under its own request id. */
+  tries: number;
+  at?: Date;
+}
+
+/**
+ * A photo, voice note or file on a message. Customers' photos and voice notes from
+ * Messenger, Instagram and WhatsApp arrive `pending` with where to fetch them (`source`,
+ * never shown to anyone), and are `ready` once saved to the business's storage (`fileId`),
+ * or `failed`. Older attachments and links have only `url`.
  */
 export interface MessageAttachment {
+  /** Absent on attachments stored before voice notes: inferred from `contentType`. */
+  kind?: AttachmentKind;
   url: string;
   contentType?: string;
   name?: string;
@@ -236,6 +263,18 @@ export interface MessageAttachment {
   source?: string;
   /** Why it could not be saved (for staff, in plain words). */
   error?: string;
+  /** Voice notes: the recording's length, when it could be read. */
+  durationMs?: number;
+  /** Voice notes: the words in it. */
+  transcript?: Transcript;
+}
+
+/** What an attachment is, for attachments saved before `kind` existed. */
+export function attachmentKind(a: Pick<MessageAttachment, 'kind' | 'contentType'>): AttachmentKind {
+  if (a.kind) return a.kind;
+  if (a.contentType?.startsWith('image/')) return 'image';
+  if (a.contentType?.startsWith('audio/')) return 'audio';
+  return 'file';
 }
 
 export interface Message {
@@ -270,6 +309,7 @@ export const messageSchema = tenantSchema<Message>({
     type: [
       new Schema(
         {
+          kind: { type: String, enum: ATTACHMENT_KINDS },
           url: { type: String, default: '' },
           contentType: String,
           name: String,
@@ -278,6 +318,19 @@ export const messageSchema = tenantSchema<Message>({
           status: { type: String, enum: ATTACHMENT_STATUSES },
           source: String,
           error: String,
+          durationMs: { type: Number, min: 0 },
+          transcript: new Schema(
+            {
+              status: { type: String, enum: TRANSCRIPT_STATUSES, required: true },
+              text: String,
+              language: String,
+              error: String,
+              credits: Number,
+              tries: { type: Number, default: 0, min: 0 },
+              at: Date,
+            },
+            { _id: false, strict: 'throw' },
+          ),
         },
         { _id: false, strict: 'throw' },
       ),

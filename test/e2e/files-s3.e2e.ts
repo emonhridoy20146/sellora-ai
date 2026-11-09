@@ -6,6 +6,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { StorageDriver } from '../../src/infra/storage/storage.driver.js';
 import { TestApp, type Session } from '../helpers/test-app.js';
 
 /**
@@ -143,6 +144,25 @@ describe.skipIf(!MINIO)('file storage (S3 driver, real MinIO)', () => {
       .expect(200);
     expect(Buffer.compare(served.body as Buffer, PNG)).toBe(0);
     expect(served.headers['content-type']).toBe('image/png');
+  });
+
+  it('streams part of an object, for media players that ask for byte ranges', async () => {
+    const key = `o/${orgId}/chat/${'a'.repeat(24)}.ogg`;
+    const driver = t.app.get(StorageDriver);
+    const bytes = Buffer.from(Array.from({ length: 300 }, (_, i) => i % 256));
+    await driver.put(key, bytes, 'audio/ogg');
+    const read = async (range?: { start: number; end: number }) => {
+      const obj = (await driver.open(key, range))!;
+      const chunks: Buffer[] = [];
+      for await (const c of obj.body as AsyncIterable<Buffer>) chunks.push(c);
+      return { size: obj.size, body: Buffer.concat(chunks) };
+    };
+    expect(await read()).toEqual({ size: 300, body: bytes });
+    expect(await read({ start: 250, end: 299 })).toEqual({
+      size: 300,
+      body: bytes.subarray(250),
+    });
+    await driver.delete(key);
   });
 
   it('the bucket refuses a body of another size or type than the signed one', async () => {

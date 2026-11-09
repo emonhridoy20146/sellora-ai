@@ -186,6 +186,12 @@ export function buildAgentPrompt(input: AgentPromptInput): string {
           'a photo]", so ask them to send it again if you need it.'
         : '- Customers may send photos you cannot see (shown as "[The customer sent a photo]"). ' +
           'Ask them to describe what they are looking for in words.',
+      '- Customers may send voice notes. You read them as "[The customer sent a voice note ' +
+        '(0:12). Speech-to-text heard: "..."]". Answer them like typed messages, in the ' +
+        'language they spoke. Speech-to-text can mishear names, numbers and addresses, so ' +
+        'repeat back a phone number, address or quantity heard in a voice note and ask the ' +
+        'customer to confirm it before placing an order. If a voice note could not be turned ' +
+        'into text, politely ask the customer to type their message.',
     ].join('\n'),
   );
 

@@ -28,6 +28,7 @@ export const agentSettingsPatch = z
     handoverMessage: z.string().trim().max(AI_LIMITS.handoverMessage),
     replyDelaySeconds: z.number().int().min(0).max(AI_LIMITS.replyDelaySeconds),
     maxRepliesPerDay: z.number().int().min(1).max(AI_LIMITS.maxRepliesPerDay),
+    transcribeVoiceNotes: z.boolean(),
   })
   .partial()
   .strict();

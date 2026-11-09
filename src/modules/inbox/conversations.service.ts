@@ -18,6 +18,7 @@ import {
   type ContactDoc,
   type ConversationDoc,
   type ConversationDto,
+  type MessageDto,
 } from './inbox.mappers.js';
 import {
   INBOX_AI_RESUMED,
@@ -25,7 +26,8 @@ import {
   type InboxAiResumedEvent,
 } from './messaging.service.js';
 import { ContactRepository, ConversationRepository, MessageRepository } from './repositories.js';
-import type { Conversation, ConversationAi } from './schemas.js';
+import { attachmentKind, type Conversation, type ConversationAi } from './schemas.js';
+import { VoiceNoteQueue } from './voice-note-queue.js';
 
 export interface ConversationListQuery {
   limit: number;
@@ -66,6 +68,7 @@ export class ConversationsService {
     private readonly members: MembersService,
     private readonly events: EventEmitter2,
     private readonly files: FilesService,
+    private readonly voiceNotes: VoiceNoteQueue,
   ) {}
 
   private can(permission: string): boolean {
@@ -193,6 +196,38 @@ export class ConversationsService {
     const fileId = message?.attachments[index]?.fileId;
     if (!fileId) throw AppError.notFound('attachment');
     return this.files.get(fileId.toHexString());
+  }
+
+  /**
+   * Tries again to turn a customer's voice note into text (ADR 0025): after a failure, or
+   * once the business turned the setting on or topped up its credits.
+   */
+  async retryTranscript(
+    id: string,
+    messageId: string,
+    index: number,
+  ): Promise<{ message: MessageDto }> {
+    const conv = await this.messaging.ensureUnlocked(await this.visible(id));
+    const message = await this.messages.findOne({
+      _id: new Types.ObjectId(messageId),
+      conversationId: conv._id,
+    });
+    const a = message?.attachments[index];
+    if (!message || !a || attachmentKind(a) !== 'audio') throw AppError.notFound('voice_note');
+    if (a.status !== 'ready')
+      throw AppError.conflict('voice_note_not_saved', 'This voice note was not saved.');
+    const queued = await this.messaging.requeueTranscript(message._id, index);
+    if (!queued)
+      throw AppError.conflict(
+        'transcript_not_retryable',
+        'This voice note is already turned into text, or on its way.',
+      );
+    const tries = queued.attachments[index]!.transcript?.tries ?? 0;
+    await this.voiceNotes.enqueue(
+      { orgId: RequestContext.tenant()!.orgId, messageId: message._id.toHexString(), index },
+      `r${tries}-${Date.now().toString(36)}`,
+    );
+    return { message: toMessageDto(queued) };
   }
 
   async markRead(id: string): Promise<ConversationDto> {

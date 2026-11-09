@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_AI_MODELS, DEFAULT_CREDIT_RATE } from './billing-defaults.js';
 import {
   creditsFor,
+  creditsForAudio,
   maxChargeFor,
+  providerAudioCostUsdMicros,
   providerCostUsdMicros,
   usdMicrosToMinor,
 } from './credit-math.js';
@@ -141,11 +143,56 @@ describe('AI credit maths', () => {
   });
 
   it('keeps a healthy margin on every default tier', () => {
-    for (const m of DEFAULT_AI_MODELS) {
+    for (const m of DEFAULT_AI_MODELS.filter((x) => x.purpose !== 'transcription')) {
       const usage = { inputTokens: 3_000, outputTokens: 400 };
       const billed = creditsFor(rate, m.tier, usage).billedMinor;
       const cost = usdMicrosToMinor(providerCostUsdMicros(m, usage), rate);
       expect(billed, m.model).toBeGreaterThan(cost * 1.5);
     }
+  });
+
+  describe('voice notes', () => {
+    it('charges the per-minute price by the millisecond, rounded up to a hundredth of a credit', () => {
+      // 15 credits a minute: 4.2 s = 1.05 credits = ৳0.105 → 11 paisa.
+      expect(creditsForAudio(rate, 4_200)).toEqual({
+        credits: 1.05,
+        centiCredits: 105,
+        billedMinor: 11,
+      });
+      // 61 s = 15.25 credits.
+      expect(creditsForAudio(rate, 61_000).credits).toBe(15.25);
+      // 1 ms more is a hundredth more, never less.
+      expect(creditsForAudio(rate, 61_001).credits).toBe(15.26);
+    });
+
+    it('applies the per-request minimum to short notes', () => {
+      expect(creditsForAudio(rate, 1_000).credits).toBe(rate.minimumCreditsPerRequest);
+      expect(creditsForAudio(rate, 0).credits).toBe(rate.minimumCreditsPerRequest);
+    });
+
+    it('refuses a price list without a voice note price', () => {
+      const old = { ...rate, transcriptionCreditsPerMinute: undefined };
+      expect(() => creditsForAudio(old, 10_000)).toThrow(/no voice note price/);
+    });
+
+    it('computes provider cost per minute of audio, rounding up', () => {
+      const stt = DEFAULT_AI_MODELS.find((m) => m.purpose === 'transcription')!;
+      expect(stt.audioUsdMicrosPerMinute).toBe(3_000);
+      expect(providerAudioCostUsdMicros(stt, 60_000)).toBe(3_000);
+      expect(providerAudioCostUsdMicros(stt, 4_200)).toBe(210);
+      expect(providerAudioCostUsdMicros(stt, 1)).toBe(1);
+      expect(
+        providerAudioCostUsdMicros({ ...stt, audioUsdMicrosPerMinute: undefined }, 60_000),
+      ).toBe(0);
+    });
+
+    it('keeps a healthy margin on the default speech-to-text model', () => {
+      const stt = DEFAULT_AI_MODELS.find((m) => m.purpose === 'transcription')!;
+      for (const ms of [5_000, 30_000, 120_000]) {
+        const billed = creditsForAudio(rate, ms).billedMinor;
+        const cost = usdMicrosToMinor(providerAudioCostUsdMicros(stt, ms), rate);
+        expect(billed, `${ms} ms`).toBeGreaterThan(cost * 1.5);
+      }
+    });
   });
 });

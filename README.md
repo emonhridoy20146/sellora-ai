@@ -55,6 +55,14 @@ Secrets never go in code or in git:
   Without it the agent hands every chat to people and the settings page says the AI service
   is unavailable. To demo locally without a key, run `node scripts/claude-stand-in.mjs` and
   set `AI_ANTHROPIC_BASE_URL=http://127.0.0.1:4010` with any key; its replies are scripted.
+- Voice notes (ADR 0025): customers' voice notes from Messenger, Instagram and WhatsApp are
+  saved privately and play in the inbox with no extra settings. Turning them into text needs
+  `AI_OPENAI_API_KEY` (API and worker), an enabled speech-to-text model in Admin › AI credits &
+  models (one is seeded) and a voice note price in the credit price list (seeded at 15 credits
+  a minute). Optional `VOICE_NOTE_MAX_SECONDS` (default 300). To demo locally without a key,
+  run `node scripts/speech-stand-in.mjs` and set
+  `AI_OPENAI_BASE_URL=http://127.0.0.1:4100/v1` with any key; it answers a scripted sentence
+  and never listens to the recording.
 - Messenger, Instagram and WhatsApp use one Meta app for the platform: `META_APP_ID`,
   `META_APP_SECRET` and `META_WEBHOOK_VERIFY_TOKEN` (set all three or none), plus optional
   `META_LOGIN_CONFIG_ID` (Facebook Login for Business) and `META_WHATSAPP_CONFIG_ID` (WhatsApp
@@ -66,7 +74,8 @@ Secrets never go in code or in git:
   `META_APP_SECRET=<same secret> node scripts/graph-stand-in.mjs` and set
   `META_GRAPH_BASE_URL=http://127.0.0.1:4020` for the API and the worker. It is not Meta: it
   knows two demo pages and one WhatsApp number, accepts any login code, and serves demo photos
-  (`/__photo/<name>.jpg`, and WhatsApp media ids starting `wa-media-`).
+  (`/__photo/<name>.jpg`, and WhatsApp media ids starting `wa-media-`) and voice clips
+  (`/__audio/<name>.mp4`, and WhatsApp media ids starting `wa-voice-`).
 - Customers' photos from Messenger, Instagram and WhatsApp are copied into file storage as
   private files (ADR 0012). `CHAT_MEDIA_MAX_MB` (default 16) is the largest one kept; they
   count against the plan's storage. On S3, make only `o/*/products/*` and `o/*/store/*`
@@ -191,6 +200,7 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
 | `node scripts/telegram-stand-in.mjs`                          | Stand-in for the Telegram Bot API with a page of chats you can type in, for trying owner reports, alerts and commands without a bot (not Telegram).                                                                               |
 | `node scripts/shop-stand-in.mjs`                              | Stand-in for Shopify's GraphQL Admin API, WooCommerce's REST API and a published sheet on :4090, with a page to change prices and stock, for trying catalog sync (not Shopify, WooCommerce or Google).                            |
 | `node scripts/site-stand-in.mjs`                              | A demo shop website on :4095 (robots.txt, sitemap, product pages with schema.org data, delivery and returns pages in Bangla and English), with calls to change prices, hide pages and set the verification tag (not a real shop). |
+| `node scripts/speech-stand-in.mjs`                            | Stand-in for an OpenAI-style speech-to-text API on :4100 for trying voice notes without a key; answers a scripted sentence (set the next with `/__say`) and never listens (not speech recognition).                               |
 
 ## Tests
 

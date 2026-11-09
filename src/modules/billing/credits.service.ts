@@ -13,10 +13,13 @@ import { AuditService } from '../audit/audit.service.js';
 import { DEFAULT_AI_MODELS, DEFAULT_CREDIT_RATE } from './billing-defaults.js';
 import {
   creditsFor,
+  creditsForAudio,
   maxChargeFor,
   promptTokens,
+  providerAudioCostUsdMicros,
   providerCostUsdMicros,
   usdMicrosToMinor,
+  type CreditCharge,
   type TokenUsage,
 } from './credit-math.js';
 import type { AiModel, AiUsage, CreditRate, ModelTier, TierRate } from './credit-schemas.js';
@@ -50,11 +53,27 @@ export interface SettleInput extends TokenUsage {
   model: string;
 }
 
+export interface ReserveAudioInput {
+  requestId: string;
+  feature: string;
+  /** Length of the recording; the hold is exactly what it will cost. */
+  audioMs: number;
+  reference?: { type: string; id: string };
+}
+
+export interface SettleAudioInput {
+  requestId: string;
+  provider: string;
+  model: string;
+  audioMs: number;
+}
+
 export interface PublishRateInput {
   currency: string;
   creditPriceMinor: number;
   tiers: TierRate[];
   minimumCreditsPerRequest: number;
+  transcriptionCreditsPerMinute?: number;
   usdRateScaled: number;
   effectiveFrom?: Date;
   note?: string;
@@ -62,13 +81,23 @@ export interface PublishRateInput {
 
 const RATE_CACHE_MS = 10_000;
 
+/**
+ * Which models share a "default" flag: chat models per tier, and speech-to-text models
+ * together (one is used for every voice note).
+ */
+function defaultScope(purpose: AiModel['purpose'], tier: ModelTier) {
+  return purpose === 'transcription'
+    ? { purpose: 'transcription' as const }
+    : { tier, purpose: { $ne: 'transcription' as const } };
+}
+
 /** The credit view a merchant may see: no provider, model or cost fields. */
 export function toMerchantUsageDto(u: AiUsageDoc) {
   return {
     id: u._id.toHexString(),
     requestId: u.requestId,
     feature: u.feature,
-    tier: u.tier,
+    tier: u.tier ?? null,
     status: u.status,
     tokens: {
       input: promptTokens({
@@ -79,6 +108,7 @@ export function toMerchantUsageDto(u: AiUsageDoc) {
       }),
       output: u.outputTokens,
     },
+    audioSeconds: u.audioMs === undefined ? null : Math.round(u.audioMs / 100) / 10,
     credits: u.credits,
     chargedMinor: u.billedMinor - u.shortfallMinor,
     reference: u.reference ?? null,
@@ -92,6 +122,7 @@ export function toPublicRateDto(rate: CreditRateDoc) {
     currency: rate.currency,
     creditPriceMinor: rate.creditPriceMinor,
     minimumCreditsPerRequest: rate.minimumCreditsPerRequest,
+    transcriptionCreditsPerMinute: rate.transcriptionCreditsPerMinute ?? null,
     tiers: rate.tiers.map((t) => ({
       tier: t.tier,
       inputCreditsPer1k: t.inputCreditsPer1k,
@@ -119,6 +150,7 @@ export function toAiModelDto(m: AiModelDoc) {
     provider: m.provider,
     model: m.model,
     label: m.label,
+    purpose: m.purpose ?? 'chat',
     tier: m.tier,
     inputUsdPerMTok: m.inputUsdMicrosPerMTok / 1_000_000,
     outputUsdPerMTok: m.outputUsdMicrosPerMTok / 1_000_000,
@@ -134,6 +166,8 @@ export function toAiModelDto(m: AiModelDoc) {
       : null,
     contextWindow: m.contextWindow,
     imageInput: m.imageInput === true,
+    audioUsdPerMinute:
+      m.audioUsdMicrosPerMinute === undefined ? null : m.audioUsdMicrosPerMinute / 1_000_000,
     enabled: m.enabled,
     isDefaultForTier: m.isDefaultForTier,
   };
@@ -185,6 +219,24 @@ export class CreditsService {
       .catch((err: unknown) => {
         if (!isDuplicateKey(err)) throw err;
       });
+    // The seeded first price list learns the voice note price once (it had none to change);
+    // lists the super-admin published are never touched.
+    await this.rates
+      .updateOne(
+        {
+          currency: DEFAULT_CREDIT_RATE.currency,
+          version: DEFAULT_CREDIT_RATE.version,
+          createdBy: 'system:seed',
+          transcriptionCreditsPerMinute: { $exists: false },
+        },
+        {
+          $set: {
+            transcriptionCreditsPerMinute: DEFAULT_CREDIT_RATE.transcriptionCreditsPerMinute,
+          },
+        },
+      )
+      .exec();
+    this.rateCache.clear();
     for (const m of DEFAULT_AI_MODELS) {
       await this.models
         .updateOne({ provider: m.provider, model: m.model }, { $setOnInsert: m }, { upsert: true })
@@ -291,7 +343,9 @@ export class CreditsService {
       const doc = await this.tx.run(async () => {
         if (input.isDefaultForTier)
           await this.models
-            .updateMany({ tier: input.tier }, { $set: { isDefaultForTier: false } })
+            .updateMany(defaultScope(input.purpose ?? 'chat', input.tier), {
+              $set: { isDefaultForTier: false },
+            })
             .exec();
         const [created] = await this.models.create([input]);
         return created!.toObject() as unknown as AiModelDoc;
@@ -314,10 +368,14 @@ export class CreditsService {
     const before = await this.models.findById(id).lean<AiModelDoc>().exec();
     if (!before) throw AppError.notFound('ai_model');
     const tier = patch.tier ?? before.tier;
+    const purpose = patch.purpose ?? before.purpose ?? 'chat';
     const after = await this.tx.run(async () => {
       if (patch.isDefaultForTier)
         await this.models
-          .updateMany({ tier, _id: { $ne: before._id } }, { $set: { isDefaultForTier: false } })
+          .updateMany(
+            { ...defaultScope(purpose, tier), _id: { $ne: before._id } },
+            { $set: { isDefaultForTier: false } },
+          )
           .exec();
       return this.models
         .findByIdAndUpdate(id, { $set: patch }, { returnDocument: 'after', runValidators: true })
@@ -334,22 +392,31 @@ export class CreditsService {
 
   /** The model to call for a tier: the enabled default, else any enabled model of that tier. */
   async modelForTier(tier: ModelTier): Promise<AiModelDoc> {
+    const chat = { tier, enabled: true, purpose: { $ne: 'transcription' as const } };
     const model =
       (await this.models
-        .findOne({ tier, enabled: true, isDefaultForTier: true })
+        .findOne({ ...chat, isDefaultForTier: true })
         .lean<AiModelDoc>()
         .exec()) ??
-      (await this.models
-        .findOne({ tier, enabled: true })
-        .sort({ updatedAt: -1 })
-        .lean<AiModelDoc>()
-        .exec());
+      (await this.models.findOne(chat).sort({ updatedAt: -1 }).lean<AiModelDoc>().exec());
     if (!model)
       throw AppError.unprocessable(
         'ai_model_unavailable',
         `No AI model is enabled for the ${tier} tier.`,
       );
     return model;
+  }
+
+  /**
+   * The speech-to-text model voice notes use: the enabled default, else the most recently
+   * changed enabled one; null when the catalogue has none (voice notes stay audio only).
+   */
+  async transcriptionModel(): Promise<AiModelDoc | null> {
+    return this.models
+      .findOne({ purpose: 'transcription', enabled: true })
+      .sort({ isDefaultForTier: -1, updatedAt: -1 })
+      .lean<AiModelDoc>()
+      .exec();
   }
 
   private async modelByName(provider: string, model: string): Promise<AiModelDoc | null> {
@@ -375,19 +442,57 @@ export class CreditsService {
     };
   }
 
+  /** What a minute of voice note costs to turn into text; null when the price list has none. */
+  async quoteAudioMinute() {
+    const currency = (await this.wallet.get()).currency;
+    const rate = await this.currentRate(currency).catch(() => null);
+    if (!rate || rate.transcriptionCreditsPerMinute === undefined) return null;
+    const charge = creditsForAudio(rate, 60_000);
+    return { credits: charge.credits, amountMinor: charge.billedMinor, currency };
+  }
+
   async reserve(input: ReserveInput): Promise<AiUsageDoc> {
+    return this.hold(input, (rate) =>
+      maxChargeFor(rate, input.tier, input.estimatedInputTokens, input.maxOutputTokens),
+    );
+  }
+
+  /**
+   * Holds the price of turning a recording of `audioMs` into text (ADR 0025). Throws
+   * `voice_notes_not_priced` when the price list in force has no voice note price.
+   */
+  async reserveAudio(input: ReserveAudioInput): Promise<AiUsageDoc> {
+    return this.hold(input, (rate) => {
+      if (rate.transcriptionCreditsPerMinute === undefined)
+        throw AppError.unprocessable(
+          'voice_notes_not_priced',
+          'Voice notes have no credit price yet. Contact support.',
+        );
+      return creditsForAudio(rate, input.audioMs);
+    });
+  }
+
+  private async hold(
+    input: {
+      requestId: string;
+      feature: string;
+      tier?: ModelTier;
+      reference?: ReserveInput['reference'];
+    },
+    price: (rate: CreditRateDoc) => CreditCharge,
+  ): Promise<AiUsageDoc> {
     const existing = await this.usage.findOne({ requestId: input.requestId });
     if (existing) return existing;
     const wallet = await this.wallet.get();
     const rate = await this.currentRate(wallet.currency);
-    const max = maxChargeFor(rate, input.tier, input.estimatedInputTokens, input.maxOutputTokens);
+    const max = price(rate);
     try {
       return await this.tx.run(async () => {
         await this.wallet.hold(max.billedMinor);
         return this.usage.create({
           requestId: input.requestId,
           feature: input.feature,
-          tier: input.tier,
+          ...(input.tier ? { tier: input.tier } : {}),
           status: 'reserved',
           currency: wallet.currency,
           reservedMinor: max.billedMinor,
@@ -407,6 +512,41 @@ export class CreditsService {
    * a shortfall for the platform to see; it never fails the settlement.
    */
   async settle(input: SettleInput): Promise<AiUsageDoc> {
+    const tokens: TokenUsage = {
+      inputTokens: input.inputTokens,
+      outputTokens: input.outputTokens,
+      cachedInputTokens: input.cachedInputTokens ?? 0,
+      cacheWriteInputTokens: input.cacheWriteInputTokens ?? 0,
+    };
+    return this.charge(input, (usage, rate, model) => ({
+      charge: creditsFor(rate, usage.tier!, tokens),
+      costUsdMicros: model ? providerCostUsdMicros(model, tokens) : 0,
+      fields: {
+        inputTokens: tokens.inputTokens,
+        outputTokens: tokens.outputTokens,
+        cachedInputTokens: tokens.cachedInputTokens ?? 0,
+        cacheWriteInputTokens: tokens.cacheWriteInputTokens ?? 0,
+      },
+    }));
+  }
+
+  /** Charges a voice note turned into text, by the length of the recording (ADR 0025). */
+  async settleAudio(input: SettleAudioInput): Promise<AiUsageDoc> {
+    return this.charge(input, (_usage, rate, model) => ({
+      charge: creditsForAudio(rate, input.audioMs),
+      costUsdMicros: model ? providerAudioCostUsdMicros(model, input.audioMs) : 0,
+      fields: { audioMs: Math.max(0, Math.round(input.audioMs)) },
+    }));
+  }
+
+  private async charge(
+    input: { requestId: string; provider: string; model: string },
+    price: (
+      usage: AiUsageDoc,
+      rate: CreditRateDoc,
+      model: AiModelDoc | null,
+    ) => { charge: CreditCharge; costUsdMicros: number; fields: Partial<AiUsage> },
+  ): Promise<AiUsageDoc> {
     const result = await this.tx.run(async () => {
       const usage = await this.usage.findOne({ requestId: input.requestId });
       if (!usage) throw AppError.notFound('ai_usage');
@@ -417,20 +557,13 @@ export class CreditsService {
           .findOne({ currency: wallet.currency, version: usage.creditRateVersion })
           .lean<CreditRateDoc>()
           .exec()) ?? (await this.currentRate(wallet.currency));
-      const tokens: TokenUsage = {
-        inputTokens: input.inputTokens,
-        outputTokens: input.outputTokens,
-        cachedInputTokens: input.cachedInputTokens ?? 0,
-        cacheWriteInputTokens: input.cacheWriteInputTokens ?? 0,
-      };
-      const charge = creditsFor(rate, usage.tier, tokens);
       const model = await this.modelByName(input.provider, input.model);
       if (!model)
         this.logger.warn(
           { provider: input.provider, model: input.model },
           'Settling usage for a model missing from the catalogue; cost recorded as 0',
         );
-      const costUsdMicros = model ? providerCostUsdMicros(model, tokens) : 0;
+      const { charge, costUsdMicros, fields } = price(usage, rate, model);
       const costMinor = usdMicrosToMinor(costUsdMicros, rate);
 
       // Spendable for this charge = everything not held by other reservations.
@@ -455,13 +588,10 @@ export class CreditsService {
         { _id: usage._id, status: 'reserved' },
         {
           $set: {
+            ...fields,
             status: 'settled',
             provider: input.provider,
             model: input.model,
-            inputTokens: tokens.inputTokens,
-            outputTokens: tokens.outputTokens,
-            cachedInputTokens: tokens.cachedInputTokens ?? 0,
-            cacheWriteInputTokens: tokens.cacheWriteInputTokens ?? 0,
             credits: charge.credits,
             billedMinor: charge.billedMinor,
             shortfallMinor: charge.billedMinor - chargeMinor,

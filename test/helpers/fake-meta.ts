@@ -333,6 +333,24 @@ export const webhook = {
       },
     ],
   }),
+  /** A voice clip recorded in Messenger (Instagram sends the same shape). */
+  messengerAudio: (pageId: string, psid: string, mid: string, url: string) => ({
+    object: 'page',
+    entry: [
+      {
+        id: pageId,
+        time: Date.now(),
+        messaging: [
+          {
+            sender: { id: psid },
+            recipient: { id: pageId },
+            timestamp: Date.now(),
+            message: { mid, attachments: [{ type: 'audio', payload: { url } }] },
+          },
+        ],
+      },
+    ],
+  }),
   echo: (pageId: string, psid: string, mid: string, text: string, appId?: string) => ({
     object: 'page',
     entry: [
@@ -442,6 +460,40 @@ export const webhook = {
                     sha256: 'meta-sends-its-own-hash',
                     ...(caption ? { caption } : {}),
                   },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  }),
+  /** A WhatsApp voice note (WhatsApp records Ogg Opus). */
+  whatsappVoice: (
+    phoneNumberId: string,
+    from: string,
+    id: string,
+    mediaId: string,
+    mimeType = 'audio/ogg; codecs=opus',
+  ) => ({
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: 'WABA',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: { display_phone_number: '8801700000000', phone_number_id: phoneNumberId },
+              contacts: [{ profile: { name: 'Karim' }, wa_id: from }],
+              messages: [
+                {
+                  from,
+                  id,
+                  timestamp: String(Math.floor(Date.now() / 1000)),
+                  type: 'audio',
+                  audio: { id: mediaId, mime_type: mimeType, sha256: 'meta-hash', voice: true },
                 },
               ],
             },

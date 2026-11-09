@@ -1,4 +1,5 @@
 import type { Readable } from 'node:stream';
+import type { ByteRange } from '../../common/http/byte-range.js';
 
 /** Where the browser sends the file bytes: one PUT with exactly these headers. */
 export interface UploadTarget {
@@ -51,8 +52,11 @@ export abstract class StorageDriver {
   /** The first `bytes` bytes of an object, to check what it really is. */
   abstract readStart(key: string, bytes: number): Promise<Buffer>;
 
-  /** Streams an object, or returns null when it does not exist. */
-  abstract open(key: string): Promise<ObjectStream | null>;
+  /**
+   * Streams an object, or returns null when it does not exist. With `range`, only those bytes
+   * are streamed; `size` stays the whole object's size.
+   */
+  abstract open(key: string, range?: ByteRange): Promise<ObjectStream | null>;
 
   /** Deletes an object. Deleting a missing object is not an error. */
   abstract delete(key: string): Promise<void>;

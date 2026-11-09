@@ -31,6 +31,7 @@ export const BEHAVIOUR_FIELDS = [
   'handoverMessage',
   'replyDelaySeconds',
   'maxRepliesPerDay',
+  'transcribeVoiceNotes',
 ] as const;
 
 /** Fields that describe the business to the agent. */
@@ -56,6 +57,7 @@ export function toAgentSettingsDto(s: AiAgentSettingsDoc) {
     handoverMessage: s.handoverMessage,
     replyDelaySeconds: s.replyDelaySeconds,
     maxRepliesPerDay: s.maxRepliesPerDay,
+    transcribeVoiceNotes: s.transcribeVoiceNotes !== false,
     updatedAt: s.updatedAt.toISOString(),
   };
 }

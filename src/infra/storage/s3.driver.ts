@@ -11,6 +11,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import type { Readable } from 'node:stream';
+import type { ByteRange } from '../../common/http/byte-range.js';
 import {
   StorageDriver,
   type ObjectStream,
@@ -128,14 +129,20 @@ export class S3StorageDriver extends StorageDriver {
     return Buffer.from((await res.Body?.transformToByteArray()) ?? []);
   }
 
-  async open(key: string): Promise<ObjectStream | null> {
+  async open(key: string, range?: ByteRange): Promise<ObjectStream | null> {
     try {
       const res = await this.client.send(
-        new GetObjectCommand({ Bucket: this.opts.bucket, Key: key }),
+        new GetObjectCommand({
+          Bucket: this.opts.bucket,
+          Key: key,
+          ...(range ? { Range: `bytes=${range.start}-${range.end}` } : {}),
+        }),
       );
       if (!res.Body) return null;
+      // A ranged answer's length is the part; the whole size is after the slash.
+      const total = /\/(\d+)$/.exec(res.ContentRange ?? '')?.[1];
       return {
-        size: res.ContentLength ?? 0,
+        size: total ? Number(total) : (res.ContentLength ?? 0),
         contentType: res.ContentType,
         body: res.Body as Readable,
       };

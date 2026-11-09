@@ -120,18 +120,21 @@ describe('billing', () => {
 
       const models = (await P().get('/v1/platform/billing/ai-models').expect(200)).body as {
         model: string;
+        purpose: string;
         tier: string;
         isDefaultForTier: boolean;
       }[];
       expect(
         models
           .filter((m) => m.isDefaultForTier)
-          .map((m) => `${m.tier}:${m.model}`)
+          .map((m) => `${m.purpose}:${m.tier}:${m.model}`)
           .sort(),
       ).toEqual([
-        'advanced:claude-opus-5-5',
-        'fast:claude-haiku-5-5',
-        'standard:claude-sonnet-5-5',
+        'chat:advanced:claude-opus-5-5',
+        'chat:fast:claude-haiku-5-5',
+        'chat:standard:claude-sonnet-5-5',
+        // Voice notes (ADR 0025); its tier is not used.
+        'transcription:fast:gpt-4o-mini-transcribe',
       ]);
 
       // Index builds run in the background at boot; wait for them before reading.
@@ -1097,6 +1100,13 @@ describe('billing', () => {
         .send({ prices: [{ interval: 'month', currency: 'BDT', amountMinor: 89_900 }] })
         .expect(200);
       expect(updated.body).toMatchObject({ version: 2, prices: [{ amountMinor: 89_900 }] });
+      // Fields the edit left out keep their values (they are not reset to the defaults).
+      expect(updated.body).toMatchObject({
+        includedCreditsPerMonth: 100,
+        sortOrder: 5,
+        isActive: true,
+        limits: expect.objectContaining({ seats: 2 }),
+      });
       const pub = (await app.http().get('/v1/public/plans').expect(200)).body as { code: string }[];
       expect(pub[0]!.code).toBe('free');
       expect(pub.map((p) => p.code)).toContain('starter');

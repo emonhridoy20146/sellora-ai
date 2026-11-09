@@ -4,6 +4,7 @@ import type { Response } from 'express';
 import { pipeline } from 'node:stream/promises';
 import { z } from 'zod';
 import { AppError } from '../../common/errors/app-error.js';
+import { parseByteRange } from '../../common/http/byte-range.js';
 import { RequestContext } from '../../common/context/request-context.js';
 import { objectIdSchema } from '../../common/validation/schemas.js';
 import { ZodBody, ZodParam, ZodQuery } from '../../common/validation/zod.js';
@@ -111,26 +112,55 @@ export class ConversationsController {
   @Get(':conversationId/messages/:messageId/attachments/:index')
   @ApiOperation({
     summary:
-      'A photo a customer sent, saved by Sellora. Private: only for staff who can see the chat.',
+      'A photo or voice note a customer sent, saved by Sellora. Private: only for staff who can see the chat.',
   })
   async attachment(
     @ZodParam('conversationId', objectIdSchema) id: string,
     @ZodParam('messageId', objectIdSchema) messageId: string,
     @ZodParam('index', z.coerce.number().int().min(0).max(19)) index: number,
+    @Headers('range') rangeHeader: string | undefined,
     @Res() res: Response,
   ): Promise<void> {
     const file = await this.conversations.attachment(id, messageId, index);
-    const object = await this.files.open(file);
+    // Voice note players ask for byte ranges to read the length and to seek.
+    const range = parseByteRange(rangeHeader, file.size);
+    if (range === 'unsatisfiable') {
+      res.status(416).setHeader('Content-Range', `bytes */${file.size}`).end();
+      return;
+    }
+    const object = await this.files.open(file, range ?? undefined);
     if (!object) throw AppError.notFound('attachment');
-    res.status(200);
+    res.setHeader('Accept-Ranges', 'bytes');
+    if (range) {
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${object.size}`);
+      res.setHeader('Content-Length', String(range.end - range.start + 1));
+    } else {
+      res.status(200);
+      res.setHeader('Content-Length', String(object.size));
+    }
     res.setHeader('Content-Type', file.contentType);
-    res.setHeader('Content-Length', String(object.size));
     // The bytes never change, but they are a customer's: kept by the viewer's browser only.
     res.setHeader('Cache-Control', 'private, max-age=86400, immutable');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     res.setHeader('Content-Disposition', 'inline');
     await pipeline(object.body, res);
+  }
+
+  @Post(':conversationId/messages/:messageId/attachments/:index/transcribe')
+  @HttpCode(200)
+  @RequirePermissions('inbox.reply')
+  @ApiOperation({
+    summary:
+      'Try again to turn a voice note into text (after a failure, or once the setting is on or credits are topped up)',
+  })
+  transcribe(
+    @ZodParam('conversationId', objectIdSchema) id: string,
+    @ZodParam('messageId', objectIdSchema) messageId: string,
+    @ZodParam('index', z.coerce.number().int().min(0).max(19)) index: number,
+  ) {
+    return this.conversations.retryTranscript(id, messageId, index);
   }
 
   @Post(':conversationId/messages/:messageId/retry')
