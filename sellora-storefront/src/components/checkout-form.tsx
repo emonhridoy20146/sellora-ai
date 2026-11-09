@@ -3,13 +3,14 @@
 import { Banknote } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useId, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
 import { useCart } from '@/lib/cart';
 import { cartToken, setCartToken, storeCartTokenKey, useCartCapture } from '@/lib/cart-capture';
 import { cn } from '@/lib/cn';
 import { formatMoney } from '@/lib/money';
 import { asciiDigits, isBdMobile } from '@/lib/phone';
 import { fieldErrors, readJson } from '@/lib/problem';
+import { reportStep, storeAttribution } from '@/lib/shop-steps';
 import {
   DETAILS_KEY,
   load,
@@ -73,6 +74,10 @@ export function CheckoutForm() {
   const [chosenZone, setChosenZone] = useState<string | null | undefined>(undefined);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
+  // The store's numbers: shoppers who opened the checkout (once a day, counted by the API).
+  useEffect(() => {
+    if (state === 'open') reportStep('checkout');
+  }, [state]);
   const [placing, setPlacing] = useState(false);
   const { quote, error: quoteError } = useQuote(cart.items, chosenZone);
   // Until the shopper picks an area, the shop's default area applies.
@@ -156,6 +161,8 @@ export function CheckoutForm() {
       zoneId: zoneId ?? null,
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(website ? { website } : {}),
+      // Where the shopper came from (the ad or site), kept on the order.
+      ...(state === 'open' && storeAttribution() ? { attribution: storeAttribution() } : {}),
     };
     // The saved cart this order comes from, if one was saved; the order closes it.
     const token = cartToken(tokenKey, false);
