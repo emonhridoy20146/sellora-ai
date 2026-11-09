@@ -242,6 +242,31 @@ export const mailTemplates = {
         );
   },
 
+  storeChangesAsked(
+    locale: Locale,
+    p: { storeName: string; reason: string; dashboardUrl: string },
+  ): RenderedMail {
+    return locale === 'bn'
+      ? render(
+          `${p.storeName}: একটি পরিবর্তন ঠিক করুন`,
+          [
+            'স্টোর চালু হওয়ার পর আপনি যা বদলেছেন, Sellora তা দেখেছে। একটি জিনিস ঠিক করতে হবে:',
+            p.reason,
+            'আপনার স্টোর খোলা আছে। ঠিক করে সেভ করুন, Sellora আবার দেখবে।',
+          ],
+          { label: 'স্টোর ঠিক করুন', url: p.dashboardUrl },
+        )
+      : render(
+          `${p.storeName}: please fix a change`,
+          [
+            'Sellora looked at what you changed after your store opened. One thing needs fixing:',
+            p.reason,
+            'Your store stays open. Fix it and save, and Sellora will look again.',
+          ],
+          { label: 'Fix your store', url: p.dashboardUrl },
+        );
+  },
+
   storeReinstated(locale: Locale, p: { storeName: string; dashboardUrl: string }): RenderedMail {
     return locale === 'bn'
       ? render(

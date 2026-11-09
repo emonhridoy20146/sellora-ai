@@ -10,6 +10,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { OrgsService, type OrganizationDoc } from '../orgs/orgs.service.js';
 import type { Store, StoreStatus } from './schemas.js';
 import { StoreRepository } from './repositories.js';
+import { textChanges, storeTexts } from './store-changes.js';
 import { StoreDomainsService } from './store-domains.service.js';
 import { StoreLinksService } from './store-links.service.js';
 import { StoreNotifier } from './store-notifier.service.js';
@@ -63,17 +64,27 @@ export class StoreReviewService {
       : null;
   }
 
-  async list(q: { status?: StoreStatus; q?: string; page: number; pageSize: number }) {
+  async list(q: {
+    status?: StoreStatus;
+    changed?: boolean;
+    q?: string;
+    page: number;
+    pageSize: number;
+  }) {
     const filter: Record<string, unknown> = {};
     if (q.status) filter.status = q.status;
+    if (q.changed) filter['changes.since'] = { $exists: true };
     if (q.q) {
       const re = { $regex: escapeRegex(q.q), $options: 'i' };
       filter.$or = [{ name: re }, { handle: re }];
     }
     // The queue is first come, first served; everything else shows the latest change first.
-    const sort: Record<string, 1 | -1> =
-      q.status === 'pending' ? { 'review.submittedAt': 1, _id: 1 } : { updatedAt: -1, _id: -1 };
-    const [items, total, pending] = await Promise.all([
+    const sort: Record<string, 1 | -1> = q.changed
+      ? { 'changes.since': 1, _id: 1 }
+      : q.status === 'pending'
+        ? { 'review.submittedAt': 1, _id: 1 }
+        : { updatedAt: -1, _id: -1 };
+    const [items, total, pending, changed] = await Promise.all([
       this.storeModel
         .find(filter, null, { [CROSS_TENANT]: true })
         .sort(sort)
@@ -87,6 +98,10 @@ export class StoreReviewService {
         .exec(),
       this.storeModel
         .countDocuments({ status: 'pending' })
+        .setOptions({ [CROSS_TENANT]: true })
+        .exec(),
+      this.storeModel
+        .countDocuments({ 'changes.since': { $exists: true } })
         .setOptions({ [CROSS_TENANT]: true })
         .exec(),
     ]);
@@ -107,12 +122,22 @@ export class StoreReviewService {
         themeKey: s.themeKey,
         org: this.orgSummary(orgById.get(s.orgId.toHexString())),
         flagCount: s.review.flags.length,
+        changes: s.changes
+          ? {
+              since: s.changes.since.toISOString(),
+              lastAt: s.changes.lastAt.toISOString(),
+              areas: s.changes.areas,
+              flagCount: s.changes.flags.length,
+              asked: Boolean(s.changes.askedAt),
+            }
+          : null,
         submittedAt: s.review.submittedAt?.toISOString() ?? null,
         decidedAt: s.review.decidedAt?.toISOString() ?? null,
         updatedAt: s.updatedAt.toISOString(),
       })),
       total,
       pending,
+      changed,
       page: q.page,
       pageSize: q.pageSize,
     };
@@ -127,6 +152,7 @@ export class StoreReviewService {
         ...this.merchant.toDto(store, readiness),
         org: this.orgSummary(org),
         flags: store.review.flags,
+        changes: this.changesView(store),
         statusBeforeSuspension: store.statusBeforeSuspension ?? null,
         domains: await this.domains.forStore(store),
         preview: this.links.enabled
@@ -134,6 +160,95 @@ export class StoreReviewService {
           : null,
       };
     });
+  }
+
+  /** What changed since approval, with the words before and now when a copy was kept. */
+  private changesView(store: StoreDoc) {
+    const c = store.changes;
+    if (!c) return null;
+    const approved = store.review.approvedTexts;
+    return {
+      since: c.since.toISOString(),
+      lastAt: c.lastAt.toISOString(),
+      areas: c.areas,
+      flags: c.flags,
+      askedAt: c.askedAt?.toISOString() ?? null,
+      reason: c.reason ?? null,
+      /** null: the store was approved before Sellora kept a copy of its words. */
+      texts: approved ? textChanges(approved, storeTexts(store)) : null,
+    };
+  }
+
+  /**
+   * The super-admin has looked at the changes and they are fine: the store's words now are
+   * what later changes are compared with. Refused when the business changed something after
+   * the version the reviewer saw.
+   */
+  async acceptChanges(id: string, lastChangeAt: Date): Promise<StoreDoc> {
+    const store = await this.load(id);
+    if (!store.changes)
+      throw AppError.conflict('no_store_changes', 'This store has no changes waiting for a look.');
+    return RequestContext.withTenant(store.orgId.toHexString(), async () => {
+      const after = await this.stores.findOneAndUpdate(
+        { _id: store._id, 'changes.lastAt': lastChangeAt },
+        {
+          $set: { 'review.approvedTexts': storeTexts(store) },
+          $unset: { changes: '' },
+        },
+      );
+      if (!after)
+        throw AppError.conflict(
+          'store_changed',
+          'The business changed the store again while you were looking. Look at the latest changes first.',
+        );
+      await this.audit.record({
+        action: 'platform.store.changes_accepted',
+        orgId: store.orgId,
+        target: { type: 'store', id: store._id.toHexString(), label: store.name },
+        metadata: { areas: store.changes!.areas, flags: store.changes!.flags.length },
+      });
+      return after;
+    });
+  }
+
+  /**
+   * Asks the business to fix something in its changes. The store stays open (suspend it if
+   * shoppers must not see it); the owner gets an email and a note in the dashboard, and the
+   * store stays in the queue until the reviewer accepts.
+   */
+  async askForFix(id: string, reason: string): Promise<StoreDoc> {
+    const store = await this.load(id);
+    if (!store.changes)
+      throw AppError.conflict('no_store_changes', 'This store has no changes waiting for a look.');
+    const by = this.actor();
+    const after = await RequestContext.withTenant(store.orgId.toHexString(), async () => {
+      const updated = await this.stores.findOneAndUpdate(
+        { _id: store._id, changes: { $exists: true } },
+        {
+          $set: { 'changes.askedAt': new Date(), 'changes.askedBy': by, 'changes.reason': reason },
+        },
+      );
+      if (!updated)
+        throw AppError.conflict(
+          'no_store_changes',
+          'This store has no changes waiting for a look.',
+        );
+      await this.audit.record({
+        action: 'platform.store.changes_asked',
+        orgId: store.orgId,
+        target: { type: 'store', id: store._id.toHexString(), label: store.name },
+        metadata: { reason, areas: store.changes!.areas },
+      });
+      return updated;
+    });
+    await this.notifier.notifyOwner(after, 'store.changes_asked', (locale) =>
+      mailTemplates.storeChangesAsked(locale, {
+        storeName: after.name,
+        reason,
+        dashboardUrl: this.notifier.dashboardUrl(after),
+      }),
+    );
+    return after;
   }
 
   /** Re-runs the automatic check (after the business changed its products, say). */
@@ -183,9 +298,10 @@ export class StoreReviewService {
           'review.decidedAt': now,
           'review.decidedBy': by,
           'review.autoApproved': false,
+          'review.approvedTexts': storeTexts(s),
           ...(s.liveSince ? {} : { liveSince: now }),
         },
-        $unset: { 'review.reason': '' },
+        $unset: { 'review.reason': '', changes: '' },
       }),
       'platform.store.approved',
       'Only a store waiting for review can be approved.',

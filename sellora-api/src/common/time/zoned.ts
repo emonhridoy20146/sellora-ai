@@ -77,3 +77,24 @@ export function startOfMonthInZone(at: Date, timeZone: string): Date {
   const p = zonedParts(at, timeZone);
   return zonedTimeToUtc({ year: p.year, month: p.month, day: 1 }, timeZone);
 }
+
+/** The calendar day (YYYY-MM-DD) of `at` in `timeZone`; UTC when the zone is unknown. */
+export function dayKey(at: Date, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(at);
+  } catch {
+    return at.toISOString().slice(0, 10);
+  }
+}
+
+/** The last `days` calendar days in `timeZone`, oldest first, ending today. */
+export function lastDayKeys(days: number, timeZone: string, now = new Date()): string[] {
+  return Array.from({ length: days }, (_, i) =>
+    dayKey(new Date(now.getTime() - (days - 1 - i) * 86_400_000), timeZone),
+  );
+}

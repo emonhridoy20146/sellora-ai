@@ -8,12 +8,24 @@ import { FilesCoreModule } from '../files/files.module.js';
 import { OrgsModule } from '../orgs/orgs.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { DNS_LOOKUP, NodeDnsLookup } from './dns-lookup.js';
-import { StoreDomainRepository, StoreRepository } from './repositories.js';
-import { storeDomainSchema, storeSchema } from './schemas.js';
+import {
+  StoreDomainRepository,
+  StoreProductStatRepository,
+  StoreRepository,
+  StoreStatRepository,
+} from './repositories.js';
+import {
+  storeDomainSchema,
+  storeProductStatSchema,
+  storeSchema,
+  storeStatSchema,
+} from './schemas.js';
+import { StoreChangesService } from './store-changes.service.js';
 import { StoreDomainsService } from './store-domains.service.js';
 import { StoreLinksService } from './store-links.service.js';
 import { StoreNotifier } from './store-notifier.service.js';
 import { StoreReviewService } from './store-review.service.js';
+import { StoreStatsService } from './store-stats.service.js';
 import { StorefrontKeyGuard } from './storefront-key.guard.js';
 import { StorefrontService } from './storefront.service.js';
 import {
@@ -43,17 +55,23 @@ import { StoresService } from './stores.service.js';
     MongooseModule.forFeature([
       { name: 'Store', schema: storeSchema },
       { name: 'StoreDomain', schema: storeDomainSchema },
+      { name: 'StoreStat', schema: storeStatSchema },
+      { name: 'StoreProductStat', schema: storeProductStatSchema },
     ]),
   ],
   providers: [
     { provide: DNS_LOOKUP, useClass: NodeDnsLookup },
     StoreRepository,
     StoreDomainRepository,
+    StoreStatRepository,
+    StoreProductStatRepository,
     StoreLinksService,
     StoreNotifier,
+    StoreChangesService,
     StoresService,
     StoreDomainsService,
     StoreReviewService,
+    StoreStatsService,
     StorefrontService,
   ],
   exports: [
@@ -63,6 +81,7 @@ import { StoresService } from './stores.service.js';
     StoresService,
     StoreDomainsService,
     StoreReviewService,
+    StoreStatsService,
     StorefrontService,
   ],
 })

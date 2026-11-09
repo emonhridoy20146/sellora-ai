@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Types, type Model } from 'mongoose';
 import { RequestContext } from '../../common/context/request-context.js';
@@ -19,7 +19,9 @@ import { PlatformSettingsService } from '../platform/platform-settings.service.j
 import type { Store, StorePageKey, StoreStatus } from './schemas.js';
 import { HANDLE_MESSAGES, handleProblem, normalizeHandle } from './store-hosts.js';
 import { StoreLinksService } from './store-links.service.js';
-import { precheckStore, type CheckedText } from './store-precheck.js';
+import { changedAreas, storeTexts } from './store-changes.js';
+import { StoreChangesService } from './store-changes.service.js';
+import { precheckStore } from './store-precheck.js';
 import { StoreDomainRepository, StoreRepository } from './repositories.js';
 import {
   THEMES,
@@ -91,39 +93,6 @@ export function themeImages(theme: ThemeSettings): { fileId: string; path: strin
   return out;
 }
 
-/** Every piece of text in a store a shopper reads, for the automatic check. */
-export function storeTexts(store: Pick<Store, 'name' | 'seo' | 'pages' | 'theme'>): CheckedText[] {
-  const texts: CheckedText[] = [
-    { where: 'name', label: 'Store name', text: store.name },
-    {
-      where: 'seo',
-      label: 'Search title and description',
-      text: `${store.seo.title ?? ''} ${store.seo.description ?? ''}`,
-    },
-    { where: 'announcement', label: 'Announcement bar', text: store.theme.announcement },
-  ];
-  for (const [key, text] of Object.entries(store.pages))
-    if (text) texts.push({ where: `page:${key}`, label: `Page: ${key}`, text });
-  store.theme.sections.forEach((s, i) => {
-    const parts =
-      s.type === 'hero'
-        ? [s.heading, s.subheading, s.buttonLabel]
-        : s.type === 'banner'
-          ? [s.heading, s.text, s.buttonLabel]
-          : s.type === 'text'
-            ? [s.heading, s.body]
-            : s.type === 'features'
-              ? s.items.flatMap((f) => [f.title, f.text])
-              : [s.title];
-    texts.push({
-      where: `section:${s.id}`,
-      label: `Home section ${i + 1} (${s.type})`,
-      text: parts.join(' '),
-    });
-  });
-  return texts;
-}
-
 /**
  * A business's online stores (merchant side). A store is set up as a draft, sent to the
  * super-admin for review, and opens to shoppers once approved (or straight away when the
@@ -132,6 +101,8 @@ export function storeTexts(store: Pick<Store, 'name' | 'seo' | 'pages' | 'theme'
  */
 @Injectable()
 export class StoresService {
+  private readonly logger = new Logger(StoresService.name);
+
   constructor(
     private readonly stores: StoreRepository,
     private readonly domains: StoreDomainRepository,
@@ -145,7 +116,18 @@ export class StoresService {
     private readonly links: StoreLinksService,
     private readonly tx: TransactionService,
     private readonly audit: AuditService,
+    private readonly changes: StoreChangesService,
   ) {}
+
+  /** An edit to an approved store is live; note it for the super-admin to look at. */
+  private async noteChange(before: StoreDoc, after: StoreDoc): Promise<void> {
+    try {
+      await this.changes.noted(after, changedAreas(before, after));
+    } catch (err) {
+      // The edit is saved; a missed note must not turn it into an error for the business.
+      this.logger.error({ err, storeId: after._id.toHexString() }, 'Could not note a store change');
+    }
+  }
 
   private orgId(): string {
     return RequestContext.tenant()!.orgId;
@@ -203,6 +185,14 @@ export class StoresService {
         reason: s.review.reason ?? null,
         autoApproved: s.review.autoApproved ?? false,
       },
+      /** The super-admin asked for a fix after the store opened (ADR 0028); it stays open. */
+      changeRequest: s.changes?.askedAt
+        ? {
+            askedAt: s.changes.askedAt.toISOString(),
+            reason: s.changes.reason ?? '',
+            changedSince: s.changes.lastAt > s.changes.askedAt,
+          }
+        : null,
       handleLocked: Boolean(s.liveSince),
       liveSince: s.liveSince?.toISOString() ?? null,
       ...(readiness ? { readiness } : {}),
@@ -433,6 +423,7 @@ export class StoresService {
         ...(set.handle ? { handle: { from: before.handle, to: set.handle } } : {}),
       },
     });
+    await this.noteChange(before, after);
     return after;
   }
 
@@ -506,6 +497,7 @@ export class StoresService {
       target: { type: 'store', id: after._id.toHexString(), label: after.name },
       metadata: { themeKey, sections: theme.sections.length },
     });
+    await this.noteChange(before, after);
     return after;
   }
 
@@ -571,7 +563,14 @@ export class StoresService {
             submittedAt: now,
             submittedBy: by,
             flags,
-            ...(auto ? { decidedAt: now, decidedBy: { id: 'auto' }, autoApproved: true } : {}),
+            ...(auto
+              ? {
+                  decidedAt: now,
+                  decidedBy: { id: 'auto' },
+                  autoApproved: true,
+                  approvedTexts: storeTexts(store),
+                }
+              : {}),
           },
           ...(auto && !store.liveSince ? { liveSince: now } : {}),
         },

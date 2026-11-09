@@ -2,6 +2,7 @@ import { Schema, type Types } from 'mongoose';
 import { tenantSchema } from '../../infra/database/schema-helpers.js';
 import { BUSINESS_CATEGORY_KEYS, type BusinessCategory } from '../orgs/business-categories.js';
 import type { ThemeSettings } from './themes.js';
+import { TRAFFIC_SOURCES, type TrafficSource } from './traffic-source.js';
 
 /**
  * draft: being set up · pending: waiting for a super-admin · live: open to shoppers ·
@@ -30,6 +31,43 @@ export interface ReviewFlag {
   reason: string;
 }
 
+/** One piece of the store's own words, as the automatic check and the reviewer read it. */
+export interface StoreText {
+  /** Where it is: "name", "seo", "page:about", "section:<id>". */
+  where: string;
+  label: string;
+  text: string;
+}
+
+/** The parts of an open store whose edits a super-admin looks at again (ADR 0028). */
+export const STORE_CHANGE_AREAS = [
+  'name',
+  'design',
+  'pages',
+  'seo',
+  'social',
+  'checkout',
+  'products',
+] as const;
+export type StoreChangeArea = (typeof STORE_CHANGE_AREAS)[number];
+
+/**
+ * Edits made after the store was approved. They are live already; this waits for a
+ * super-admin to look, and goes away when they accept the changes.
+ */
+export interface StoreChanges {
+  /** The first change nobody has looked at yet. */
+  since: Date;
+  lastAt: Date;
+  areas: StoreChangeArea[];
+  /** What the automatic check found in the changed words (and in products saved since). */
+  flags: ReviewFlag[];
+  /** When the super-admin asked the business to fix something, and what. */
+  askedAt?: Date;
+  askedBy?: { id: string; label?: string };
+  reason?: string;
+}
+
 export interface StoreReview {
   submittedAt?: Date;
   submittedBy?: { id: string; label?: string };
@@ -39,6 +77,8 @@ export interface StoreReview {
   reason?: string;
   flags: ReviewFlag[];
   autoApproved?: boolean;
+  /** The store's words when it was last approved (or its changes accepted), to compare with. */
+  approvedTexts?: StoreText[];
 }
 
 export interface Store {
@@ -66,6 +106,7 @@ export interface Store {
   /** The status before a suspension, to return to when it is lifted. */
   statusBeforeSuspension?: StoreStatus;
   review: StoreReview;
+  changes?: StoreChanges;
   /** First time the store opened to shoppers; the handle is fixed from then on. */
   liveSince?: Date;
   /** The active custom domain shoppers are sent to (ADR 0015); none: the Sellora address. */
@@ -74,6 +115,10 @@ export interface Store {
 }
 
 const by = new Schema({ id: String, label: String }, { _id: false, strict: 'throw' });
+const flag = new Schema(
+  { where: String, label: String, term: String, reason: String },
+  { _id: false, strict: 'throw' },
+);
 
 export const storeSchema = tenantSchema<Store>({
   name: { type: String, required: true, trim: true },
@@ -125,20 +170,36 @@ export const storeSchema = tenantSchema<Store>({
         decidedAt: Date,
         decidedBy: by,
         reason: String,
-        flags: {
+        flags: { type: [flag], default: [] },
+        autoApproved: Boolean,
+        approvedTexts: {
           type: [
             new Schema(
-              { where: String, label: String, term: String, reason: String },
+              { where: String, label: String, text: String },
               { _id: false, strict: 'throw' },
             ),
           ],
-          default: [],
+          default: undefined,
         },
-        autoApproved: Boolean,
       },
       { _id: false, strict: 'throw' },
     ),
     default: () => ({ flags: [] }),
+  },
+  changes: {
+    type: new Schema(
+      {
+        since: { type: Date, required: true },
+        lastAt: { type: Date, required: true },
+        areas: { type: [{ type: String, enum: STORE_CHANGE_AREAS }], default: [] },
+        flags: { type: [flag], default: [] },
+        askedAt: Date,
+        askedBy: by,
+        reason: String,
+      },
+      { _id: false, strict: 'throw' },
+    ),
+    default: undefined,
   },
   liveSince: Date,
   primaryDomain: String,
@@ -149,6 +210,11 @@ storeSchema.index({ handle: 1 }, { unique: true });
 storeSchema.index({ orgId: 1, createdAt: 1 });
 // The super-admin's review queue.
 storeSchema.index({ status: 1, 'review.submittedAt': 1 });
+// Changes made after approval, oldest first.
+storeSchema.index(
+  { 'changes.since': 1 },
+  { partialFilterExpression: { 'changes.since': { $exists: true } } },
+);
 
 // ---------------------------------------------------------------- custom domains
 
@@ -244,3 +310,77 @@ storeDomainSchema.index({ orgId: 1, storeId: 1, createdAt: 1 });
 // The worker's due checks and the super-admin's queue.
 storeDomainSchema.index({ nextCheckAt: 1 }, { sparse: true });
 storeDomainSchema.index({ status: 1, verifiedAt: 1 });
+
+// ---------------------------------------------------------------- visits and sales
+
+/** Visitors counted per traffic source (see traffic-source.ts). */
+export type SourceCounts = Partial<Record<TrafficSource, number>>;
+
+/**
+ * One store's shoppers on one day (in the business's time zone), ADR 0027. Each visitor
+ * counts once a day at each step: visited, looked at a product, added to the cart, opened
+ * the checkout. Orders and their value come from the orders themselves.
+ */
+export interface StoreStat {
+  orgId: Types.ObjectId;
+  storeId: Types.ObjectId;
+  day: string;
+  visitors: number;
+  productViewers: number;
+  cartVisitors: number;
+  checkoutVisitors: number;
+  orders: number;
+  revenueMinor: number;
+  sources: SourceCounts;
+  orderSources: SourceCounts;
+}
+
+/** One product's lookers and buyers in one store on one day. */
+export interface StoreProductStat {
+  orgId: Types.ObjectId;
+  storeId: Types.ObjectId;
+  productId: Types.ObjectId;
+  day: string;
+  viewers: number;
+  orders: number;
+  units: number;
+  revenueMinor: number;
+}
+
+const sourceCounts = new Schema(
+  Object.fromEntries(TRAFFIC_SOURCES.map((s) => [s, { type: Number, default: 0 }])),
+  { _id: false, strict: 'throw' },
+);
+
+export const storeStatSchema = tenantSchema<StoreStat>(
+  {
+    storeId: { type: Schema.Types.ObjectId, required: true },
+    day: { type: String, required: true },
+    visitors: { type: Number, default: 0 },
+    productViewers: { type: Number, default: 0 },
+    cartVisitors: { type: Number, default: 0 },
+    checkoutVisitors: { type: Number, default: 0 },
+    orders: { type: Number, default: 0 },
+    revenueMinor: { type: Number, default: 0 },
+    sources: { type: sourceCounts, default: () => ({}) },
+    orderSources: { type: sourceCounts, default: () => ({}) },
+  },
+  { collection: 'store_stats' },
+);
+storeStatSchema.index({ storeId: 1, day: 1 }, { unique: true });
+storeStatSchema.index({ orgId: 1, day: 1 });
+
+export const storeProductStatSchema = tenantSchema<StoreProductStat>(
+  {
+    storeId: { type: Schema.Types.ObjectId, required: true },
+    productId: { type: Schema.Types.ObjectId, required: true },
+    day: { type: String, required: true },
+    viewers: { type: Number, default: 0 },
+    orders: { type: Number, default: 0 },
+    units: { type: Number, default: 0 },
+    revenueMinor: { type: Number, default: 0 },
+  },
+  { collection: 'store_product_stats' },
+);
+storeProductStatSchema.index({ storeId: 1, productId: 1, day: 1 }, { unique: true });
+storeProductStatSchema.index({ storeId: 1, day: 1 });
