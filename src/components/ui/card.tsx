@@ -4,7 +4,8 @@ import { cn } from '@/lib/utils';
 export function Card({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
-      className={cn('rounded-lg border bg-card text-card-foreground shadow-xs', className)}
+      // min-w-0: a wide table inside scrolls in the card instead of widening a grid column.
+      className={cn('min-w-0 rounded-lg border bg-card text-card-foreground shadow-xs', className)}
       {...props}
     />
   );

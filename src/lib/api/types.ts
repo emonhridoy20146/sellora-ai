@@ -2829,3 +2829,47 @@ export interface AnalyticsOverview {
     topProducts: { productId: string; name: string; quantity: number; valueMinor: number }[];
   } | null;
 }
+
+/** GET /orgs/:orgId/stores/:storeId/stats (ADR 0027) */
+export type TrafficSource =
+  | 'facebook'
+  | 'instagram'
+  | 'whatsapp'
+  | 'google'
+  | 'tiktok'
+  | 'youtube'
+  | 'sms'
+  | 'other'
+  | 'direct';
+
+export interface StoreDayNumbers {
+  visitors: number;
+  productViewers: number;
+  cartVisitors: number;
+  checkoutVisitors: number;
+  orders: number;
+  revenueMinor: number;
+}
+
+export type StoreFunnelStep =
+  'visited' | 'viewed_product' | 'added_to_cart' | 'started_checkout' | 'ordered';
+
+export interface StoreStats {
+  days: ({ day: string } & StoreDayNumbers)[];
+  total: StoreDayNumbers;
+  previous: StoreDayNumbers;
+  conversionRate: number | null;
+  funnel: { step: StoreFunnelStep; shoppers: number }[];
+  sources: { source: TrafficSource; visitors: number; orders: number }[];
+  products: {
+    productId: string;
+    name: string | null;
+    slug: string | null;
+    viewers: number;
+    orders: number;
+    units: number;
+    revenueMinor: number;
+    conversionRate: number | null;
+  }[];
+  currency: string;
+}
