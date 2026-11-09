@@ -40,3 +40,10 @@ export const INTERVAL_LABEL: Record<string, string> = {
   trial: 'Free trial',
   free: 'Free',
 };
+
+/** What each AI feature is called on usage screens; unknown ones fall back to `humanize`. */
+export const FEATURE_LABEL: Record<string, string> = {
+  ai_agent_reply: 'AI sales agent reply',
+  ai_agent_preview: 'AI agent test chat',
+  voice_note_transcription: 'Voice notes to text',
+};

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatMoney, formatStorage, humanize, minorToInput, parseMoney } from './format';
+import {
+  formatClock,
+  formatMoney,
+  formatStorage,
+  humanize,
+  minorToInput,
+  parseMoney,
+} from './format';
 
 describe('money', () => {
   it('formats minor units with the currency decimals', () => {
@@ -42,5 +49,14 @@ describe('humanize', () => {
     expect(formatStorage(2_000 * MB)).toBe('2 GB');
     expect(formatStorage(100_000 * MB)).toBe('100 GB');
     expect(formatStorage(2_500 * MB)).toBe('2.5 GB');
+  });
+});
+
+describe('formatClock', () => {
+  it('shows a recording length the way phones do', () => {
+    expect(formatClock(4_200)).toBe('0:04');
+    expect(formatClock(65_000)).toBe('1:05');
+    expect(formatClock(300_000)).toBe('5:00');
+    expect(formatClock(-5)).toBe('0:00');
   });
 });

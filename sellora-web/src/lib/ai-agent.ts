@@ -47,6 +47,7 @@ export const BEHAVIOUR_KEYS = [
   'tier',
   'takeOrders',
   'confirmOrders',
+  'transcribeVoiceNotes',
   'handoverKeywords',
   'handoverMessage',
   'replyDelaySeconds',
@@ -69,6 +70,7 @@ export interface AgentDraft {
   faqs: { question: string; answer: string }[];
   takeOrders: boolean;
   confirmOrders: boolean;
+  transcribeVoiceNotes: boolean;
   handoverKeywords: string[];
   handoverMessage: string;
   replyDelaySeconds: string;
@@ -87,6 +89,7 @@ export function toDraft(s: AiAgentSettings): AgentDraft {
     faqs: s.faqs.map((f) => ({ ...f })),
     takeOrders: s.takeOrders,
     confirmOrders: s.confirmOrders,
+    transcribeVoiceNotes: s.transcribeVoiceNotes,
     handoverKeywords: [...s.handoverKeywords],
     handoverMessage: s.handoverMessage,
     replyDelaySeconds: String(s.replyDelaySeconds),
@@ -158,6 +161,7 @@ export function draftValues(d: AgentDraft): Required<AgentPatch> {
     faqs: d.faqs.map((f) => ({ question: f.question.trim(), answer: f.answer.trim() })),
     takeOrders: d.takeOrders,
     confirmOrders: d.confirmOrders,
+    transcribeVoiceNotes: d.transcribeVoiceNotes,
     handoverKeywords: d.handoverKeywords,
     handoverMessage: d.handoverMessage.trim(),
     replyDelaySeconds: Number(d.replyDelaySeconds.trim()),

@@ -8,6 +8,8 @@ export interface RateDraft {
   minimumCreditsPerRequest: number;
   usdRate: number;
   tiers: { tier: ModelTier; inputCreditsPer1k: number; outputCreditsPer1k: number }[];
+  /** Credits per minute of voice note turned into text; null or missing: no voice price. */
+  transcriptionCreditsPerMinute?: number | null;
 }
 
 export interface TierEconomics {
@@ -37,7 +39,9 @@ function margin(price: number, cost: number | null): number | null {
 export function tierEconomics(rate: RateDraft, models: AiModel[]): TierEconomics[] {
   const scale = 10 ** minorDigits(rate.currency);
   return rate.tiers.map((t) => {
-    const candidates = models.filter((m) => m.enabled && m.tier === t.tier);
+    const candidates = models.filter(
+      (m) => m.enabled && m.purpose !== 'transcription' && m.tier === t.tier,
+    );
     const worst = candidates.reduce<AiModel | null>(
       (w, m) =>
         !w || m.inputUsdPerMTok + m.outputUsdPerMTok > w.inputUsdPerMTok + w.outputUsdPerMTok
@@ -60,6 +64,36 @@ export function tierEconomics(rate: RateDraft, models: AiModel[]): TierEconomics
       model: worst ? { label: worst.label, model: worst.model } : null,
     };
   });
+}
+
+export interface VoiceEconomics {
+  /** What a merchant pays per minute of recording, in minor units. */
+  pricePerMinuteMinor: number;
+  /** What the provider charges us per minute (most expensive enabled speech model). */
+  costPerMinuteMinor: number | null;
+  marginPct: number | null;
+  model: Pick<AiModel, 'label' | 'model'> | null;
+}
+
+/** Price, cost and margin per minute of voice note; null when the draft has no voice price. */
+export function voiceEconomics(rate: RateDraft, models: AiModel[]): VoiceEconomics | null {
+  const perMinute = rate.transcriptionCreditsPerMinute;
+  if (perMinute === null || perMinute === undefined) return null;
+  const scale = 10 ** minorDigits(rate.currency);
+  const worst = models
+    .filter((m) => m.enabled && m.purpose === 'transcription')
+    .reduce<AiModel | null>(
+      (w, m) => (!w || (m.audioUsdPerMinute ?? 0) > (w.audioUsdPerMinute ?? 0) ? m : w),
+      null,
+    );
+  const price = perMinute * rate.creditPriceMinor;
+  const cost = worst ? (worst.audioUsdPerMinute ?? 0) * rate.usdRate * scale : null;
+  return {
+    pricePerMinuteMinor: price,
+    costPerMinuteMinor: cost,
+    marginPct: margin(price, cost),
+    model: worst ? { label: worst.label, model: worst.model } : null,
+  };
 }
 
 /**

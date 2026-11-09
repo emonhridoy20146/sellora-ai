@@ -3,7 +3,7 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Bot } from 'lucide-react';
 import { useState } from 'react';
-import { TIER_LABEL } from '@/components/billing/labels';
+import { FEATURE_LABEL, TIER_LABEL } from '@/components/billing/labels';
 import { UsageChart } from '@/components/billing/usage-chart';
 import { useOrg } from '@/components/org-context';
 import { StatusBadge } from '@/components/status-badge';
@@ -16,7 +16,7 @@ import { Stat } from '@/components/ui/stat';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import { api } from '@/lib/api/client';
 import type { Page, UsageRequest, UsageSummary } from '@/lib/api/types';
-import { formatDateTime, formatMoney, formatNumber, humanize } from '@/lib/format';
+import { formatClock, formatDateTime, formatMoney, formatNumber, humanize } from '@/lib/format';
 import { rangeFromDays } from '@/lib/series';
 import { cn } from '@/lib/utils';
 
@@ -106,7 +106,9 @@ export default function UsagePage() {
                       .sort((a, b) => b.credits - a.credits)
                       .map((f) => (
                         <TR key={f.feature}>
-                          <TD className="font-medium">{humanize(f.feature)}</TD>
+                          <TD className="font-medium">
+                            {FEATURE_LABEL[f.feature] ?? humanize(f.feature)}
+                          </TD>
                           <TD className="tabular text-right">{formatNumber(f.requests)}</TD>
                           <TD className="tabular text-right">{formatNumber(f.credits)}</TD>
                           <TD className="tabular text-right">
@@ -130,7 +132,8 @@ export default function UsagePage() {
         <CardHeader>
           <CardTitle>Every AI request</CardTitle>
           <CardDescription>
-            Newest first. Tokens are the pieces of text the AI read and wrote.
+            Newest first. Tokens are the pieces of text the AI read and wrote; voice notes are
+            charged by their length.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0 pb-0">
@@ -159,10 +162,12 @@ export default function UsagePage() {
                     <TD className="whitespace-nowrap text-muted-foreground">
                       {formatDateTime(r.at, org.timezone)}
                     </TD>
-                    <TD>{humanize(r.feature)}</TD>
-                    <TD>{TIER_LABEL[r.tier].name}</TD>
+                    <TD>{FEATURE_LABEL[r.feature] ?? humanize(r.feature)}</TD>
+                    <TD>{r.tier ? TIER_LABEL[r.tier].name : 'Voice note'}</TD>
                     <TD className="tabular text-right text-muted-foreground">
-                      {formatNumber(r.tokens.input)} / {formatNumber(r.tokens.output)}
+                      {r.audioSeconds !== null
+                        ? `${formatClock(r.audioSeconds * 1000)} of audio`
+                        : `${formatNumber(r.tokens.input)} / ${formatNumber(r.tokens.output)}`}
                     </TD>
                     <TD className="tabular text-right">{formatNumber(r.credits)}</TD>
                     <TD className="tabular text-right">{formatMoney(r.chargedMinor, currency)}</TD>

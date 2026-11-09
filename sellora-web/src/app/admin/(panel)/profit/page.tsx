@@ -5,7 +5,7 @@ import { TrendingUp, X } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useMemo, useState } from 'react';
-import { TIER_LABEL } from '@/components/billing/labels';
+import { FEATURE_LABEL, TIER_LABEL } from '@/components/billing/labels';
 import { ProfitChart } from '@/components/charts/profit-chart';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -180,8 +180,9 @@ function rowLabel(r: ProfitRow, groupBy: GroupBy): React.ReactNode {
         {r.label ?? r.key}
       </Link>
     );
-  if (groupBy === 'tier') return TIER_LABEL[r.key as ModelTier]?.name ?? r.key;
-  if (groupBy === 'feature') return humanize(r.key.replace(/\./g, ' '));
+  if (groupBy === 'tier') return TIER_LABEL[r.key as ModelTier]?.name ?? humanize(r.key);
+  if (groupBy === 'feature')
+    return FEATURE_LABEL[r.key] ?? humanize(r.key.replace(/\./g, ' '));
   if (groupBy === 'model') return <span className="font-mono text-xs">{r.key || 'Unknown'}</span>;
   return longDay(r.key);
 }

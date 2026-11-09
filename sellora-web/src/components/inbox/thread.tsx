@@ -94,12 +94,18 @@ function MessageRow({
   social,
   onRetry,
   onDiscard,
+  onRetryTranscript,
+  retryingTranscript,
 }: {
   m: InboxMessage;
   /** Messenger, Instagram or WhatsApp: Meta reports delivery and reads. */
   social: boolean;
   onRetry?: () => void;
   onDiscard?: () => void;
+  /** Voice notes: ask speech-to-text again for attachment `index`. */
+  onRetryTranscript?: ((index: number) => void) | undefined;
+  /** The attachment index being retried right now. */
+  retryingTranscript?: number | null;
 }) {
   if (m.type === 'system')
     return (
@@ -137,7 +143,16 @@ function MessageRow({
         {m.attachments.length > 0 && (
           <div className={cn('flex flex-wrap gap-1.5', m.text && 'mb-1.5')}>
             {m.attachments.map((a, i) => (
-              <MessageAttachmentView key={a.url ?? `${m.id}-${i}`} a={a} />
+              <MessageAttachmentView
+                key={a.url ?? `${m.id}-${i}`}
+                a={a}
+                {...(onRetryTranscript && a.kind === 'audio'
+                  ? {
+                      onRetryTranscript: () => onRetryTranscript(i),
+                      retrying: retryingTranscript === i,
+                    }
+                  : {})}
+              />
             ))}
           </div>
         )}
@@ -314,6 +329,16 @@ export function Thread({
     mutationFn: (messageId: string) =>
       api<{ message: InboxMessage }>(
         `/orgs/${orgId}/conversations/${conversationId}/messages/${messageId}/retry`,
+        { method: 'POST' },
+      ),
+    onSuccess: (res) => applyMessage(qc, orgId, res.message),
+  });
+
+  // A voice note sent to speech-to-text again; the words arrive live.
+  const transcribe = useMutation({
+    mutationFn: (v: { messageId: string; index: number }) =>
+      api<{ message: InboxMessage }>(
+        `/orgs/${orgId}/conversations/${conversationId}/messages/${v.messageId}/attachments/${v.index}/transcribe`,
         { method: 'POST' },
       ),
     onSuccess: (res) => applyMessage(qc, orgId, res.message),
@@ -603,6 +628,16 @@ export function Thread({
                   key={m.id}
                   m={m}
                   social={c.channelType !== 'web_chat'}
+                  {...(perms.reply && !c.locked && m.attachments.some((a) => a.kind === 'audio')
+                    ? {
+                        onRetryTranscript: (index: number) =>
+                          transcribe.mutate({ messageId: m.id, index }),
+                        retryingTranscript:
+                          transcribe.isPending && transcribe.variables.messageId === m.id
+                            ? transcribe.variables.index
+                            : null,
+                      }
+                    : {})}
                   {...(failedOnServer(m)
                     ? perms.reply && canReply
                       ? { onRetry: () => resend.mutate(m.id) }
