@@ -418,8 +418,23 @@ export const envSchema = z
 
 export type Env = z.infer<typeof envSchema>;
 
+/** Settings where an empty value means something ("hide the link"), not "use the default". */
+const EMPTY_MEANS_OFF = new Set([
+  'COURIER_STEADFAST_TRACKING_URL',
+  'COURIER_PATHAO_TRACKING_URL',
+  'COURIER_REDX_TRACKING_URL',
+]);
+
+/**
+ * Reads the environment. A variable set to an empty string (`NAME=` copied from
+ * .env.example, or left blank in a host's dashboard) counts as not set, except the few where
+ * empty has its own meaning.
+ */
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
-  const parsed = envSchema.safeParse(source);
+  const cleaned: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(source))
+    if (value !== '' || EMPTY_MEANS_OFF.has(key)) cleaned[key] = value;
+  const parsed = envSchema.safeParse(cleaned);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`);
     throw new Error(`Invalid environment configuration:\n${lines.join('\n')}`);
