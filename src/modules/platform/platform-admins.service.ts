@@ -171,6 +171,11 @@ export class PlatformAdminsService {
   }
 
   /** Used by the bootstrap script when the platform has no accounts yet. */
+  /** True once any platform account (of any status) exists. */
+  async hasAccounts(): Promise<boolean> {
+    return (await this.users.countDocuments({}).limit(1).exec()) > 0;
+  }
+
   async bootstrapOwner(email: string, name: string): Promise<{ setupUrl: string }> {
     if ((await this.users.countDocuments({}).exec()) > 0)
       throw new Error('Platform already has accounts; use the admin panel to invite more.');

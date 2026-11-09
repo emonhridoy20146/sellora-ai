@@ -271,6 +271,15 @@ test/
 scripts/                     keys, bootstrap, indexes, dev seed
 ```
 
+## Deploying (Railway or Render)
+
+`DEPLOY.md` at the root of the GitHub repository walks through a first deploy on Railway (API,
+worker, web app and Redis) with MongoDB Atlas, Cloudflare R2 and SMTP; `render.yaml` there is
+the same on Render. `Dockerfile` in this folder builds one image for both processes:
+`node dist/main.js` (the default) and `node dist/worker.js`. Without a shell on the server,
+set `PLATFORM_BOOTSTRAP_EMAIL` for the first start: the API creates that platform owner and
+logs a one-time setup link. `HOST` sets the listen address (`::` for IPv6 private networks).
+
 ## Deploying (VPS)
 
 Run two processes from the same build: `node dist/main.js` (behind Nginx or Caddy with TLS,

@@ -124,6 +124,11 @@ describe.skipIf(!MINIO)('file storage (S3 driver, real MinIO)', () => {
   it('uploads straight to the bucket with a presigned PUT, then serves through the API', async () => {
     const { file, upload } = await start();
     expect(upload.url.startsWith(`${endpoint}/${bucket}/o/${orgId}/products/`)).toBe(true);
+    // No checksum of an empty body in the link: AWS S3 would refuse the real file.
+    const params = [...new URL(upload.url).searchParams.keys()].map((k) => k.toLowerCase());
+    expect(
+      params.filter((k) => k.startsWith('x-amz-checksum') || k.includes('checksum-algorithm')),
+    ).toEqual([]);
     const put = await fetch(upload.url, { method: 'PUT', headers: upload.headers, body: PNG });
     expect(put.status).toBe(200);
     const ready = await O()

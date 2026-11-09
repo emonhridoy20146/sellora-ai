@@ -25,6 +25,11 @@ export const envSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     APP_NAME: z.string().default('Sellora AI'),
     PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+    /**
+     * Address the API listens on. 0.0.0.0 is IPv4 only; `::` also takes IPv6, which some
+     * hosts' private networks use (Railway environments made before mid-October 2025).
+     */
+    HOST: z.string().trim().min(1).default('0.0.0.0'),
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
     LOG_LEVEL: z
       .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -262,6 +267,17 @@ export const envSchema = z
 
     /** Insert the starter plans, AI models and credit price list when missing (never overwrites). */
     BILLING_SEED_DEFAULTS: bool.default(true),
+    /**
+     * First deploy without a shell: when set and no platform account exists yet, the API
+     * creates this platform owner at start and logs a one-time setup link (valid 24 hours).
+     * Ignored once any platform account exists; remove it after setting up.
+     */
+    PLATFORM_BOOTSTRAP_EMAIL: z
+      .preprocess((v) => (v === '' ? undefined : v), z.email().optional())
+      .transform((v) => v?.toLowerCase()),
+    PLATFORM_BOOTSTRAP_NAME: z
+      .preprocess((v) => (v === '' ? undefined : v), z.string().trim().min(1).max(100).optional())
+      .transform((v) => v ?? 'Platform owner'),
     /** Time zone that platform-wide reports (AI profit per day) use to cut days. */
     PLATFORM_REPORT_TIMEZONE: z
       .string()

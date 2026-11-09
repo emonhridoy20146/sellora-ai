@@ -1,0 +1,11 @@
+node_modules
+dist
+storage
+coverage
+test
+.env
+.env.*
+!.env.example
+*.log
+dump.rdb
+.git

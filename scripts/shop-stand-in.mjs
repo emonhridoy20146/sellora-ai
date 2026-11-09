@@ -52,8 +52,24 @@ function demo() {
           options: [{ name: 'Colour', values: ['Red', 'Blue'] }],
           images: [img('jamdani-red'), img('jamdani-blue')],
           variants: [
-            { id: 'gid://shopify/ProductVariant/1', sku: 'JAM-RED', price: '3200.00', compareAtPrice: '3800.00', inventoryQuantity: 7, tracked: true, options: { Colour: 'Red' } },
-            { id: 'gid://shopify/ProductVariant/2', sku: 'JAM-BLUE', price: '3200.00', compareAtPrice: null, inventoryQuantity: 2, tracked: true, options: { Colour: 'Blue' } },
+            {
+              id: 'gid://shopify/ProductVariant/1',
+              sku: 'JAM-RED',
+              price: '3200.00',
+              compareAtPrice: '3800.00',
+              inventoryQuantity: 7,
+              tracked: true,
+              options: { Colour: 'Red' },
+            },
+            {
+              id: 'gid://shopify/ProductVariant/2',
+              sku: 'JAM-BLUE',
+              price: '3200.00',
+              compareAtPrice: null,
+              inventoryQuantity: 2,
+              tracked: true,
+              options: { Colour: 'Blue' },
+            },
           ],
         },
         {
@@ -66,7 +82,15 @@ function demo() {
           options: [{ name: 'Title', values: ['Default Title'] }],
           images: [img('kantha-cushion')],
           variants: [
-            { id: 'gid://shopify/ProductVariant/3', sku: 'KAN-CUSH', price: '850.00', compareAtPrice: null, inventoryQuantity: null, tracked: false, options: { Title: 'Default Title' } },
+            {
+              id: 'gid://shopify/ProductVariant/3',
+              sku: 'KAN-CUSH',
+              price: '850.00',
+              compareAtPrice: null,
+              inventoryQuantity: null,
+              tracked: false,
+              options: { Title: 'Default Title' },
+            },
           ],
         },
         {
@@ -79,9 +103,33 @@ function demo() {
           options: [{ name: 'Size', values: ['M', 'L', 'XL'] }],
           images: [img('panjabi-white')],
           variants: [
-            { id: 'gid://shopify/ProductVariant/4', sku: 'PJ-M', price: '1850.00', compareAtPrice: '2200.00', inventoryQuantity: 6, tracked: true, options: { Size: 'M' } },
-            { id: 'gid://shopify/ProductVariant/5', sku: 'PJ-L', price: '1850.00', compareAtPrice: '2200.00', inventoryQuantity: 4, tracked: true, options: { Size: 'L' } },
-            { id: 'gid://shopify/ProductVariant/6', sku: 'PJ-XL', price: '1950.00', compareAtPrice: '2300.00', inventoryQuantity: 0, tracked: true, options: { Size: 'XL' } },
+            {
+              id: 'gid://shopify/ProductVariant/4',
+              sku: 'PJ-M',
+              price: '1850.00',
+              compareAtPrice: '2200.00',
+              inventoryQuantity: 6,
+              tracked: true,
+              options: { Size: 'M' },
+            },
+            {
+              id: 'gid://shopify/ProductVariant/5',
+              sku: 'PJ-L',
+              price: '1850.00',
+              compareAtPrice: '2200.00',
+              inventoryQuantity: 4,
+              tracked: true,
+              options: { Size: 'L' },
+            },
+            {
+              id: 'gid://shopify/ProductVariant/6',
+              sku: 'PJ-XL',
+              price: '1950.00',
+              compareAtPrice: '2300.00',
+              inventoryQuantity: 0,
+              tracked: true,
+              options: { Size: 'XL' },
+            },
           ],
         },
         {
@@ -94,7 +142,15 @@ function demo() {
           options: [{ name: 'Title', values: ['Default Title'] }],
           images: [],
           variants: [
-            { id: 'gid://shopify/ProductVariant/7', sku: 'SHAWL-1', price: '1500.00', compareAtPrice: null, inventoryQuantity: 3, tracked: true, options: { Title: 'Default Title' } },
+            {
+              id: 'gid://shopify/ProductVariant/7',
+              sku: 'SHAWL-1',
+              price: '1500.00',
+              compareAtPrice: null,
+              inventoryQuantity: 3,
+              tracked: true,
+              options: { Title: 'Default Title' },
+            },
           ],
         },
       ],
@@ -105,21 +161,62 @@ function demo() {
       failWith: 0,
       products: [
         {
-          id: 11, name: 'Clay Pot', type: 'simple', status: 'publish',
-          description: '<p>Hand-made terracotta pot from Bogura.</p>', sku: 'POT-1',
-          price: '450', regular_price: '500', sale_price: '450', manage_stock: true,
-          stock_quantity: 12, stock_status: 'instock', categories: [{ name: 'Home' }],
-          images: [img('clay-pot')], attributes: [], variations: [],
+          id: 11,
+          name: 'Clay Pot',
+          type: 'simple',
+          status: 'publish',
+          description: '<p>Hand-made terracotta pot from Bogura.</p>',
+          sku: 'POT-1',
+          price: '450',
+          regular_price: '500',
+          sale_price: '450',
+          manage_stock: true,
+          stock_quantity: 12,
+          stock_status: 'instock',
+          categories: [{ name: 'Home' }],
+          images: [img('clay-pot')],
+          attributes: [],
+          variations: [],
         },
         {
-          id: 12, name: 'Cotton Lungi', type: 'variable', status: 'publish',
-          description: 'Check lungi, pure cotton.', sku: '', price: '650', regular_price: '',
-          sale_price: '', manage_stock: true, stock_quantity: 9, stock_status: 'instock',
-          categories: [{ name: 'Men' }], images: [img('lungi')],
+          id: 12,
+          name: 'Cotton Lungi',
+          type: 'variable',
+          status: 'publish',
+          description: 'Check lungi, pure cotton.',
+          sku: '',
+          price: '650',
+          regular_price: '',
+          sale_price: '',
+          manage_stock: true,
+          stock_quantity: 9,
+          stock_status: 'instock',
+          categories: [{ name: 'Men' }],
+          images: [img('lungi')],
           attributes: [{ name: 'Colour', options: ['Green', 'Blue'], variation: true }],
           variations: [
-            { id: 121, sku: 'LG-GREEN', price: '650', regular_price: '650', sale_price: '', manage_stock: true, stock_quantity: 5, stock_status: 'instock', attributes: [{ name: 'Colour', option: 'Green' }] },
-            { id: 122, sku: 'LG-BLUE', price: '650', regular_price: '650', sale_price: '', manage_stock: 'parent', stock_quantity: null, stock_status: 'instock', attributes: [{ name: 'Colour', option: 'Blue' }] },
+            {
+              id: 121,
+              sku: 'LG-GREEN',
+              price: '650',
+              regular_price: '650',
+              sale_price: '',
+              manage_stock: true,
+              stock_quantity: 5,
+              stock_status: 'instock',
+              attributes: [{ name: 'Colour', option: 'Green' }],
+            },
+            {
+              id: 122,
+              sku: 'LG-BLUE',
+              price: '650',
+              regular_price: '650',
+              sale_price: '',
+              manage_stock: 'parent',
+              stock_quantity: null,
+              stock_status: 'instock',
+              attributes: [{ name: 'Colour', option: 'Blue' }],
+            },
           ],
         },
       ],
@@ -195,7 +292,9 @@ function shopify(query, variables) {
     };
   if (query.includes('SelloraVariants')) {
     const p = s.products.find((x) => x.id === variables.id);
-    return { data: { product: p ? { variants: variantsPage(p, Number(variables.after ?? 0)) } : null } };
+    return {
+      data: { product: p ? { variants: variantsPage(p, Number(variables.after ?? 0)) } : null },
+    };
   }
   if (query.includes('SelloraProducts')) {
     const first = Number(variables.first);
@@ -215,7 +314,10 @@ function shopify(query, variables) {
             status: p.status,
             productType: p.productType,
             tags: p.tags,
-            options: p.options.map((o) => ({ name: o.name, optionValues: o.values.map((name) => ({ name })) })),
+            options: p.options.map((o) => ({
+              name: o.name,
+              optionValues: o.values.map((name) => ({ name })),
+            })),
             media: { nodes: p.images.map((url) => ({ image: { url, altText: null } })) },
             variants: variantsPage(p, 0),
           })),
@@ -233,7 +335,10 @@ function woo(req, res, url) {
   if (w.failWith) return json(res, w.failWith, { code: 'stand_in_failure', message: 'Down' });
   const expected = `Basic ${Buffer.from(`${WOO_KEY}:${WOO_SECRET}`).toString('base64')}`;
   if (req.headers.authorization !== expected)
-    return json(res, 401, { code: 'woocommerce_rest_cannot_view', message: 'Sorry, you cannot list resources.' });
+    return json(res, 401, {
+      code: 'woocommerce_rest_cannot_view',
+      message: 'Sorry, you cannot list resources.',
+    });
   if (path === '/wc/v3/data/currencies/current')
     return json(res, 200, { code: w.currency, name: 'Bangladeshi taka', symbol: '৳' });
   const perPage = Number(url.searchParams.get('per_page') ?? 10);
@@ -265,21 +370,59 @@ function allVariants() {
   const out = [];
   for (const p of state.shopify.products)
     for (const v of p.variants)
-      out.push({ shop: 'shopify', product: p.title, sku: v.sku, price: v.price, stock: v.tracked ? v.inventoryQuantity : null, set: (price, qty) => {
-        if (price !== undefined) v.price = Number(price).toFixed(2);
-        if (qty !== undefined) { v.inventoryQuantity = qty; v.tracked = true; }
-      } });
+      out.push({
+        shop: 'shopify',
+        product: p.title,
+        sku: v.sku,
+        price: v.price,
+        stock: v.tracked ? v.inventoryQuantity : null,
+        set: (price, qty) => {
+          if (price !== undefined) v.price = Number(price).toFixed(2);
+          if (qty !== undefined) {
+            v.inventoryQuantity = qty;
+            v.tracked = true;
+          }
+        },
+      });
   for (const p of state.woo.products) {
     if (p.type === 'simple')
-      out.push({ shop: 'woo', product: p.name, sku: p.sku, price: p.price, stock: p.manage_stock ? p.stock_quantity : null, set: (price, qty) => {
-        if (price !== undefined) { p.price = String(price); p.sale_price = Number(price) < Number(p.regular_price) ? String(price) : ''; }
-        if (qty !== undefined) { p.stock_quantity = qty; p.manage_stock = true; p.stock_status = qty > 0 ? 'instock' : 'outofstock'; }
-      } });
+      out.push({
+        shop: 'woo',
+        product: p.name,
+        sku: p.sku,
+        price: p.price,
+        stock: p.manage_stock ? p.stock_quantity : null,
+        set: (price, qty) => {
+          if (price !== undefined) {
+            p.price = String(price);
+            p.sale_price = Number(price) < Number(p.regular_price) ? String(price) : '';
+          }
+          if (qty !== undefined) {
+            p.stock_quantity = qty;
+            p.manage_stock = true;
+            p.stock_status = qty > 0 ? 'instock' : 'outofstock';
+          }
+        },
+      });
     for (const v of p.variations)
-      out.push({ shop: 'woo', product: p.name, sku: v.sku, price: v.price, stock: v.manage_stock === true ? v.stock_quantity : null, set: (price, qty) => {
-        if (price !== undefined) { v.price = String(price); v.regular_price = String(price); }
-        if (qty !== undefined) { v.stock_quantity = qty; v.manage_stock = true; v.stock_status = qty > 0 ? 'instock' : 'outofstock'; }
-      } });
+      out.push({
+        shop: 'woo',
+        product: p.name,
+        sku: v.sku,
+        price: v.price,
+        stock: v.manage_stock === true ? v.stock_quantity : null,
+        set: (price, qty) => {
+          if (price !== undefined) {
+            v.price = String(price);
+            v.regular_price = String(price);
+          }
+          if (qty !== undefined) {
+            v.stock_quantity = qty;
+            v.manage_stock = true;
+            v.stock_status = qty > 0 ? 'instock' : 'outofstock';
+          }
+        },
+      });
   }
   return out;
 }
@@ -287,7 +430,9 @@ function allVariants() {
 function page() {
   const rows = allVariants()
     .map(
-      (v) => `<tr><td>${esc(v.shop)}</td><td>${esc(v.product)}</td><td><code>${esc(v.sku)}</code></td>
+      (
+        v,
+      ) => `<tr><td>${esc(v.shop)}</td><td>${esc(v.product)}</td><td><code>${esc(v.sku)}</code></td>
       <td>${esc(v.price)}</td><td>${v.stock ?? '—'}</td>
       <td><form method="post" action="/__price"><input type="hidden" name="sku" value="${esc(v.sku)}">
       <input name="price" size="7" placeholder="price"> <button>Set price</button></form></td>
@@ -343,7 +488,9 @@ async function control(req, res, url) {
     const id = params.get('id');
     const before = shop.products.length;
     shop.products = shop.products.filter((p) => String(p.id).split('/').pop() !== id);
-    return json(res, before === shop.products.length ? 404 : 200, { removed: before - shop.products.length });
+    return json(res, before === shop.products.length ? 404 : 200, {
+      removed: before - shop.products.length,
+    });
   }
   if (op === '/__fail') {
     const shop = params.get('shop') === 'woo' ? state.woo : state.shopify;
