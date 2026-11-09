@@ -14,15 +14,24 @@
  *   POST /__fail {"code":613}    the next send answers with that Graph error code
  *   GET  /__photo/<name>.jpg     a demo product photo, standing in for a Messenger or
  *                                Instagram CDN link (`expired.jpg` answers 403 like an old link)
+ *   GET  /__audio/<name>.mp4     a demo voice clip (MP4 audio, a tone with no speech), standing
+ *                                in for a Messenger or Instagram voice clip link
  *
  * WhatsApp media: GET /<version>/wa-media-<anything> answers like Meta's media endpoint, with
- * a download link that needs the same token.
+ * a download link that needs the same token; `wa-voice-<anything>` is a voice note (Ogg Opus,
+ * a tone with no speech).
  *
  * Never point a production deployment at it.
  */
 import { createHash, createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import sharp from 'sharp';
+
+const fixture = (name) => readFileSync(new URL(`../test/fixtures/audio/${name}`, import.meta.url));
+/** Demo recordings: tones, not speech (see test/fixtures/audio). */
+const VOICE_OGG = fixture('voice-4s.ogg');
+const VOICE_MP4 = fixture('voice-2s.m4a');
 
 const PORT = Number(process.env.PORT ?? 4020);
 const SECRET = process.env.META_APP_SECRET;
@@ -159,6 +168,15 @@ function route(method, path, query, body, res) {
     });
 
   if (method === 'GET' && parts.length === 1) {
+    if (parts[0].startsWith('wa-voice-'))
+      return answer(res, 200, {
+        messaging_product: 'whatsapp',
+        id: parts[0],
+        url: `http://127.0.0.1:${PORT}/__wa-media/${parts[0]}`,
+        mime_type: 'audio/ogg; codecs=opus',
+        sha256: createHash('sha256').update(VOICE_OGG).digest('hex'),
+        file_size: VOICE_OGG.length,
+      });
     if (parts[0].startsWith('wa-media-'))
       return demoPhoto(parts[0].slice('wa-media-'.length)).then((bytes) =>
         answer(res, 200, {
@@ -201,11 +219,24 @@ createServer(async (req, res) => {
     console.log(`photo ${name}`);
     return sendPhoto(res, await demoPhoto(name));
   }
+  if (url.pathname.startsWith('/__audio/')) {
+    console.log(`voice clip ${url.pathname.slice('/__audio/'.length)}`);
+    res.writeHead(200, { 'content-type': 'audio/mp4', 'content-length': VOICE_MP4.length });
+    return res.end(VOICE_MP4);
+  }
   // Like WhatsApp's media store: the download needs the channel's token.
   if (url.pathname.startsWith('/__wa-media/')) {
     const auth = req.headers.authorization ?? '';
     if (!auth.startsWith('Bearer ') || !known(auth.slice(7)))
       return answer(res, 401, { error: 'Unauthorized' });
+    if (url.pathname.startsWith('/__wa-media/wa-voice-')) {
+      console.log(`whatsapp voice note ${url.pathname.slice('/__wa-media/'.length)}`);
+      res.writeHead(200, {
+        'content-type': 'audio/ogg',
+        'content-length': VOICE_OGG.length,
+      });
+      return res.end(VOICE_OGG);
+    }
     const id = url.pathname.slice('/__wa-media/wa-media-'.length);
     console.log(`whatsapp media ${id}`);
     return sendPhoto(res, await demoPhoto(id));

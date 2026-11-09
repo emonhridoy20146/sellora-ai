@@ -108,4 +108,85 @@ describe('agent history', () => {
       },
     ]);
   });
+
+  describe('voice notes', () => {
+    const voice = (transcript?: Msg['attachments'][number]['transcript'], durationMs?: number) =>
+      ({
+        kind: 'audio',
+        url: '',
+        status: 'ready',
+        ...(durationMs ? { durationMs } : {}),
+        ...(transcript ? { transcript } : {}),
+      }) as Msg['attachments'][number];
+
+    it('gives the agent the words speech-to-text heard, with the length', () => {
+      expect(
+        toAgentHistory([
+          msg('in', '', {
+            type: 'audio',
+            attachments: [voice({ status: 'done', text: 'lal saree ta ache?', tries: 1 }, 4_200)],
+          }),
+        ]),
+      ).toEqual([
+        {
+          role: 'user',
+          text: '[The customer sent a voice note (0:04). Speech-to-text heard: "lal saree ta ache?"]',
+        },
+      ]);
+    });
+
+    it('says when there were no words, when they are still coming, and when they failed', () => {
+      const [turn] = toAgentHistory([
+        msg('in', '', {
+          type: 'audio',
+          attachments: [voice({ status: 'done', text: '', tries: 1 })],
+        }),
+        msg('in', '', {
+          type: 'audio',
+          attachments: [voice({ status: 'pending', tries: 0 }, 61_000)],
+        }),
+        msg('in', '', {
+          type: 'audio',
+          attachments: [voice({ status: 'failed', error: 'x', tries: 3 })],
+        }),
+        msg('in', '', {
+          type: 'audio',
+          attachments: [voice({ status: 'skipped', error: 'off', tries: 0 })],
+        }),
+        msg('in', '', { type: 'audio', attachments: [voice()] }),
+      ]);
+      expect(turn).toEqual({
+        role: 'user',
+        text: [
+          '[The customer sent a voice note with no clear words in it]',
+          '[The customer sent a voice note (1:01) that is still being turned into text]',
+          '[The customer sent a voice note that could not be turned into text]',
+          '[The customer sent a voice note that could not be turned into text]',
+          '[The customer sent a voice note that could not be turned into text]',
+        ].join('\n'),
+      });
+    });
+
+    it('keeps photo labels when a voice note and a photo come together', () => {
+      const id = new Types.ObjectId();
+      const photo: AiImage = { mediaType: 'image/jpeg', data: 'AAAA', width: 10, height: 10 };
+      const [turn] = toAgentHistory(
+        [
+          msg('in', 'eta', {
+            _id: id,
+            type: 'audio',
+            attachments: [
+              voice({ status: 'done', text: 'ei design ta', tries: 1 }),
+              { kind: 'image', url: '', status: 'ready' },
+            ],
+          }),
+        ],
+        new Map([[id.toHexString(), [photo]]]),
+      );
+      expect(turn).toMatchObject({
+        role: 'user',
+        text: '[The customer sent a voice note. Speech-to-text heard: "ei design ta"] [The customer sent Photo 1] eta',
+      });
+    });
+  });
 });

@@ -17,6 +17,7 @@ import {
 import { AgentsGateway, WebchatGateway } from './inbox.gateways.js';
 import { MessagingService } from './messaging.service.js';
 import { OutboxQueue } from './outbox.js';
+import { VoiceNoteQueue } from './voice-note-queue.js';
 import {
   ChannelRepository,
   ContactRepository,
@@ -46,8 +47,22 @@ const repositories = [
  */
 @Module({
   imports: [OrgsModule, BillingModule, models],
-  providers: [...repositories, ChannelsService, InboxRealtime, MessagingService, OutboxQueue],
-  exports: [...repositories, ChannelsService, InboxRealtime, MessagingService, OutboxQueue],
+  providers: [
+    ...repositories,
+    ChannelsService,
+    InboxRealtime,
+    MessagingService,
+    OutboxQueue,
+    VoiceNoteQueue,
+  ],
+  exports: [
+    ...repositories,
+    ChannelsService,
+    InboxRealtime,
+    MessagingService,
+    OutboxQueue,
+    VoiceNoteQueue,
+  ],
 })
 export class InboxCoreModule {}
 

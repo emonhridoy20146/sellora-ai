@@ -49,7 +49,8 @@ export function toPlatformUsageDto(u: AiUsageDoc) {
     orgId: u.orgId.toHexString(),
     requestId: u.requestId,
     feature: u.feature,
-    tier: u.tier,
+    tier: u.tier ?? null,
+    audioMs: u.audioMs ?? null,
     status: u.status,
     provider: u.provider ?? null,
     model: u.model ?? null,
@@ -242,7 +243,8 @@ export class PlatformBillingService {
         $concat: [{ $ifNull: ['$provider', 'unknown'] }, '/', { $ifNull: ['$model', 'unknown'] }],
       },
       feature: '$feature',
-      tier: '$tier',
+      // Speech-to-text has no tier.
+      tier: { $ifNull: ['$tier', 'voice notes'] },
     };
     const rows = await this.agg<
       { _id: { key: string; currency: string } } & Omit<ProfitRow, 'key' | 'currency'>

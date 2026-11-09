@@ -226,11 +226,33 @@ export const DEFAULT_AI_MODELS: AiModel[] = [
     enabled: true,
     isDefaultForTier: true,
   },
+  /**
+   * Speech-to-text for customers' voice notes (ADR 0025), through OpenAI's transcription
+   * API (or any service that speaks it, set by AI_OPENAI_BASE_URL). $0.003 a minute is the
+   * published price as summarised in November 2026; confirm it on OpenAI's price page. Its
+   * tier is not used. Without AI_OPENAI_API_KEY voice notes stay audio only.
+   */
+  {
+    provider: 'openai',
+    model: 'gpt-4o-mini-transcribe',
+    label: 'GPT-4o mini Transcribe',
+    purpose: 'transcription',
+    tier: 'fast',
+    inputUsdMicrosPerMTok: 0,
+    outputUsdMicrosPerMTok: 0,
+    cachedInputUsdMicrosPerMTok: 0,
+    contextWindow: 16_000,
+    imageInput: false,
+    audioUsdMicrosPerMinute: 3_000,
+    enabled: true,
+    isDefaultForTier: true,
+  },
 ];
 
 /**
  * Starting price list: 1 credit = ৳0.10. Per 1,000 tokens a fast reply costs 2 credits in
- * and 10 out, standard 6/30, advanced 10/50. The super-admin publishes new versions.
+ * and 10 out, standard 6/30, advanced 10/50. A minute of voice note turned into text costs
+ * 15 credits (৳1.50), charged by the second. The super-admin publishes new versions.
  */
 export const DEFAULT_CREDIT_RATE: Omit<CreditRate, 'effectiveFrom' | 'createdBy'> = {
   version: 1,
@@ -242,6 +264,7 @@ export const DEFAULT_CREDIT_RATE: Omit<CreditRate, 'effectiveFrom' | 'createdBy'
     { tier: 'advanced', inputCreditsPer1k: 10, outputCreditsPer1k: 50 },
   ],
   minimumCreditsPerRequest: 1,
+  transcriptionCreditsPerMinute: 15,
   usdRateScaled: 1_220_000,
   note: 'Initial price list',
 };

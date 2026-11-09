@@ -1,4 +1,6 @@
+import { formatClock } from '../../../common/media/audio-length.js';
 import type { MessageDoc } from '../../inbox/inbox.mappers.js';
+import { attachmentKind, type MessageAttachment } from '../../inbox/schemas.js';
 import type { AiImage, AiMessage } from '../provider/ai-provider.js';
 
 /** About 4K tokens of English: enough context for a sales chat, cheap to resend each turn. */
@@ -8,21 +10,44 @@ type HistoryMessage = Pick<MessageDoc, 'direction' | 'type' | 'text' | 'attachme
   _id?: MessageDoc['_id'];
 };
 
+/**
+ * A customer's voice note as the agent reads it (ADR 0025): its length and the words
+ * speech-to-text heard, or why there are none.
+ */
+export function voiceNoteLine(
+  a: Pick<MessageAttachment, 'durationMs' | 'transcript' | 'status'>,
+): string {
+  const length = a.durationMs ? ` (${formatClock(a.durationMs)})` : '';
+  const t = a.transcript;
+  if (t?.status === 'done') {
+    const words = (t.text ?? '').trim();
+    return words
+      ? `[The customer sent a voice note${length}. Speech-to-text heard: "${words}"]`
+      : `[The customer sent a voice note${length} with no clear words in it]`;
+  }
+  if (t?.status === 'pending')
+    return `[The customer sent a voice note${length} that is still being turned into text]`;
+  return `[The customer sent a voice note${length} that could not be turned into text]`;
+}
+
+function otherLabel(m: HistoryMessage, shown: AiImage[]): string {
+  if (shown.length === 1) return `[The customer sent ${shown[0]!.label}]`;
+  if (shown.length > 1) return `[The customer sent ${shown.map((p) => p.label).join(', ')}]`;
+  const what = m.type === 'image' ? 'a photo' : 'a file';
+  const lost =
+    m.direction === 'in' && m.type === 'image' && m.attachments.some((a) => a.status === 'failed');
+  return `[${m.direction === 'in' ? 'The customer sent' : 'We sent'} ${what}${lost ? ' that could not be loaded' : ''}]`;
+}
+
 function describe(m: HistoryMessage, shown: AiImage[]): string {
   const text = m.text.trim();
   if (m.type === 'text' && !m.attachments.length) return text;
-  let label: string;
-  if (shown.length === 1) label = `[The customer sent ${shown[0]!.label}]`;
-  else if (shown.length > 1) label = `[The customer sent ${shown.map((p) => p.label).join(', ')}]`;
-  else {
-    const what = m.type === 'image' ? 'a photo' : 'a file';
-    const lost =
-      m.direction === 'in' &&
-      m.type === 'image' &&
-      m.attachments.some((a) => a.status === 'failed');
-    label = `[${m.direction === 'in' ? 'The customer sent' : 'We sent'} ${what}${lost ? ' that could not be loaded' : ''}]`;
-  }
-  return `${label}${text ? ` ${text}` : ''}`;
+  const labels: string[] = [];
+  if (m.direction === 'in')
+    for (const a of m.attachments) if (attachmentKind(a) === 'audio') labels.push(voiceNoteLine(a));
+  if (!labels.length || m.attachments.some((a) => attachmentKind(a) !== 'audio'))
+    labels.push(otherLabel(m, shown));
+  return `${labels.join(' ')}${text ? ` ${text}` : ''}`;
 }
 
 /**

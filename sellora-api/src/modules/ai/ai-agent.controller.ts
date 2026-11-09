@@ -16,6 +16,7 @@ import {
   type AiAgentSettingsDoc,
 } from './agent-settings.service.js';
 import { AiRepliesService } from './agent/ai-replies.service.js';
+import { VoiceNotesService } from './voice-notes/voice-notes.service.js';
 
 /** A typical reply: instructions, catalog and recent chat in, a short answer out. */
 const TYPICAL_REPLY = { inputTokens: 6_000, outputTokens: 400 };
@@ -33,6 +34,7 @@ export class AiAgentController {
     private readonly wallet: WalletService,
     private readonly channels: ChannelsService,
     private readonly rateLimit: RateLimitService,
+    private readonly voiceNotes: VoiceNotesService,
   ) {}
 
   /** Each tier's cost for a typical reply, and whether it can answer now. */
@@ -55,10 +57,11 @@ export class AiAgentController {
   }
 
   private async view(settings: AiAgentSettingsDoc) {
-    const [tiers, wallet, channels] = await Promise.all([
+    const [tiers, wallet, channels, voiceNotes] = await Promise.all([
       this.tiers(),
       this.wallet.get(),
       this.channels.list(),
+      this.voiceNotes.status(),
     ]);
     const current = tiers.find((t) => t.tier === settings.tier)!;
     return {
@@ -67,6 +70,7 @@ export class AiAgentController {
         serviceReady: current.available,
         perReply: current.perReply,
         tiers,
+        voiceNotes,
         wallet: { availableMinor: toBalance(wallet).availableMinor, currency: wallet.currency },
         channels: channels.map((c) => ({
           id: c._id.toHexString(),

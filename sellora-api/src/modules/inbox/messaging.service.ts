@@ -30,6 +30,7 @@ import type {
   MessageAttachment,
   MessageType,
   SenderType,
+  Transcript,
 } from './schemas.js';
 
 /** Emitted after a customer message is stored. The AI agent listens for it. */
@@ -64,7 +65,7 @@ export interface InboundContact {
 export interface InboundMessage {
   externalId?: string;
   clientId?: string;
-  type: Extract<MessageType, 'text' | 'image' | 'file'>;
+  type: Extract<MessageType, 'text' | 'image' | 'audio' | 'file'>;
   text: string;
   attachments?: MessageAttachment[];
 }
@@ -561,11 +562,23 @@ export class MessagingService {
    * Records the outcome of saving one of a message's attachments and tells live clients.
    * Only a still-pending attachment changes, so a late retry never undoes a result.
    */
+  /**
+   * Records how saving a customer's photo or voice note went. A saved voice note can be
+   * marked for transcription in the same write (`transcribe`), so an AI reply never sees
+   * it ready without knowing its words are on the way.
+   */
   async settleAttachment(
     messageId: Types.ObjectId,
     index: number,
     result:
-      | { status: 'ready'; fileId: Types.ObjectId; contentType: string; size: number }
+      | {
+          status: 'ready';
+          fileId: Types.ObjectId;
+          contentType: string;
+          size: number;
+          durationMs?: number;
+          transcribe?: boolean;
+        }
       | { status: 'failed'; error: string },
   ): Promise<MessageDoc | null> {
     const at = `attachments.${index}`;
@@ -578,10 +591,88 @@ export class MessagingService {
               [`${at}.fileId`]: result.fileId,
               [`${at}.contentType`]: result.contentType,
               [`${at}.size`]: result.size,
+              ...(result.durationMs !== undefined
+                ? { [`${at}.durationMs`]: result.durationMs }
+                : {}),
+              ...(result.transcribe
+                ? { [`${at}.transcript`]: { status: 'pending', tries: 0 } satisfies Transcript }
+                : {}),
             },
             $unset: { [`${at}.source`]: 1 },
           }
         : { $set: { [`${at}.status`]: 'failed', [`${at}.error`]: result.error } },
+    );
+    if (message) await this.publishMessage(message);
+    return message;
+  }
+
+  /**
+   * Claims a voice note's transcription run: moves `pending` to a new try and returns the
+   * message with the try number, or null when it is not waiting (already done, or another
+   * run took it).
+   */
+  async startTranscript(
+    messageId: Types.ObjectId,
+    index: number,
+    tries: number,
+  ): Promise<MessageDoc | null> {
+    const at = `attachments.${index}.transcript`;
+    return this.messages.findOneAndUpdate(
+      {
+        _id: messageId,
+        [`${at}.status`]: 'pending',
+        // A transcript put back in line by hand may not carry a count yet.
+        [`${at}.tries`]: tries === 0 ? { $in: [0, null] } : tries,
+      },
+      { $set: { [`${at}.tries`]: tries + 1 } },
+    );
+  }
+
+  /** Saves how a transcription run ended and tells the inbox. */
+  async finishTranscript(
+    messageId: Types.ObjectId,
+    index: number,
+    transcript: Omit<Transcript, 'tries' | 'at'>,
+  ): Promise<MessageDoc | null> {
+    const at = `attachments.${index}.transcript`;
+    const set: Record<string, unknown> = {
+      [`${at}.status`]: transcript.status,
+      [`${at}.at`]: new Date(),
+    };
+    const unset: Record<string, 1> = {};
+    for (const key of ['text', 'language', 'error', 'credits'] as const) {
+      if (transcript[key] === undefined) unset[`${at}.${key}`] = 1;
+      else set[`${at}.${key}`] = transcript[key];
+    }
+    const message = await this.messages.findOneAndUpdate(
+      { _id: messageId, [`${at}.status`]: 'pending' },
+      { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
+    );
+    if (message) await this.publishMessage(message);
+    return message;
+  }
+
+  /**
+   * Puts a voice note that failed or was skipped back in line for transcription (a person
+   * asked). Returns the message, or null when there is nothing to retry.
+   */
+  async requeueTranscript(messageId: Types.ObjectId, index: number): Promise<MessageDoc | null> {
+    const at = `attachments.${index}`;
+    const message = await this.messages.findOneAndUpdate(
+      {
+        _id: messageId,
+        [`${at}.status`]: 'ready',
+        [`${at}.kind`]: 'audio',
+        [`${at}.fileId`]: { $exists: true },
+        $or: [
+          { [`${at}.transcript`]: { $exists: false } },
+          { [`${at}.transcript.status`]: { $in: ['failed', 'skipped'] } },
+        ],
+      },
+      {
+        $set: { [`${at}.transcript.status`]: 'pending' },
+        $unset: { [`${at}.transcript.error`]: 1 },
+      },
     );
     if (message) await this.publishMessage(message);
     return message;

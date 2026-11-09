@@ -6,7 +6,7 @@ import {
   paginationQuerySchema,
 } from '../../common/validation/schemas.js';
 import { BILLING_INTERVALS, FEATURE_MODULE_KEYS, LIMIT_KEYS } from './feature-modules.js';
-import { MODEL_TIERS } from './credit-schemas.js';
+import { MODEL_PURPOSES, MODEL_TIERS } from './credit-schemas.js';
 import { GATEWAYS, type GatewayKey } from './payment-schemas.js';
 import { LEDGER_TYPES } from './schemas.js';
 
@@ -95,24 +95,38 @@ const priceSchema = z
   .object({ interval, currency: currencySchema, amountMinor: moneyMinorSchema })
   .strict();
 
+/** Plan fields without defaults, so a partial update never resets what it leaves out. */
+const planFields = {
+  code: planCode,
+  name: z.string().trim().min(1).max(60),
+  description: z.string().trim().max(500),
+  modules: z.array(z.enum(FEATURE_MODULE_KEYS)).max(FEATURE_MODULE_KEYS.length),
+  limits: limitsSchema.partial(),
+  prices: z.array(priceSchema).max(20),
+  includedCreditsPerMonth: z.number().int().min(0).max(1_000_000),
+  isPublic: z.boolean(),
+  isActive: z.boolean(),
+  trialEligible: z.boolean(),
+  highlight: z.boolean(),
+  sortOrder: z.number().int().min(0).max(10_000),
+};
+
 export const createPlanBody = z
   .object({
-    code: planCode,
-    name: z.string().trim().min(1).max(60),
-    description: z.string().trim().max(500).default(''),
-    modules: z.array(z.enum(FEATURE_MODULE_KEYS)).max(FEATURE_MODULE_KEYS.length),
-    limits: limitsSchema.partial().default({}),
-    prices: z.array(priceSchema).max(20),
-    includedCreditsPerMonth: z.number().int().min(0).max(1_000_000).default(0),
-    isPublic: z.boolean().default(true),
-    isActive: z.boolean().default(true),
-    trialEligible: z.boolean().default(true),
-    highlight: z.boolean().default(false),
-    sortOrder: z.number().int().min(0).max(10_000).default(100),
+    ...planFields,
+    description: planFields.description.default(''),
+    limits: planFields.limits.default({}),
+    includedCreditsPerMonth: planFields.includedCreditsPerMonth.default(0),
+    isPublic: planFields.isPublic.default(true),
+    isActive: planFields.isActive.default(true),
+    trialEligible: planFields.trialEligible.default(true),
+    highlight: planFields.highlight.default(false),
+    sortOrder: planFields.sortOrder.default(100),
   })
   .strict();
 
-export const updatePlanBody = createPlanBody
+export const updatePlanBody = z
+  .object(planFields)
   .omit({ code: true })
   .partial()
   .strict()
@@ -137,6 +151,8 @@ export const publishRateBody = z
       .min(1)
       .max(MODEL_TIERS.length),
     minimumCreditsPerRequest: decimalRate.default(1),
+    /** Credits per minute of voice note turned into text; leave out to keep voice notes audio only. */
+    transcriptionCreditsPerMinute: decimalRate.optional(),
     usdRate: z.number().positive().max(100_000).describe('Local currency per 1 USD, e.g. 122.5'),
     effectiveFrom: isoDate.optional(),
     note: z.string().trim().max(500).optional(),
@@ -145,35 +161,54 @@ export const publishRateBody = z
 
 const usdPerMTok = z.number().min(0).max(10_000);
 
+/** Catalogue fields without defaults, so a partial update never resets what it leaves out. */
+const aiModelFields = {
+  provider: z.enum(['anthropic', 'openai', 'google', 'other']),
+  model: z.string().trim().min(1).max(100),
+  label: z.string().trim().min(1).max(100),
+  purpose: z.enum(MODEL_PURPOSES),
+  tier: z.enum(MODEL_TIERS),
+  inputUsdPerMTok: usdPerMTok,
+  outputUsdPerMTok: usdPerMTok,
+  cachedInputUsdPerMTok: usdPerMTok,
+  /** null: 1.25 × the input price. */
+  cacheWriteUsdPerMTok: usdPerMTok.nullable().optional(),
+  longContext: z
+    .object({
+      thresholdTokens: z.number().int().min(1),
+      inputUsdPerMTok: usdPerMTok,
+      outputUsdPerMTok: usdPerMTok,
+    })
+    .strict()
+    .nullable()
+    .optional(),
+  contextWindow: z.number().int().min(1_000).max(10_000_000),
+  imageInput: z.boolean(),
+  /** Speech-to-text models: USD per minute of audio. */
+  audioUsdPerMinute: z.number().min(0).max(100).nullable().optional(),
+  enabled: z.boolean(),
+  isDefaultForTier: z.boolean(),
+};
+
 export const aiModelBody = z
   .object({
-    provider: z.enum(['anthropic', 'openai', 'google', 'other']),
-    model: z.string().trim().min(1).max(100),
-    label: z.string().trim().min(1).max(100),
-    tier: z.enum(MODEL_TIERS),
-    inputUsdPerMTok: usdPerMTok,
-    outputUsdPerMTok: usdPerMTok,
-    cachedInputUsdPerMTok: usdPerMTok.default(0),
-    /** null: 1.25 × the input price. */
-    cacheWriteUsdPerMTok: usdPerMTok.nullable().optional(),
-    longContext: z
-      .object({
-        thresholdTokens: z.number().int().min(1),
-        inputUsdPerMTok: usdPerMTok,
-        outputUsdPerMTok: usdPerMTok,
-      })
-      .strict()
-      .nullable()
-      .optional(),
-    contextWindow: z.number().int().min(1_000).max(10_000_000).default(200_000),
-    imageInput: z.boolean().default(false),
-    enabled: z.boolean().default(true),
-    isDefaultForTier: z.boolean().default(false),
+    ...aiModelFields,
+    purpose: aiModelFields.purpose.default('chat'),
+    cachedInputUsdPerMTok: aiModelFields.cachedInputUsdPerMTok.default(0),
+    contextWindow: aiModelFields.contextWindow.default(200_000),
+    imageInput: aiModelFields.imageInput.default(false),
+    enabled: aiModelFields.enabled.default(true),
+    isDefaultForTier: aiModelFields.isDefaultForTier.default(false),
   })
-  .strict();
+  .strict()
+  .refine((b) => b.purpose !== 'transcription' || typeof b.audioUsdPerMinute === 'number', {
+    path: ['audioUsdPerMinute'],
+    message: 'A speech-to-text model needs its price per minute',
+  });
 
-export const updateAiModelBody = aiModelBody
-  .omit({ provider: true, model: true })
+export const updateAiModelBody = z
+  .object(aiModelFields)
+  .omit({ provider: true, model: true, purpose: true })
   .partial()
   .strict()
   .refine((b) => Object.keys(b).length > 0, 'Nothing to update');

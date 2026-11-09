@@ -44,6 +44,12 @@ export interface AiAgentSettings {
   replyDelaySeconds: number;
   /** AI replies per conversation in 24 hours before it hands over (guards against loops). */
   maxRepliesPerDay: number;
+  /**
+   * Turn customers' voice notes into text (ADR 0025), so the team can read them and the AI
+   * can answer them. Costs credits per minute; on by default. Absent on settings saved
+   * before voice notes: on.
+   */
+  transcribeVoiceNotes?: boolean;
   updatedBy?: { type: string; id: string };
 }
 
@@ -62,6 +68,7 @@ export const AI_AGENT_DEFAULTS = {
   handoverMessage: '',
   replyDelaySeconds: 3,
   maxRepliesPerDay: 40,
+  transcribeVoiceNotes: true,
 } as const satisfies Omit<AiAgentSettings, 'orgId' | 'updatedBy'>;
 
 export const AI_LIMITS = {
@@ -115,6 +122,7 @@ export const aiAgentSettingsSchema = tenantSchema<AiAgentSettings>(
       min: 1,
       max: AI_LIMITS.maxRepliesPerDay,
     },
+    transcribeVoiceNotes: { type: Boolean, default: AI_AGENT_DEFAULTS.transcribeVoiceNotes },
     updatedBy: new Schema({ type: String, id: String }, { _id: false, strict: 'throw' }),
   },
   { collection: 'ai_agent_settings' },

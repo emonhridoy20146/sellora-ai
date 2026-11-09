@@ -15,22 +15,24 @@ const ACTOR: Actor = { type: 'system', id: 'meta-webhook' };
 const PROFILE_TIMEOUT_MS = 4_000;
 
 /**
- * Photos are saved to the business's storage after the message is stored (the inbox shows
- * them as loading meanwhile); other files keep Meta's link.
+ * Photos and voice notes are saved to the business's storage after the message is stored
+ * (the inbox shows them as loading meanwhile); other files keep Meta's link.
  */
 function toAttachment(a: MetaAttachment): MessageAttachment | null {
-  if (a.kind === 'image') {
+  if (a.kind === 'image' || a.kind === 'audio') {
     const source = a.mediaId ? `${WHATSAPP_MEDIA_PREFIX}${a.mediaId}` : a.url;
     if (!source) return null;
     return {
+      kind: a.kind,
       url: '',
       status: 'pending',
       source,
-      ...(a.contentType ? { contentType: a.contentType } : {}),
+      // WhatsApp says "audio/ogg; codecs=opus"; the saved copy's type is read from its bytes.
+      ...(a.contentType ? { contentType: a.contentType.split(';')[0]!.trim() } : {}),
     };
   }
   if (!a.url) return null;
-  return { url: a.url, ...(a.name ? { name: a.name } : {}) };
+  return { kind: 'file', url: a.url, ...(a.name ? { name: a.name } : {}) };
 }
 
 export type InboundOutcome =

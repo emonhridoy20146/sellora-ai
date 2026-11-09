@@ -18,11 +18,14 @@ import { WithdrawalsService, toWithdrawalDto } from './withdrawals.service.js';
 
 const toMicros = (usd: number) => Math.round(usd * 1_000_000);
 
-function modelInput(body: Partial<z.infer<typeof dto.aiModelBody>>): Partial<AiModel> {
+type ModelBody = Partial<z.infer<typeof dto.aiModelBody>>;
+
+function modelInput(body: ModelBody): Partial<AiModel> {
   const out: Partial<AiModel> & Record<string, unknown> = {};
   if (body.provider !== undefined) out.provider = body.provider;
   if (body.model !== undefined) out.model = body.model;
   if (body.label !== undefined) out.label = body.label;
+  if (body.purpose !== undefined) out.purpose = body.purpose;
   if (body.tier !== undefined) out.tier = body.tier;
   if (body.inputUsdPerMTok !== undefined)
     out.inputUsdMicrosPerMTok = toMicros(body.inputUsdPerMTok);
@@ -44,6 +47,9 @@ function modelInput(body: Partial<z.infer<typeof dto.aiModelBody>>): Partial<AiM
   }
   if (body.contextWindow !== undefined) out.contextWindow = body.contextWindow;
   if (body.imageInput !== undefined) out.imageInput = body.imageInput;
+  if (body.audioUsdPerMinute !== undefined)
+    out.audioUsdMicrosPerMinute =
+      body.audioUsdPerMinute === null ? undefined : toMicros(body.audioUsdPerMinute);
   if (body.enabled !== undefined) out.enabled = body.enabled;
   if (body.isDefaultForTier !== undefined) out.isDefaultForTier = body.isDefaultForTier;
   return out;

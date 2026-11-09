@@ -12,7 +12,7 @@ export interface AiReplyJob {
   messageId: string;
   /** Times this job was put back because another reply was still running. */
   busy?: number;
-  /** Times this job waited for the customer's photos to finish saving. */
+  /** Times this job waited for the customer's photos or voice notes to be ready. */
   mediaWaits?: number;
 }
 
@@ -22,8 +22,11 @@ export const AI_REPLY_ATTEMPTS = 3;
 /** How long to wait for a running reply before giving up (40 × 3 s = 2 minutes). */
 const MAX_BUSY_REQUEUES = 40;
 const BUSY_DELAY_MS = 3_000;
-/** How long a reply waits for the customer's photos to be saved (10 × 2 s). */
-export const MAX_MEDIA_WAITS = 10;
+/**
+ * How long a reply waits for the customer's photos to be saved and voice notes to be
+ * turned into text (15 × 2 s); after that it answers with what it has.
+ */
+export const MAX_MEDIA_WAITS = 15;
 const MEDIA_WAIT_MS = 2_000;
 const JOB_OPTIONS = {
   attempts: AI_REPLY_ATTEMPTS,
@@ -62,7 +65,7 @@ export class AiReplyQueue {
     });
   }
 
-  /** Puts the job back for a moment while the customer's photos are still being saved. */
+  /** Puts the job back for a moment while the customer's photos or voice notes are not ready. */
   async requeueForMedia(job: AiReplyJob): Promise<void> {
     const mediaWaits = (job.mediaWaits ?? 0) + 1;
     await this.queue.add(

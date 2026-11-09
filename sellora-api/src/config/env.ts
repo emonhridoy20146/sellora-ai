@@ -187,8 +187,15 @@ export const envSchema = z
     AI_ANTHROPIC_API_KEY: z.string().optional(),
     /** Only for a gateway or proxy in front of the Anthropic API. Empty: the public API. */
     AI_ANTHROPIC_BASE_URL: z.union([z.url(), z.literal('')]).optional(),
+    /**
+     * OpenAI, used for speech-to-text on customers' voice notes (ADR 0025). The base URL may
+     * point at any service with the same API (Groq, a self-hosted Whisper server). Without
+     * a key voice notes stay audio only.
+     */
     AI_OPENAI_API_KEY: z.string().optional(),
-    AI_OPENAI_BASE_URL: z.string().optional(),
+    AI_OPENAI_BASE_URL: z.union([z.url(), z.literal('')]).optional(),
+    /** Longer voice notes are kept and playable but not turned into text. */
+    VOICE_NOTE_MAX_SECONDS: z.coerce.number().int().min(10).max(3_600).default(300),
 
     /** The platform's Meta app (Messenger, Instagram, WhatsApp). Without it those channels are off. */
     META_APP_ID: z.string().optional(),

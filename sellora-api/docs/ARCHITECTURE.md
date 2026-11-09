@@ -155,8 +155,14 @@ inboxes hear it live (`channel.updated`).
 The `media` queue copies customers' photos from Meta into the business's private storage
 (ADR 0012): messages are stored at once with the photo `pending`, the worker downloads it from
 Meta's hosts only, checks its real type and size against the plan's storage, and marks it
-ready or failed with a reason. The AI reply job waits up to 20 s for a pending photo, then
-shows the newest saved photos to models that can see images.
+ready or failed with a reason. The AI reply job waits up to 30 s for a pending photo or voice
+note, then shows the newest saved photos to models that can see images.
+
+Voice notes (ADR 0025) take the same path, then a `transcribe` job on the `ai` queue sends the
+saved recording to the speech-to-text model picked in the model catalogue (a `Transcriber`
+adapter per provider), metered in AI credits by the second through the same reserve, settle
+and release calls as chat replies. The words are stored on the attachment and published live;
+the AI reply job waits for them and gives them to the agent as part of the customer's turn.
 
 The `couriers` queue books parcels and follows them (ADR 0013). A single booking calls the
 courier straight away; bulk bookings run as `send` jobs, one per parcel, and every booking is

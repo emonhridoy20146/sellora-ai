@@ -12,6 +12,8 @@
  *
  * It cannot see photos. When the customer's newest turn carries some, it says so in its
  * reply, and GET /__requests (a test hook) lists what each request carried, photos included.
+ * Voice notes reach it as text (Sellora transcribes them first); it answers the words it is
+ * given and starts its reply with "Voice note shunechi" so checks can tell.
  *
  * Never point a production deployment at it.
  */
@@ -29,6 +31,11 @@ const SHOP_INFO =
   /(deliver|shipping|charge|return|exchange|refund policy|size guide|cash on delivery|\bcod\b|ডেলিভারি|চার্জ|ফেরত|এক্সচেঞ্জ|সাইজ)/i;
 const COMPLAINT =
   /(complain|torn|chhera|chera|broken|bhanga|refund|faulty|wrong item|খারাপ|ছেঁড়া|অভিযোগ)/i;
+
+/** How Sellora writes a customer's voice note for the model (ADR 0025). */
+const VOICE_HEARD = /\[The customer sent a voice note[^\]]*?Speech-to-text heard: "([^"]*)"\]/g;
+const VOICE_LOST =
+  /\[The customer sent a voice note[^\]]*?(could not be turned into text|still being turned into text|with no clear words in it)\]/;
 
 let seq = 0;
 /** What recent requests carried, newest last (for GET /__requests). */
@@ -56,11 +63,26 @@ function toolUse(name, input) {
   return { type: 'tool_use', id: `toolu_standin_${(seq += 1)}`, name, input };
 }
 
+/** The words of the customer's newest turn, with voice notes read as what they said. */
+function heardWords(text) {
+  const heard = [...text.matchAll(VOICE_HEARD)].map((m) => m[1]);
+  const typed = text.replace(VOICE_HEARD, '').trim();
+  return { heard, customer: [typed, ...heard].filter(Boolean).join('\n') };
+}
+
 function reply(body) {
+  const { heard } = heardWords(lastCustomerTurn(body.messages ?? []).text);
+  const content = answer(body);
+  if (heard.length && content[0]?.type === 'text')
+    return [{ type: 'text', text: `Voice note shunechi! ${content[0].text}` }, ...content.slice(1)];
+  return content;
+}
+
+function answer(body) {
   const messages = body.messages ?? [];
   const last = messages.at(-1);
   const turn = lastCustomerTurn(messages);
-  const customer = turn.text;
+  const { heard, customer } = heardWords(turn.text);
   const bangla = BENGALI.test(customer);
   const tools = new Set((body.tools ?? []).map((t) => t.name));
 
@@ -137,6 +159,15 @@ function reply(body) {
           `Photo peyechi, dhonnobad! (Stand-in AI: received ${turn.images.length} photo` +
           `${turn.images.length > 1 ? 's' : ''}; a real Claude model would look at it and ` +
           'search the catalog.) Ki khujchen ektu likhe bolben?',
+      },
+    ];
+
+  // A voice note Sellora could not turn into text: ask for words, like a real model should.
+  if (last?.role === 'user' && !heard.length && VOICE_LOST.test(turn.text))
+    return [
+      {
+        type: 'text',
+        text: 'Dukkhito, voice note ta shunte parini. Ektu likhe bolben ki khujchen?',
       },
     ];
 

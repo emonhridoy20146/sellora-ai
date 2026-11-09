@@ -5,6 +5,7 @@ import { dirname, resolve, sep } from 'node:path';
 import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '../../common/errors/app-error.js';
+import type { ByteRange } from '../../common/http/byte-range.js';
 import { contentTypeForKey } from './content-types.js';
 import {
   StorageDriver,
@@ -174,10 +175,10 @@ export class LocalStorageDriver extends StorageDriver {
     }
   }
 
-  async open(key: string): Promise<ObjectStream | null> {
+  async open(key: string, range?: ByteRange): Promise<ObjectStream | null> {
     const meta = await this.head(key);
     if (!meta) return null;
-    return { ...meta, body: createReadStream(this.path(key)) };
+    return { ...meta, body: createReadStream(this.path(key), range ?? {}) };
   }
 
   async delete(key: string): Promise<void> {

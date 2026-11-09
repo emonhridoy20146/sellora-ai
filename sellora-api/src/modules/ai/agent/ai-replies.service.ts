@@ -19,7 +19,12 @@ import {
   MessageRepository,
 } from '../../inbox/repositories.js';
 import { replyWindowOpen } from '../../inbox/reply-window.js';
-import type { ChannelType, ConversationAi, MessageType } from '../../inbox/schemas.js';
+import {
+  attachmentKind,
+  type ChannelType,
+  type ConversationAi,
+  type MessageType,
+} from '../../inbox/schemas.js';
 import { OrgsService } from '../../orgs/orgs.service.js';
 import { AiAgentSettingsService, type AiAgentSettingsDoc } from '../agent-settings.service.js';
 import type { AiAgentSettings } from '../agent-settings.schema.js';
@@ -50,7 +55,15 @@ const TYPING_PULSE_MS = 3_000;
 /** Saved photos larger than this are not shown to the model. */
 const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
 /** Messages the customer sees (notes and system lines stay with the team). */
-const VISIBLE_TYPES: MessageType[] = ['text', 'image', 'file'];
+const VISIBLE_TYPES: MessageType[] = ['text', 'image', 'audio', 'file'];
+
+/** What the customer said in a message: its text and the words of its voice notes. */
+function spokenAndWritten(m: MessageDoc): string {
+  const words = m.attachments
+    .filter((a) => attachmentKind(a) === 'audio' && a.transcript?.status === 'done')
+    .map((a) => a.transcript!.text ?? '');
+  return [m.text, ...words].filter((t) => t.trim()).join('\n');
+}
 
 const CHANNEL_LABEL: Record<ChannelType, string> = {
   web_chat: 'the website chat',
@@ -259,10 +272,13 @@ export class AiRepliesService {
     const thread = await this.loadThread(conversationId);
     if (typeof thread === 'string') return { status: 'skipped', reason: thread };
     const { settings, conversation, contact, channel, pending } = thread;
-    // A photo the customer just sent is still being saved: answer once it can be seen.
-    if (opts.waitForMedia && pending.some((m) => m.attachments.some((a) => a.status === 'pending')))
+    // A photo or voice note the customer just sent is still being saved or turned into
+    // text: answer once it can be seen and read.
+    const waiting = (m: MessageDoc) =>
+      m.attachments.some((a) => a.status === 'pending' || a.transcript?.status === 'pending');
+    if (opts.waitForMedia && pending.some(waiting))
       return { status: 'skipped', reason: 'waiting_for_media' };
-    const customerText = pending.map((m) => m.text).join('\n');
+    const customerText = pending.map(spokenAndWritten).join('\n');
 
     const keyword = matchKeyword(customerText, settings.handoverKeywords);
     if (keyword) {
@@ -403,7 +419,7 @@ export class AiRepliesService {
     const { settings, channel } = thread;
     if (notifyCustomer) {
       // The customer hears that a person will answer; no AI is needed to say so.
-      const customerText = thread.pending.map((m) => m.text).join('\n');
+      const customerText = thread.pending.map(spokenAndWritten).join('\n');
       try {
         const posted = await this.messaging.postOutgoing(
           thread.conversation,
@@ -593,7 +609,12 @@ export class AiRepliesService {
     for (const m of [...history].reverse()) {
       if (m.direction !== 'in') continue;
       for (const a of m.attachments)
-        if (a.fileId && (a.status ?? 'ready') === 'ready' && picked.length < MAX_AGENT_IMAGES)
+        if (
+          a.fileId &&
+          attachmentKind(a) === 'image' &&
+          (a.status ?? 'ready') === 'ready' &&
+          picked.length < MAX_AGENT_IMAGES
+        )
           picked.push({ messageId: m._id.toHexString(), fileId: a.fileId });
       if (picked.length >= MAX_AGENT_IMAGES) break;
     }
