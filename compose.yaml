@@ -4,6 +4,7 @@
 #
 #   docker compose run --rm keys > local-secrets.env     # once: fresh secrets
 #   docker compose up --build -d                         # http://localhost:3000
+#                                                        # shops: http://<shop>.sellora.localhost:3100
 #   docker compose run --rm tools                        # demo data + super-admin link
 #
 # Optional keys go in a file named .env next to this one (never commit it):
@@ -26,6 +27,10 @@ x-api-env: &api-env
     WEB_APP_URL: http://localhost:3000
     API_PUBLIC_URL: http://localhost:3000
     CORS_ORIGINS: http://localhost:3000
+    # Shops open at http://<shop>.sellora.localhost:3100 (browsers send *.localhost to this
+    # computer). The storefront service below must use the same STOREFRONT_API_KEY.
+    STOREFRONT_BASE_DOMAIN: sellora.localhost:3100
+    STOREFRONT_URL_SCHEME: http
     MAIL_TRANSPORT: smtp
     SMTP_URL: smtp://mailpit:1025
     MAIL_FROM: Sellora AI <no-reply@sellora.local>
@@ -102,6 +107,24 @@ services:
     image: sellora-local/web
     ports:
       - "3000:3000"
+    depends_on:
+      api: { condition: service_started }
+    restart: unless-stopped
+
+  # Online stores and landing pages. The API decides which shop a request is for from its
+  # address, so the shop only opens once it is approved in the super-admin panel.
+  storefront:
+    build: ./sellora-storefront
+    image: sellora-local/storefront
+    env_file:
+      - path: ./local-secrets.env
+        required: true
+    environment:
+      API_INTERNAL_URL: http://api:4000
+      # Browsers reach this app directly here, with no proxy in front.
+      TRUST_PROXY_HOPS: "0"
+    ports:
+      - "3100:3100"
     depends_on:
       api: { condition: service_started }
     restart: unless-stopped

@@ -5,18 +5,21 @@ cheap services that can grow later.
 
 | Piece                                           | Where                                                                   | Why                                                                                                                                 |
 | ----------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| API, worker, web app, Redis                     | **Railway** (Hobby plan), Singapore region                              | One bill. Private network between the services. No sleeping, so Meta's webhooks always arrive. Live chat updates (WebSockets) work. |
+| API, worker, web app, online stores, Redis      | **Railway** (Hobby plan), Singapore region                              | One bill. Private network between the services. No sleeping, so Meta's webhooks always arrive. Live chat updates (WebSockets) work. |
+| Shop addresses (`<shop>.shops.yourdomain.com`)  | A domain you own, at any registrar                                      | Only for the online stores and landing pages. Everything else works on Railway's own address.                                       |
 | Database                                        | **MongoDB Atlas** free cluster (M0), Singapore                          | Free up to 0.5 GB.                                                                                                                  |
 | Files (photos, voice notes, backups)            | **Cloudflare R2**, private bucket                                       | S3-compatible.                                                                                                                      |
 | Email (sign-up codes, password resets, invites) | Any SMTP provider                                                       | Production refuses to start without one.                                                                                            |
 | AI                                              | Anthropic API key (Claude); optional OpenAI key for voice notes to text |                                                                                                                                     |
 
 `render.yaml` describes the same setup for Render if you prefer it (see the end). The online
-store app (`sellora-storefront`) is not part of this test and is not deployed here.
+stores (step 4e) are optional: skip that step if you only want to test the inbox and the AI
+sales agent first.
 
 **Cost (estimate, not measured).** Railway Hobby is $5 a month and includes $5 of usage. Its
 published rates are $10 per GB of memory per month and $20 per vCPU per month. Four small
-services that sit mostly idle use well under 1 GB together, so expect roughly $5 to $15 a month.
+services that sit mostly idle use well under 1 GB together, so expect roughly $5 to $15 a month,
+a little more with the online stores.
 Atlas M0 is free. R2 has a free monthly allowance that a two-business test should stay inside.
 Check each provider's pricing page before you start, because prices change.
 
@@ -28,8 +31,10 @@ machine, against local MongoDB, Redis and MinIO (an S3 stand-in). These all pass
 - A WebSocket connection through the web app.
 - The first super-admin link.
 
-None of this has run on Railway, Render, Atlas or R2 themselves yet. Expect small fixes on the
-first real deploy.
+The online store image ran in the local Docker setup (`TRY-LOCALLY.md`), where the store and
+landing page browser checks passed: build, review, approval, shopping, checkout and the order in
+the dashboard. None of this has run on Railway, Render, Atlas or R2 themselves yet. Expect small
+fixes on the first real deploy.
 
 ---
 
@@ -93,7 +98,7 @@ SMTP_URL=smtps://USERNAME:PASSWORD@smtp.example.com:465
 - Set `MAIL_FROM` to an address on a domain the provider lets you send from, for example
   `Sellora AI <no-reply@yourdomain.com>`.
 
-## 4. Railway (API, worker, web app, Redis)
+## 4. Railway (API, worker, web app, online stores, Redis)
 
 Sign up at [railway.com](https://railway.com) and choose the Hobby plan. Connect your GitHub
 account when it asks, so Railway can read `emonhridoy20146/sellora-ai`.
@@ -129,6 +134,7 @@ API_PUBLIC_URL=https://${{web.RAILWAY_PUBLIC_DOMAIN}}
 CORS_ORIGINS=https://${{web.RAILWAY_PUBLIC_DOMAIN}}
 COOKIE_SECURE=true
 STOREFRONT_URL_SCHEME=https
+STOREFRONT_BASE_DOMAIN=shops.yourdomain.com
 MONGODB_URI=<from step 1>
 MONGODB_DB_NAME=sellora
 REDIS_URL=${{Redis.REDIS_URL}}
@@ -156,6 +162,9 @@ Notes on this block:
   and voice notes stay playable but are not read by the AI.
 - `${{web.RAILWAY_PUBLIC_DOMAIN}}` fills in once the web service has a domain (step 4d).
   `${{Redis.REDIS_URL}}` is the Redis service's private address.
+- `STOREFRONT_BASE_DOMAIN` is where shops live: a shop with the address `nakshi-ghor` opens at
+  `https://nakshi-ghor.shops.yourdomain.com`. Use your own domain (step 4e). If you skip the
+  online stores for now, leave the line as it is.
 
 ### 4c. The `worker` service
 
@@ -187,7 +196,7 @@ Keep the API's and the worker's variables the same whenever you change one.
 3. **Settings › Networking › Generate Domain**, with port `3000`. This creates the address
    people will use, `https://web-production-xxxx.up.railway.app`. A custom domain such as
    `app.yourdomain.com` can be added later in the same place. After changing the domain,
-   redeploy all three services.
+   redeploy the api, worker and web services.
 4. **Variables › Raw Editor**:
 
 ```
@@ -200,9 +209,50 @@ The web app's Dockerfile reads `API_INTERNAL_URL` while it builds, because Next.
 `/v1` and `/socket.io` forwarding at build time. If you change it, redeploy the web service so
 it is rebuilt.
 
-### 4e. Deploy and check
+### 4e. The `storefront` service (online stores and landing pages)
 
-Deploy all three services (**Deploy** on each, or push to GitHub). Then check:
+Skip this step if you are not testing online stores yet.
+
+You need a domain you own, such as `yourdomain.com`. Every shop gets an address under
+`shops.yourdomain.com`, so Railway needs one wildcard domain, `*.shops.yourdomain.com`.
+
+1. **+ New › GitHub Repo › sellora-ai**.
+2. In **Settings**, set these:
+   - **Name**: `storefront`.
+   - **Root Directory**: `/sellora-storefront`.
+   - **Region**: Singapore.
+   - **Healthcheck Path**: `/api/health`.
+   - **Watch Paths** (optional): `/sellora-storefront/**`.
+3. **Variables › Raw Editor**:
+
+```
+PORT=3100
+API_INTERNAL_URL=http://${{api.RAILWAY_PRIVATE_DOMAIN}}:${{api.PORT}}
+STOREFRONT_API_KEY=${{api.STOREFRONT_API_KEY}}
+TRUST_PROXY_HOPS=1
+```
+
+4. **Settings › Networking › + Custom Domain**: enter `*.shops.yourdomain.com` with port
+   `3100`. Railway then shows two `CNAME` records and one `TXT` record. Add all three at your
+   domain's DNS provider exactly as shown. If your DNS is on Cloudflare, set the
+   `_acme-challenge` record to **DNS only** (grey cloud), or Railway cannot issue the
+   certificate. Wait until Railway shows the domain as verified (minutes, sometimes hours).
+5. Check that `STOREFRONT_BASE_DOMAIN=shops.yourdomain.com` is set on **api and worker**, and
+   redeploy them.
+
+Then try it: in the dashboard, open **Online store**, create a store, choose a theme and
+**Send for review**. In the super-admin panel, approve it under **Online stores**. Open
+`https://<store address>.shops.yourdomain.com`, place a cash-on-delivery order and find it in
+**Orders**.
+
+**Businesses' own domains** (such as `www.theirshop.com`) are off in this setup: leave
+`STOREFRONT_DOMAIN_TARGET` unset. On Railway each such domain would also have to be added to
+the storefront service by hand, and the Hobby plan allows 2 custom domains per service, one of
+which is the wildcard. Shops use their `shops.yourdomain.com` address until this is automated.
+
+### 4f. Deploy and check
+
+Deploy all the services (**Deploy** on each, or push to GitHub). Then check:
 
 1. **api › Deployments › logs** shows `Sellora API listening on 0.0.0.0:4000`, then a line
    `Platform owner … created. Open this link within 24 hours …`. Open that link and set your
@@ -294,6 +344,13 @@ There is no separate migration step.
   `REDIS_URL` on api and worker.
 - **Uploads fail in the browser with a CORS error**: check step 5. The origin must match the
   web address exactly, with `https://` and no trailing slash.
+- **A shop address shows Railway's "Application not found" page**: the wildcard domain is not
+  verified yet. Check the three DNS records from step 4e.
+- **A shop shows "opening soon"**: it has not been approved in the super-admin panel yet. **"No
+  store at this address"** means the address before `.shops.` does not match a store, or
+  `STOREFRONT_BASE_DOMAIN` on the api differs from the domain you added.
+- **Every shop page fails with an error**: check the storefront's logs. `STOREFRONT_API_KEY`
+  must equal the api's, which the `${{api.STOREFRONT_API_KEY}}` reference does for you.
 - **Live chat updates stop**: open the browser's network tab. `/socket.io` should upgrade to a
   WebSocket. If you put the web app behind another proxy or CDN, it must pass WebSockets.
   Hosting the web app on Vercel is not covered here: its rewrites to another host are not
@@ -301,10 +358,14 @@ There is no separate migration step.
 
 ## Render instead of Railway
 
-`render.yaml` (repository root) creates the same four pieces in Singapore. In the Render
+`render.yaml` (repository root) creates the same pieces in Singapore, with the online stores
+as `sellora-storefront`. In the Render
 dashboard, choose **New › Blueprint** and pick this repository. Render asks once for each secret
 and the worker copies them from the API. Set `WEB_APP_URL`, `API_PUBLIC_URL` and
 `CORS_ORIGINS` to the web service's `https://…onrender.com` address, and `NEXT_PUBLIC_SITE_URL`
-to the same address. The plans are Render's paid defaults: free web services sleep when idle,
+to the same address. For the online stores, set `STOREFRONT_BASE_DOMAIN` on the API, then add
+`*.shops.yourdomain.com` as a custom domain on `sellora-storefront`. Render asks for three
+`CNAME` records, and the base name (`shops.yourdomain.com`) must point to Render too. The plans
+are Render's paid defaults: free web services sleep when idle,
 which loses Meta's webhooks. Expect it to cost more than Railway for the same test. This
 Blueprint has not been applied to a Render account yet.

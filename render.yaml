@@ -1,5 +1,5 @@
-# Render Blueprint for Sellora: the API, the worker, the web app and a Key Value (Redis)
-# instance, in Singapore. Railway is the recommended host (see DEPLOY.md); use this file only
+# Render Blueprint for Sellora: the API, the worker, the web app, the online stores and a Key
+# Value (Redis) instance, in Singapore. Railway is the recommended host (see DEPLOY.md); use this file only
 # if you choose Render. In the Render dashboard: New > Blueprint, pick this repository.
 #
 # Not tried on Render yet. The Dockerfiles were built and run in production mode before
@@ -66,6 +66,9 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false
+      # Where shops live: <shop>.<this>, e.g. shops.yourdomain.com (see DEPLOY.md, Render).
+      - key: STOREFRONT_BASE_DOMAIN
+        sync: false
       - key: MONGODB_URI
         sync: false
       - key: SMTP_URL
@@ -105,6 +108,8 @@ services:
         sync: false
       - key: WEBCHAT_TOKEN_SECRET
         sync: false
+      - key: STOREFRONT_API_KEY
+        sync: false
       - key: STORAGE_SIGNING_SECRET
         sync: false
       - key: FRAUD_NETWORK_SECRET
@@ -132,6 +137,8 @@ services:
         fromService: { type: web, name: sellora-api, envVarKey: API_PUBLIC_URL }
       - key: CORS_ORIGINS
         fromService: { type: web, name: sellora-api, envVarKey: CORS_ORIGINS }
+      - key: STOREFRONT_BASE_DOMAIN
+        fromService: { type: web, name: sellora-api, envVarKey: STOREFRONT_BASE_DOMAIN }
       - key: MONGODB_URI
         fromService: { type: web, name: sellora-api, envVarKey: MONGODB_URI }
       - key: SMTP_URL
@@ -166,6 +173,8 @@ services:
         fromService: { type: web, name: sellora-api, envVarKey: BACKUP_ENCRYPTION_ACTIVE_KID }
       - key: WEBCHAT_TOKEN_SECRET
         fromService: { type: web, name: sellora-api, envVarKey: WEBCHAT_TOKEN_SECRET }
+      - key: STOREFRONT_API_KEY
+        fromService: { type: web, name: sellora-api, envVarKey: STOREFRONT_API_KEY }
       - key: STORAGE_SIGNING_SECRET
         fromService: { type: web, name: sellora-api, envVarKey: STORAGE_SIGNING_SECRET }
       - key: FRAUD_NETWORK_SECRET
@@ -191,3 +200,25 @@ services:
       # This app's public address, e.g. https://sellora-web.onrender.com
       - key: NEXT_PUBLIC_SITE_URL
         sync: false
+
+  # The online stores and landing pages. Add *.shops.yourdomain.com as its custom domain.
+  - type: web
+    name: sellora-storefront
+    runtime: docker
+    region: singapore
+    dockerfilePath: ./sellora-storefront/Dockerfile
+    dockerContext: ./sellora-storefront
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: '3100'
+      - key: TRUST_PROXY_HOPS
+        value: '1'
+      # The API's private address ("host:port"); the storefront adds http://.
+      - key: API_INTERNAL_URL
+        fromService:
+          type: web
+          name: sellora-api
+          property: hostport
+      - key: STOREFRONT_API_KEY
+        fromService: { type: web, name: sellora-api, envVarKey: STOREFRONT_API_KEY }

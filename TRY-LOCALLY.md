@@ -1,7 +1,7 @@
 # Try Sellora on your own computer
 
 One set of Docker commands runs everything: the database, Redis, the API, the background
-worker, the web app and a test email inbox. You do not need to install MongoDB, Redis or
+worker, the web app, the online stores and a test email inbox. You do not need to install MongoDB, Redis or
 Node.js.
 
 This setup is for trying Sellora, not for real customers. Messenger, Instagram and WhatsApp
@@ -47,11 +47,23 @@ Finish the platform owner account (password + 2FA) within 24 hours:
 
 ## Use it
 
-| What                 | Where                                                                                                                                                                          |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The app              | http://localhost:3000. Sign in as `owner@demo.sellora.test` (Dhaka Fashion House) or `shop@demo.sellora.test` (Nakshi Ghor). The password for both is `sellora demo password`. |
-| Super-admin          | Open the setup link from step 3. Choose a password, scan the QR code with an authenticator app, then use http://localhost:3000/admin.                                          |
-| Emails Sellora sends | http://localhost:8025 (Mailpit). This covers sign-up links, password resets and staff invites. Nothing leaves your computer.                                                   |
+| What                 | Where                                                                                                                                                                                         |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The app              | http://localhost:3000. Sign in as `owner@demo.sellora.test` (Dhaka Fashion House) or `shop@demo.sellora.test` (Nakshi Ghor). The password for both is `sellora demo password`.                |
+| Super-admin          | Open the setup link from step 3. Choose a password, scan the QR code with an authenticator app, then use http://localhost:3000/admin.                                                         |
+| Emails Sellora sends | http://localhost:8025 (Mailpit). This covers sign-up links, password resets and staff invites. Nothing leaves your computer.                                                                  |
+| Online stores        | `http://<shop address>.sellora.localhost:3100`, for example http://nakshi-ghor.sellora.localhost:3100. Use Chrome, Edge or Firefox, which send any `.localhost` address to your own computer. |
+
+### Open a demo online store
+
+1. Sign in as `shop@demo.sellora.test` and open **Online store**. Create a store with the
+   address `nakshi-ghor`, choose a theme, then **Send for review**.
+2. In the super-admin panel, open **Online stores**, open the store and approve it.
+3. Open http://nakshi-ghor.sellora.localhost:3100. Shop, check out with cash on delivery, and
+   the order appears in **Orders**.
+
+Landing pages work the same way (**Landing pages**, then approve them under **Landing pages**
+in the super-admin panel) and open at `http://nakshi-ghor.sellora.localhost:3100/<page address>`.
 
 ### Turn on the AI sales agent
 
@@ -85,8 +97,8 @@ Anthropic tokens.
 - SMS with your provider's credentials.
 - Backups. Copies to Google Drive need a Google OAuth client with the redirect
   `http://localhost:3000/v1/backups/google/callback`.
-- The online store and landing pages need the separate storefront app, which this setup does
-  not start.
+- Online stores and landing pages, with cash on delivery. Businesses' own domains need the
+  deployed version.
 
 **Needs the deployed version:**
 
@@ -108,9 +120,12 @@ docker compose down -v          # stop and ERASE all data (database, files, emai
 
 - `docker compose ps` shows what is running. `docker compose logs api` (or `worker`, `web`)
   shows why something stopped.
-- If **port 3000 or 8025 is already in use**, stop the other program, or change the left-hand
-  number under `ports:` in `compose.yaml`. If you change 3000, also change every
-  `localhost:3000` in that file.
+- If **port 3000, 3100 or 8025 is already in use**, stop the other program, or change the
+  left-hand number under `ports:` in `compose.yaml`. If you change 3000, also change every
+  `localhost:3000` in that file; if you change 3100, also change `STOREFRONT_BASE_DOMAIN`.
+- If a shop address says **"This site can't be reached"**, use Chrome, Edge or Firefox. Safari
+  may not send `.localhost` addresses to your computer.
+- If a shop shows **"opening soon"**, it has not been approved yet in the super-admin panel.
 - If the API keeps restarting with "Invalid environment configuration", the message names
   the setting. Usually `local-secrets.env` is empty or not plain text. Make it again with
   step 1.
