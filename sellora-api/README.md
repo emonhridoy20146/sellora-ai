@@ -63,6 +63,8 @@ Secrets never go in code or in git:
   run `node scripts/speech-stand-in.mjs` and set
   `AI_OPENAI_BASE_URL=http://127.0.0.1:4100/v1` with any key; it answers a scripted sentence
   and never listens to the recording.
+- Value dashboard and reports (ADR 0026) need no settings: they read the business's own
+  records and show on the overview and the Analytics page when the plan includes Reports.
 - Messenger, Instagram and WhatsApp use one Meta app for the platform: `META_APP_ID`,
   `META_APP_SECRET` and `META_WEBHOOK_VERIFY_TOKEN` (set all three or none), plus optional
   `META_LOGIN_CONFIG_ID` (Facebook Login for Business) and `META_WHATSAPP_CONFIG_ID` (WhatsApp

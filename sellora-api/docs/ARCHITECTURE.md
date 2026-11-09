@@ -164,6 +164,11 @@ adapter per provider), metered in AI credits by the second through the same rese
 and release calls as chat replies. The words are stored on the attachment and published live;
 the AI reply job waits for them and gives them to the agent as part of the customer's turn.
 
+Reports (ADR 0026) are read-only aggregations run on request through the tenant-scoped
+repositories (`analytics` module): messages, orders, carts, AI usage and the fraud check give
+the value dashboard, sales and chats for a period in the business's time zone. Nothing is
+stored for them.
+
 The `couriers` queue books parcels and follows them (ADR 0013). A single booking calls the
 courier straight away; bulk bookings run as `send` jobs, one per parcel, and every booking is
 written down as `queued` before the courier is called, so a crash or a lost reply never

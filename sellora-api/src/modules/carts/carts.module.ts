@@ -29,7 +29,8 @@ import { cartSchema, cartSettingsSchema } from './schemas.js';
     ]),
   ],
   providers: [CartRepository, CartSettingsRepository, CartsService, CartsListener],
-  exports: [CartsService],
+  // The repository is read by Reports (ADR 0026).
+  exports: [CartsService, CartRepository],
 })
 export class CartsCoreModule {}
 

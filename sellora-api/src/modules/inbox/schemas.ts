@@ -353,6 +353,8 @@ export const messageSchema = tenantSchema<Message>({
   ),
 });
 messageSchema.index({ orgId: 1, conversationId: 1, _id: -1 });
+// Reports read a period of messages (ADR 0026).
+messageSchema.index({ orgId: 1, createdAt: 1 });
 messageSchema.index(
   { orgId: 1, channelId: 1, externalId: 1 },
   { unique: true, partialFilterExpression: { externalId: { $type: 'string' } } },
