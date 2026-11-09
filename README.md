@@ -274,7 +274,7 @@ scripts/                     keys, bootstrap, indexes, dev seed
 ## Deploying (Railway or Render)
 
 `DEPLOY.md` at the root of the GitHub repository walks through a first deploy on Railway (API,
-worker, web app and Redis) with MongoDB Atlas, Cloudflare R2 and SMTP; `render.yaml` there is
+worker, web app, online stores and Redis) with MongoDB Atlas, Cloudflare R2 and SMTP; `render.yaml` there is
 the same on Render. `Dockerfile` in this folder builds one image for both processes:
 `node dist/main.js` (the default) and `node dist/worker.js`. Without a shell on the server,
 set `PLATFORM_BOOTSTRAP_EMAIL` for the first start: the API creates that platform owner and
