@@ -147,6 +147,17 @@ export default function StoreOverviewPage() {
             {s.review.reason}
           </Alert>
         )}
+        {s.changeRequest && s.status !== 'suspended' && (
+          <Alert tone="warning" title="Sellora asked you to fix something">
+            <p>{s.changeRequest.reason}</p>
+            <p className="mt-1 text-muted-foreground">
+              Asked {formatDateTime(s.changeRequest.askedAt, org.timezone)}. Your store stays open.{' '}
+              {s.changeRequest.changedSince
+                ? 'You saved changes since then; Sellora will look again.'
+                : 'Make the change and save; Sellora will look again.'}
+            </p>
+          </Alert>
+        )}
         {s.status === 'suspended' && (
           <Alert tone="danger" title="Store suspended">
             {s.review.reason ?? 'Contact support to reopen it.'}
@@ -168,7 +179,7 @@ export default function StoreOverviewPage() {
               <p className="text-sm text-muted-foreground">
                 Open since {formatDate(s.liveSince, org.timezone)}
                 {s.review.autoApproved ? ' (approved automatically)' : ''}. Changes you save show at
-                once.
+                once; Sellora looks at changes to the store’s words and design afterwards.
               </p>
             )}
             {showChecklist && (

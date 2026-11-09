@@ -1436,6 +1436,13 @@ export interface Store {
     reason: string | null;
     autoApproved: boolean;
   };
+  /** Sellora asked for a fix after the store opened (it stays open meanwhile). */
+  changeRequest: {
+    askedAt: IsoDate;
+    reason: string;
+    /** The business saved the store after the request. */
+    changedSince: boolean;
+  } | null;
   /** The address cannot change once the store has opened. */
   handleLocked: boolean;
   liveSince: IsoDate | null;
@@ -1514,9 +1521,39 @@ export interface PlatformStoreRow {
   themeKey: string;
   org: StoreOrgSummary | null;
   flagCount: number;
+  /** Changes made after approval that nobody has looked at yet. */
+  changes: {
+    since: IsoDate;
+    lastAt: IsoDate;
+    areas: StoreChangeArea[];
+    flagCount: number;
+    asked: boolean;
+  } | null;
   submittedAt: IsoDate | null;
   decidedAt: IsoDate | null;
   updatedAt: IsoDate;
+}
+
+export type StoreChangeArea =
+  'name' | 'design' | 'pages' | 'seo' | 'social' | 'checkout' | 'products';
+
+/** What changed since approval; `before` null: new, `now` null: removed. */
+export interface StoreTextChange {
+  where: string;
+  label: string;
+  before: string | null;
+  now: string | null;
+}
+
+export interface StoreChanges {
+  since: IsoDate;
+  lastAt: IsoDate;
+  areas: StoreChangeArea[];
+  flags: StoreReviewFlag[];
+  askedAt: IsoDate | null;
+  reason: string | null;
+  /** null: approved before Sellora kept a copy of the store's words. */
+  texts: StoreTextChange[] | null;
 }
 
 export interface PlatformStoreList {
@@ -1524,6 +1561,8 @@ export interface PlatformStoreList {
   total: number;
   /** Stores waiting for review, whatever the filter. */
   pending: number;
+  /** Stores changed since approval, waiting for a look. */
+  changed: number;
   page: number;
   pageSize: number;
 }
@@ -1532,6 +1571,7 @@ export interface PlatformStoreList {
 export interface PlatformStoreDetail extends Store {
   org: StoreOrgSummary | null;
   flags: StoreReviewFlag[];
+  changes: StoreChanges | null;
   statusBeforeSuspension: StoreStatus | null;
   preview: PreviewLink | null;
   domains: StoreDomain[];
@@ -2828,4 +2868,48 @@ export interface AnalyticsOverview {
     byDay: { date: string; orders: number; valueMinor: number; aiOrders: number }[];
     topProducts: { productId: string; name: string; quantity: number; valueMinor: number }[];
   } | null;
+}
+
+/** GET /orgs/:orgId/stores/:storeId/stats (ADR 0027) */
+export type TrafficSource =
+  | 'facebook'
+  | 'instagram'
+  | 'whatsapp'
+  | 'google'
+  | 'tiktok'
+  | 'youtube'
+  | 'sms'
+  | 'other'
+  | 'direct';
+
+export interface StoreDayNumbers {
+  visitors: number;
+  productViewers: number;
+  cartVisitors: number;
+  checkoutVisitors: number;
+  orders: number;
+  revenueMinor: number;
+}
+
+export type StoreFunnelStep =
+  'visited' | 'viewed_product' | 'added_to_cart' | 'started_checkout' | 'ordered';
+
+export interface StoreStats {
+  days: ({ day: string } & StoreDayNumbers)[];
+  total: StoreDayNumbers;
+  previous: StoreDayNumbers;
+  conversionRate: number | null;
+  funnel: { step: StoreFunnelStep; shoppers: number }[];
+  sources: { source: TrafficSource; visitors: number; orders: number }[];
+  products: {
+    productId: string;
+    name: string | null;
+    slug: string | null;
+    viewers: number;
+    orders: number;
+    units: number;
+    revenueMinor: number;
+    conversionRate: number | null;
+  }[];
+  currency: string;
 }

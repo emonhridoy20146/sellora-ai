@@ -55,6 +55,7 @@ export default function StoreEditorLayout({ children }: { children: React.ReactN
       <TabNav
         tabs={[
           { href: base, label: 'Overview', exact: true },
+          { href: `${base}/numbers`, label: 'Numbers' },
           { href: `${base}/design`, label: 'Design' },
           { href: `${base}/details`, label: 'Details' },
           { href: `${base}/pages`, label: 'Pages' },

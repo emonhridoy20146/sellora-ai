@@ -8,6 +8,7 @@ import {
   ExternalLink,
   Eye,
   Flag,
+  PencilLine,
   RefreshCw,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -27,9 +28,21 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
-import type { PlatformStoreDetail, StoreReviewFlag, StoreStatus } from '@/lib/api/types';
+import type {
+  PlatformStoreDetail,
+  StoreChanges,
+  StoreReviewFlag,
+  StoreStatus,
+} from '@/lib/api/types';
 import { formatDateTime, formatMoney, formatRelative, humanize } from '@/lib/format';
-import { PAGE_INFO, PAGE_KEYS, SECTION_LABEL, STORE_STATUS, sectionSummary } from '@/lib/stores';
+import {
+  CHANGE_AREA_LABEL,
+  PAGE_INFO,
+  PAGE_KEYS,
+  SECTION_LABEL,
+  STORE_STATUS,
+  sectionSummary,
+} from '@/lib/stores';
 
 type Decision = 'approve' | 'reject' | 'suspend' | 'reinstate';
 
@@ -50,7 +63,7 @@ const DECISION: Record<
   approve: {
     label: 'Approve and open',
     title: 'Open this store to shoppers?',
-    text: 'The store goes live at its address at once and the owner gets an email. Later edits are not reviewed again; suspend the store if it breaks the rules.',
+    text: 'The store goes live at its address at once and the owner gets an email. Later changes to its words and design go live too, and come back here under “Changed since approval”.',
   },
   reject: {
     label: 'Ask for changes',
@@ -88,6 +101,126 @@ function FlagList({ flags }: { flags: StoreReviewFlag[] }) {
   );
 }
 
+function TextChange({
+  label,
+  before,
+  now,
+}: {
+  label: string;
+  before: string | null;
+  now: string | null;
+}) {
+  return (
+    <li className="grid gap-1.5 rounded-md border p-3 text-sm">
+      <span className="font-medium">{label}</span>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="min-w-0">
+          <span className="text-xs text-muted-foreground">Before</span>
+          <p className="break-words whitespace-pre-line text-muted-foreground">
+            {before ?? <em>Not there</em>}
+          </p>
+        </div>
+        <div className="min-w-0">
+          <span className="text-xs text-muted-foreground">Now</span>
+          <p className="break-words whitespace-pre-line">{now ?? <em>Removed</em>}</p>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+/** Changes the business made after approval: live already, waiting for a look. */
+function ChangesCard({
+  changes,
+  timezone,
+  editable,
+  busy,
+  onAccept,
+  onAsk,
+}: {
+  changes: StoreChanges;
+  timezone?: string;
+  editable: boolean;
+  busy: boolean;
+  onAccept: () => void;
+  onAsk: () => void;
+}) {
+  const changedAfterAsk = changes.askedAt && changes.lastAt > changes.askedAt;
+  return (
+    <Card className="border-warning/50">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <PencilLine className="size-4" aria-hidden /> Changed since approval
+        </CardTitle>
+        <CardDescription>
+          The business changed{' '}
+          {changes.areas.map((a) => CHANGE_AREA_LABEL[a].toLowerCase()).join(', ')} after the store
+          was approved. Shoppers already see it. Look, then mark it fine or ask for a fix (the store
+          stays open); suspend the store if shoppers must not see it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-4 text-sm">
+        <p className="text-muted-foreground">
+          First change {formatDateTime(changes.since, timezone)}
+          {changes.lastAt !== changes.since
+            ? `, last ${formatDateTime(changes.lastAt, timezone)}`
+            : ''}
+          .
+        </p>
+        {changes.askedAt && (
+          <Alert tone="info" title={`You asked for a fix ${formatRelative(changes.askedAt)}`}>
+            <p>{changes.reason}</p>
+            <p className="mt-1 text-muted-foreground">
+              {changedAfterAsk
+                ? 'The business saved the store after that.'
+                : 'Nothing has changed since.'}
+            </p>
+          </Alert>
+        )}
+        {changes.flags.length ? (
+          <FlagList flags={changes.flags} />
+        ) : (
+          <p className="flex items-center gap-2 text-success">
+            <CircleCheck className="size-4" aria-hidden /> No warnings in what changed.
+          </p>
+        )}
+        {changes.texts === null ? (
+          <p className="text-muted-foreground">
+            This store was approved before Sellora kept a copy of its words, so the earlier version
+            cannot be shown. The words as they are now are below.
+          </p>
+        ) : changes.texts.length ? (
+          <ul className="grid gap-2" aria-label="Words changed">
+            {changes.texts.map((t) => (
+              <TextChange key={t.where} label={t.label} before={t.before} now={t.now} />
+            ))}
+          </ul>
+        ) : null}
+        {(changes.areas.includes('design') || changes.areas.includes('products')) && (
+          <p className="text-muted-foreground">
+            {changes.areas.includes('design')
+              ? 'Pictures, colours and layout are not compared: open the store to see them. '
+              : ''}
+            {changes.areas.includes('products')
+              ? 'Products saved since approval are checked one by one; only warnings bring them here.'
+              : ''}
+          </p>
+        )}
+        {editable && (
+          <div className="flex flex-wrap gap-2">
+            <Button loading={busy} onClick={onAccept}>
+              <CircleCheck /> Looks fine
+            </Button>
+            <Button variant="outline" onClick={onAsk}>
+              Ask for a fix
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-0.5 sm:grid-cols-[160px_1fr] sm:gap-3">
@@ -104,6 +237,7 @@ export default function PlatformStorePage() {
   const { can } = usePlatform();
   const queryClient = useQueryClient();
   const [decision, setDecision] = useState<Decision | null>(null);
+  const [asking, setAsking] = useState(false);
   const key = ['platform', 'stores', 'detail', storeId];
   const detail = useQuery({
     queryKey: key,
@@ -119,6 +253,36 @@ export default function PlatformStorePage() {
     },
     onError: (err) => toast.error(errorMessage(err)),
   });
+
+  const accept = useMutation({
+    meta: { silent: true },
+    mutationFn: (lastChangeAt: string) =>
+      api<PlatformStoreDetail>(`/platform/stores/${storeId}/changes/accept`, {
+        method: 'POST',
+        body: { lastChangeAt },
+      }),
+    onSuccess: (next) => {
+      queryClient.setQueryData(key, next);
+      void queryClient.invalidateQueries({ queryKey: ['platform', 'stores'] });
+      toast.success('Marked as looked at.');
+    },
+    onError: (err) => {
+      toast.error(errorMessage(err));
+      void detail.refetch();
+    },
+  });
+  const askForFix = async (reason: string) => {
+    const next = await api<PlatformStoreDetail>(`/platform/stores/${storeId}/changes/ask`, {
+      method: 'POST',
+      body: { reason },
+    }).catch((err: unknown) => {
+      toast.error(errorMessage(err));
+      throw err;
+    });
+    queryClient.setQueryData(key, next);
+    void queryClient.invalidateQueries({ queryKey: ['platform', 'stores'] });
+    toast.success('The owner has been asked by email and in the dashboard.');
+  };
 
   if (detail.isPending) return <Skeleton className="h-96" />;
   if (detail.isError)
@@ -205,6 +369,15 @@ export default function PlatformStorePage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="grid min-w-0 content-start gap-6">
+          {s.changes && (
+            <ChangesCard
+              changes={s.changes}
+              editable={editable}
+              busy={accept.isPending}
+              onAccept={() => accept.mutate(s.changes!.lastAt)}
+              onAsk={() => setAsking(true)}
+            />
+          )}
           <Card>
             <CardHeader className="flex-row items-start justify-between gap-3">
               <div>
@@ -447,6 +620,17 @@ export default function PlatformStorePage() {
         reasonLabel={decision ? DECISION[decision].reason : undefined}
         reasonMin={5}
         onConfirm={(reason) => (decision ? decide(decision, reason) : undefined)}
+      />
+      <ConfirmDialog
+        open={asking}
+        onOpenChange={setAsking}
+        title="Ask the business to fix this?"
+        description="The owner gets an email and sees your note on the store page. The store stays open; it stays in this list until you mark the changes fine."
+        confirmLabel="Ask for a fix"
+        reason
+        reasonLabel="What to fix (the owner sees this)"
+        reasonMin={5}
+        onConfirm={(reason) => askForFix(reason)}
       />
     </>
   );
