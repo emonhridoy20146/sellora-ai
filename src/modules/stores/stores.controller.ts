@@ -328,6 +328,30 @@ export class PlatformStoresController {
     await this.review.reinstate(id);
     return this.review.detail(id);
   }
+
+  @Post(':storeId/changes/accept')
+  @HttpCode(200)
+  @RequirePlatformPermissions('platform.stores.approve')
+  @ApiOperation({ summary: 'Mark changes made after approval as looked at and fine' })
+  async acceptChanges(
+    @ZodParam('storeId', dto.storeIdParam) id: string,
+    @ZodBody(dto.acceptChangesBody) body: z.infer<typeof dto.acceptChangesBody>,
+  ) {
+    await this.review.acceptChanges(id, new Date(body.lastChangeAt));
+    return this.review.detail(id);
+  }
+
+  @Post(':storeId/changes/ask')
+  @HttpCode(200)
+  @RequirePlatformPermissions('platform.stores.approve')
+  @ApiOperation({ summary: 'Ask the business to fix something it changed (the store stays open)' })
+  async askForFix(
+    @ZodParam('storeId', dto.storeIdParam) id: string,
+    @ZodBody(dto.reasonBody) body: z.infer<typeof dto.reasonBody>,
+  ) {
+    await this.review.askForFix(id, body.reason);
+    return this.review.detail(id);
+  }
 }
 
 // ---------------------------------------------------------------- shoppers (storefront app)

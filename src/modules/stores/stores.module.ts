@@ -20,6 +20,7 @@ import {
   storeSchema,
   storeStatSchema,
 } from './schemas.js';
+import { StoreChangesService } from './store-changes.service.js';
 import { StoreDomainsService } from './store-domains.service.js';
 import { StoreLinksService } from './store-links.service.js';
 import { StoreNotifier } from './store-notifier.service.js';
@@ -66,6 +67,7 @@ import { StoresService } from './stores.service.js';
     StoreProductStatRepository,
     StoreLinksService,
     StoreNotifier,
+    StoreChangesService,
     StoresService,
     StoreDomainsService,
     StoreReviewService,

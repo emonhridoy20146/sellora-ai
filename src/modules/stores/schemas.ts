@@ -31,6 +31,43 @@ export interface ReviewFlag {
   reason: string;
 }
 
+/** One piece of the store's own words, as the automatic check and the reviewer read it. */
+export interface StoreText {
+  /** Where it is: "name", "seo", "page:about", "section:<id>". */
+  where: string;
+  label: string;
+  text: string;
+}
+
+/** The parts of an open store whose edits a super-admin looks at again (ADR 0028). */
+export const STORE_CHANGE_AREAS = [
+  'name',
+  'design',
+  'pages',
+  'seo',
+  'social',
+  'checkout',
+  'products',
+] as const;
+export type StoreChangeArea = (typeof STORE_CHANGE_AREAS)[number];
+
+/**
+ * Edits made after the store was approved. They are live already; this waits for a
+ * super-admin to look, and goes away when they accept the changes.
+ */
+export interface StoreChanges {
+  /** The first change nobody has looked at yet. */
+  since: Date;
+  lastAt: Date;
+  areas: StoreChangeArea[];
+  /** What the automatic check found in the changed words (and in products saved since). */
+  flags: ReviewFlag[];
+  /** When the super-admin asked the business to fix something, and what. */
+  askedAt?: Date;
+  askedBy?: { id: string; label?: string };
+  reason?: string;
+}
+
 export interface StoreReview {
   submittedAt?: Date;
   submittedBy?: { id: string; label?: string };
@@ -40,6 +77,8 @@ export interface StoreReview {
   reason?: string;
   flags: ReviewFlag[];
   autoApproved?: boolean;
+  /** The store's words when it was last approved (or its changes accepted), to compare with. */
+  approvedTexts?: StoreText[];
 }
 
 export interface Store {
@@ -67,6 +106,7 @@ export interface Store {
   /** The status before a suspension, to return to when it is lifted. */
   statusBeforeSuspension?: StoreStatus;
   review: StoreReview;
+  changes?: StoreChanges;
   /** First time the store opened to shoppers; the handle is fixed from then on. */
   liveSince?: Date;
   /** The active custom domain shoppers are sent to (ADR 0015); none: the Sellora address. */
@@ -75,6 +115,10 @@ export interface Store {
 }
 
 const by = new Schema({ id: String, label: String }, { _id: false, strict: 'throw' });
+const flag = new Schema(
+  { where: String, label: String, term: String, reason: String },
+  { _id: false, strict: 'throw' },
+);
 
 export const storeSchema = tenantSchema<Store>({
   name: { type: String, required: true, trim: true },
@@ -126,20 +170,36 @@ export const storeSchema = tenantSchema<Store>({
         decidedAt: Date,
         decidedBy: by,
         reason: String,
-        flags: {
+        flags: { type: [flag], default: [] },
+        autoApproved: Boolean,
+        approvedTexts: {
           type: [
             new Schema(
-              { where: String, label: String, term: String, reason: String },
+              { where: String, label: String, text: String },
               { _id: false, strict: 'throw' },
             ),
           ],
-          default: [],
+          default: undefined,
         },
-        autoApproved: Boolean,
       },
       { _id: false, strict: 'throw' },
     ),
     default: () => ({ flags: [] }),
+  },
+  changes: {
+    type: new Schema(
+      {
+        since: { type: Date, required: true },
+        lastAt: { type: Date, required: true },
+        areas: { type: [{ type: String, enum: STORE_CHANGE_AREAS }], default: [] },
+        flags: { type: [flag], default: [] },
+        askedAt: Date,
+        askedBy: by,
+        reason: String,
+      },
+      { _id: false, strict: 'throw' },
+    ),
+    default: undefined,
   },
   liveSince: Date,
   primaryDomain: String,
@@ -150,6 +210,11 @@ storeSchema.index({ handle: 1 }, { unique: true });
 storeSchema.index({ orgId: 1, createdAt: 1 });
 // The super-admin's review queue.
 storeSchema.index({ status: 1, 'review.submittedAt': 1 });
+// Changes made after approval, oldest first.
+storeSchema.index(
+  { 'changes.since': 1 },
+  { partialFilterExpression: { 'changes.since': { $exists: true } } },
+);
 
 // ---------------------------------------------------------------- custom domains
 

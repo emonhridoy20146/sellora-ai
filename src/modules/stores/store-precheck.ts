@@ -1,4 +1,4 @@
-import type { ReviewFlag } from './schemas.js';
+import type { ReviewFlag, StoreText } from './schemas.js';
 
 /**
  * The automatic check before a super-admin reviews a store. It never decides: it points the
@@ -84,11 +84,7 @@ const COMPILED = RULES.map((rule) => ({
   })),
 }));
 
-export interface CheckedText {
-  where: string;
-  label: string;
-  text: string;
-}
+export type CheckedText = StoreText;
 
 /** Flags for the reviewer, at most one per rule and place, and at most 50 in all. */
 export function precheckStore(texts: CheckedText[]): ReviewFlag[] {

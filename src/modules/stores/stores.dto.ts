@@ -113,12 +113,20 @@ export const primaryDomainBody = z.object({ domainId: objectIdSchema.nullable() 
 
 export const platformStoresQuery = z.object({
   status: z.enum(STORE_STATUSES).optional(),
+  /** Only stores changed since they were approved, waiting for a look (oldest first). */
+  changed: z
+    .enum(['true', 'false'])
+    .transform((v) => v === 'true')
+    .optional(),
   q: z.string().trim().max(80).optional(),
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });
 
 export const reasonBody = z.object({ reason: text(500).min(5) }).strict();
+
+/** Accepting changes names the last change the reviewer saw, so a newer one is not missed. */
+export const acceptChangesBody = z.object({ lastChangeAt: z.iso.datetime() }).strict();
 
 export const platformDomainsQuery = z.object({
   status: z.enum(DOMAIN_STATUSES).optional(),
