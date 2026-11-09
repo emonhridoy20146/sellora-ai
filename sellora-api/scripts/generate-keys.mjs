@@ -18,3 +18,6 @@ console.log(`BACKUP_ENCRYPTION_ACTIVE_KID=b${kid}`);
 console.log(`WEBCHAT_TOKEN_SECRET=${randomBytes(32).toString('hex')}`);
 console.log(`STORAGE_SIGNING_SECRET=${randomBytes(32).toString('hex')}`);
 console.log(`METRICS_TOKEN=${randomBytes(24).toString('hex')}`);
+console.log(`STOREFRONT_API_KEY=${randomBytes(32).toString('hex')}`);
+console.log(`FRAUD_NETWORK_SECRET=${randomBytes(32).toString('hex')}`);
+console.log(`META_WEBHOOK_VERIFY_TOKEN=${randomBytes(24).toString('hex')}`);

@@ -55,6 +55,11 @@ export class S3StorageDriver extends StorageDriver {
       ...(opts.endpoint ? { endpoint: opts.endpoint } : {}),
       forcePathStyle: opts.forcePathStyle,
       credentials: { accessKeyId: opts.accessKeyId, secretAccessKey: opts.secretAccessKey },
+      // By default the SDK puts a CRC32 of an empty body into presigned upload links, which
+      // AWS S3 rejects once the browser sends the real file, and not every S3-compatible
+      // service (R2, B2) handles the newer checksum headers. Only send them when required.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
   }
 
