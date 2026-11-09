@@ -74,7 +74,9 @@ function nav(orgId: string, can: (p: string) => boolean): NavSection[] {
       ...(can('marketing.view') || can('marketing.manage')
         ? [{ href: `${base}/marketing`, label: 'Marketing', icon: Megaphone }]
         : []),
-      { href: `${base}/analytics`, label: 'Analytics', icon: BarChart3, soon: true },
+      ...(can('analytics.view')
+        ? [{ href: `${base}/analytics`, label: 'Analytics', icon: BarChart3 }]
+        : []),
     ],
   };
   const manage: NavSection = { label: 'Manage', items: [] };
