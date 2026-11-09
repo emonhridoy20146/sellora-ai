@@ -315,6 +315,40 @@ credentials as above:
 node scripts/domains-flow.mjs
 ```
 
+### Store numbers browser flow
+
+`scripts/store-numbers-flow.mjs` uses the open store `stores-flow.mjs` leaves behind. A
+shopper arrives from a Facebook ad (utm tags and fbclid), looks at a product (twice: counted
+once), adds it to the cart, opens the checkout and orders; a second shopper arrives from
+Instagram on a phone and looks at a product, and their second tab is not counted again; the
+business opens its own preview, which sends nothing. It then checks that the API's numbers
+grew by exactly those steps (visitors, product views, cart, checkout, orders, order value,
+Facebook and Instagram, the product's looks and orders), that the order kept its ad tags, that
+MongoDB holds only counts (no browser id or address; read only, connection from
+sellora-api/.env), and that the store's Numbers tab shows the API's numbers for 7 days, its
+funnel, sources and products, a chart's table view and 90 days when chosen, on a phone and in
+dark mode. The shoppers are the script's own browsers and the order is a test order.
+Screenshots go to `smoke-output/store-numbers/`. Needs the storefront app on port 3100:
+
+```bash
+node scripts/store-numbers-flow.mjs
+```
+
+### Store changes after approval browser flow
+
+`scripts/store-changes-flow.mjs` (same open store, plus the super-admin details) changes the
+store's About page to mention "master copy" bags and checks that shoppers see it at once, that
+the store appears in Admin › Online stores › Changed since approval with the warning and the
+words before and now, that asking for a fix emails the owner (the dev outbox) and shows the
+note on the store page while the store stays open, that the fix clears the warning and the
+reviewer sees it came after the request, and that "Looks fine" empties the queue. It puts the
+About page back and leaves nothing in the queue. Screenshots go to
+`smoke-output/store-changes/`.
+
+```bash
+node scripts/store-changes-flow.mjs
+```
+
 ### Landing pages browser flow
 
 `scripts/landing-flow.mjs` follows a landing page from the first click to a cancelled order,
