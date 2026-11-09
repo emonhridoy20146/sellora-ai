@@ -1,4 +1,5 @@
 import 'server-only';
+import { internalApiUrl } from './internal-url';
 import type { Plan, PublicPlatformStatus } from './types';
 
 /**
@@ -6,10 +7,10 @@ import type { Plan, PublicPlatformStatus } from './types';
  * throwing so the page still renders (without prices) when the API is unreachable.
  */
 async function getPublic<T>(path: string, revalidate: number): Promise<T | null> {
-  const base = process.env.API_INTERNAL_URL;
+  const base = internalApiUrl(process.env.API_INTERNAL_URL);
   if (!base) return null;
   try {
-    const res = await fetch(`${base.replace(/\/+$/, '')}/v1${path}`, {
+    const res = await fetch(`${base}/v1${path}`, {
       next: { revalidate },
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(4_000),

@@ -1,6 +1,10 @@
 import type { NextConfig } from 'next';
 
-const apiUrl = (process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:4000').replace(/\/+$/, '');
+// Same rule as src/lib/api/internal-url.ts: a bare "host:port" (Render's private address) is http.
+const rawApiUrl = (process.env.API_INTERNAL_URL || 'http://127.0.0.1:4000')
+  .trim()
+  .replace(/\/+$/, '');
+const apiUrl = /^https?:\/\//i.test(rawApiUrl) ? rawApiUrl : `http://${rawApiUrl}`;
 
 /**
  * The browser talks to this site only. Every /v1/* request is forwarded to the API, so the

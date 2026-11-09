@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { internalApiUrl } from '@/lib/api/internal-url';
 
-const apiUrl = (process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:4000').replace(/\/+$/, '');
+const apiUrl = internalApiUrl(process.env.API_INTERNAL_URL) ?? 'http://127.0.0.1:4000';
 const WIDGET_KEY = /^\/widget\/(wc_[A-Za-z0-9_-]{24})\/?$/;
 const CACHE_MS = 60_000;
 const allowedSites = new Map<string, { at: number; origins: string[] | null }>();

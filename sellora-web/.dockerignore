@@ -1,0 +1,10 @@
+node_modules
+.next
+smoke-output
+coverage
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+*.log
+.git
