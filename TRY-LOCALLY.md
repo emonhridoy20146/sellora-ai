@@ -61,6 +61,14 @@ Finish the platform owner account (password + 2FA) within 24 hours:
 2. In the super-admin panel, open **Online stores**, open the store and approve it.
 3. Open http://nakshi-ghor.sellora.localhost:3100. Shop, check out with cash on delivery, and
    the order appears in **Orders**.
+4. Open the store again in the dashboard and choose the **Numbers** tab: your visit, the
+   product you looked at, the cart, the checkout and the order are counted (each shopper once
+   a day). To see a source, open the store with `?utm_source=facebook` at the end of the
+   address in a private window. Your own **Preview** is never counted.
+5. Change something shoppers read, for example **Pages › About us**, and save. It is live at
+   once, and the store appears in the super-admin panel under **Online stores › Changed since
+   approval** with the words before and now. Try **Ask for a fix** (the owner sees the note on
+   the store page and gets an email in Mailpit, http://localhost:8025) and **Looks fine**.
 
 Landing pages work the same way (**Landing pages**, then approve them under **Landing pages**
 in the super-admin panel) and open at `http://nakshi-ghor.sellora.localhost:3100/<page address>`.
