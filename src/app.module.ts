@@ -22,6 +22,7 @@ import { BackupsModule } from './modules/backups/backups.module.js';
 import { BillingModule } from './modules/billing/billing.module.js';
 import { CampaignsModule } from './modules/campaigns/campaigns.module.js';
 import { CartsModule } from './modules/carts/carts.module.js';
+import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { CommerceModule } from './modules/commerce/commerce.module.js';
 import { CouriersModule } from './modules/couriers/couriers.module.js';
 import { FraudModule } from './modules/fraud/fraud.module.js';
@@ -123,6 +124,7 @@ export class AppModule {
         BackupsModule,
         TelegramModule,
         CatalogSyncModule,
+        AnalyticsModule,
       ],
       controllers: [MetricsController],
       providers: [

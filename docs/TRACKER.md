@@ -284,6 +284,19 @@ or real Claude.
 | "Turn voice notes into text" switch with the price per minute (AI agent settings); speech models and voice price in Admin › AI credits & models                | Done      | Browser flow 10/10 steps against the stand-ins.                                     |
 | Sending or recording voice notes (staff replies, website chat)                                                                                                 | Not built |                                                                                     |
 
+## Value dashboard and first analytics (Phase 1, from M8)
+
+ADR 0026. Checked with e2e tests on seeded records with known answers and a browser flow on the
+demo business, whose chats and AI replies came from the Meta and Claude stand-ins.
+
+| Feature                                                                                                                                                                       | Status    | Notes                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------ |
+| Report API: value, sales and chats for any period up to 366 days, in the business's time zone, each part only when its module is in the plan                                  | Done      | Needs Reports in the plan and `analytics.view`. Computed on request, nothing stored. |
+| Value tiles: time saved (estimate, 2 min a reply), chats the AI handled alone, orders taken by the AI, AI cost, voice notes understood, carts won back, risky orders not sent | Done      | Risky orders use today's risk rating.                                                |
+| Overview: the four headline tiles for the last 30 days                                                                                                                        | Done      |                                                                                      |
+| Analytics page: 7, 30 or 90 days; sales and chats with charts (table view), sources, best sellers, reply times, chats by channel                                              | Done      | Browser flow 8/8 steps.                                                              |
+| Ads analytics and forecasts, report exports, previous-period comparison, per-staff numbers                                                                                    | Not built | Ads need Meta ads access (M8).                                                       |
+
 ## Later milestones
 
 | Milestone | Features                                                                                                                        | Status                                                                                                                                         |
@@ -291,7 +304,7 @@ or real Claude.
 | M5        | Couriers and fraud check                                                                                                        | See above                                                                                                                                      |
 | M6        | Store builder, themes, subdomain and custom domain with super-admin approval (`sellora-storefront`)                             | Done in development (see above); real DNS and certificates still to try                                                                        |
 | M7        | Landing page builder, marketing automation, SMS, abandoned carts                                                                | Done in development; real SMS still to try                                                                                                     |
-| M8        | Ads analytics and forecasts, AI SEO studio, reports                                                                             | Not started                                                                                                                                    |
+| M8        | Ads analytics and forecasts, AI SEO studio, reports                                                                             | Value dashboard and first reports done in development (see above); ads analytics, forecasts and the AI SEO studio not started                  |
 | M9        | Backups (daily, weekly, monthly; client Google Drive; super-admin restore and download), Telegram stats, VPS deployment scripts | Backups and Telegram reports and alerts done in development (Google Drive and Telegram only against stand-ins); deployment scripts not started |
 
 ## Known gaps and follow-ups
