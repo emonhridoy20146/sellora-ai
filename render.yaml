@@ -1,0 +1,193 @@
+# Render Blueprint for Sellora: the API, the worker, the web app and a Key Value (Redis)
+# instance, in Singapore. Railway is the recommended host (see DEPLOY.md); use this file only
+# if you choose Render. In the Render dashboard: New > Blueprint, pick this repository.
+#
+# Not tried on Render yet. The Dockerfiles were built and run in production mode before
+# release, but this file has not been applied to a Render account.
+#
+# Render asks once for every value marked `sync: false` (the API's secrets and the web
+# address). The worker copies each of them from the API, so you enter them only once. Print
+# the generated secrets on your computer with:  node sellora-api/scripts/generate-keys.mjs
+#
+# Plans are left to Render's defaults (paid instances that do not sleep). Free web services
+# sleep when idle, which loses Meta's webhooks, so they are not used here.
+
+envVarGroups:
+  - name: sellora-api-settings
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Browser -> Render's proxy -> web app -> API. After signing in, "Where you are signed in"
+      # in Account should show your own address. If not, try 2.
+      - key: TRUST_PROXY_HOPS
+        value: '1'
+      - key: COOKIE_SECURE
+        value: 'true'
+      - key: STOREFRONT_URL_SCHEME
+        value: https
+      - key: MONGODB_DB_NAME
+        value: sellora
+      - key: MAIL_TRANSPORT
+        value: smtp
+      - key: STORAGE_DRIVER
+        value: s3
+      - key: S3_REGION
+        value: auto
+      - key: S3_FORCE_PATH_STYLE
+        value: 'true'
+
+services:
+  - type: keyvalue
+    name: sellora-redis
+    region: singapore
+    # BullMQ queues must never be evicted.
+    maxmemoryPolicy: noeviction
+    # Only Render services in this account may connect.
+    ipAllowList: []
+
+  - type: web
+    name: sellora-api
+    runtime: docker
+    region: singapore
+    dockerfilePath: ./sellora-api/Dockerfile
+    dockerContext: ./sellora-api
+    healthCheckPath: /v1/health/ready
+    envVars:
+      - fromGroup: sellora-api-settings
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: sellora-redis
+          property: connectionString
+      # The web app's public address, e.g. https://sellora-web.onrender.com (all three the same).
+      - key: WEB_APP_URL
+        sync: false
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: SMTP_URL
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: AI_ANTHROPIC_API_KEY
+        sync: false
+      # Optional (voice notes to text). Leave empty to keep voice notes audio only.
+      - key: AI_OPENAI_API_KEY
+        sync: false
+      # First deploy only: your email. Then remove it (see DEPLOY.md).
+      - key: PLATFORM_BOOTSTRAP_EMAIL
+        sync: false
+      # From generate-keys.mjs:
+      - key: JWT_KEY_ID
+        sync: false
+      - key: JWT_PRIVATE_KEY
+        sync: false
+      - key: JWT_PUBLIC_KEY
+        sync: false
+      - key: DATA_ENCRYPTION_KEYS
+        sync: false
+      - key: DATA_ENCRYPTION_ACTIVE_KID
+        sync: false
+      - key: BACKUP_ENCRYPTION_KEYS
+        sync: false
+      - key: BACKUP_ENCRYPTION_ACTIVE_KID
+        sync: false
+      - key: WEBCHAT_TOKEN_SECRET
+        sync: false
+      - key: STORAGE_SIGNING_SECRET
+        sync: false
+      - key: FRAUD_NETWORK_SECRET
+        sync: false
+      - key: META_WEBHOOK_VERIFY_TOKEN
+        sync: false
+
+  - type: worker
+    name: sellora-worker
+    runtime: docker
+    region: singapore
+    dockerfilePath: ./sellora-api/Dockerfile
+    dockerContext: ./sellora-api
+    dockerCommand: node dist/worker.js
+    envVars:
+      - fromGroup: sellora-api-settings
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: sellora-redis
+          property: connectionString
+      - key: WEB_APP_URL
+        fromService: { type: web, name: sellora-api, envVarKey: WEB_APP_URL }
+      - key: API_PUBLIC_URL
+        fromService: { type: web, name: sellora-api, envVarKey: API_PUBLIC_URL }
+      - key: CORS_ORIGINS
+        fromService: { type: web, name: sellora-api, envVarKey: CORS_ORIGINS }
+      - key: MONGODB_URI
+        fromService: { type: web, name: sellora-api, envVarKey: MONGODB_URI }
+      - key: SMTP_URL
+        fromService: { type: web, name: sellora-api, envVarKey: SMTP_URL }
+      - key: MAIL_FROM
+        fromService: { type: web, name: sellora-api, envVarKey: MAIL_FROM }
+      - key: S3_ENDPOINT
+        fromService: { type: web, name: sellora-api, envVarKey: S3_ENDPOINT }
+      - key: S3_BUCKET
+        fromService: { type: web, name: sellora-api, envVarKey: S3_BUCKET }
+      - key: S3_ACCESS_KEY_ID
+        fromService: { type: web, name: sellora-api, envVarKey: S3_ACCESS_KEY_ID }
+      - key: S3_SECRET_ACCESS_KEY
+        fromService: { type: web, name: sellora-api, envVarKey: S3_SECRET_ACCESS_KEY }
+      - key: AI_ANTHROPIC_API_KEY
+        fromService: { type: web, name: sellora-api, envVarKey: AI_ANTHROPIC_API_KEY }
+      - key: AI_OPENAI_API_KEY
+        fromService: { type: web, name: sellora-api, envVarKey: AI_OPENAI_API_KEY }
+      - key: JWT_KEY_ID
+        fromService: { type: web, name: sellora-api, envVarKey: JWT_KEY_ID }
+      - key: JWT_PRIVATE_KEY
+        fromService: { type: web, name: sellora-api, envVarKey: JWT_PRIVATE_KEY }
+      - key: JWT_PUBLIC_KEY
+        fromService: { type: web, name: sellora-api, envVarKey: JWT_PUBLIC_KEY }
+      - key: DATA_ENCRYPTION_KEYS
+        fromService: { type: web, name: sellora-api, envVarKey: DATA_ENCRYPTION_KEYS }
+      - key: DATA_ENCRYPTION_ACTIVE_KID
+        fromService: { type: web, name: sellora-api, envVarKey: DATA_ENCRYPTION_ACTIVE_KID }
+      - key: BACKUP_ENCRYPTION_KEYS
+        fromService: { type: web, name: sellora-api, envVarKey: BACKUP_ENCRYPTION_KEYS }
+      - key: BACKUP_ENCRYPTION_ACTIVE_KID
+        fromService: { type: web, name: sellora-api, envVarKey: BACKUP_ENCRYPTION_ACTIVE_KID }
+      - key: WEBCHAT_TOKEN_SECRET
+        fromService: { type: web, name: sellora-api, envVarKey: WEBCHAT_TOKEN_SECRET }
+      - key: STORAGE_SIGNING_SECRET
+        fromService: { type: web, name: sellora-api, envVarKey: STORAGE_SIGNING_SECRET }
+      - key: FRAUD_NETWORK_SECRET
+        fromService: { type: web, name: sellora-api, envVarKey: FRAUD_NETWORK_SECRET }
+      - key: META_WEBHOOK_VERIFY_TOKEN
+        fromService: { type: web, name: sellora-api, envVarKey: META_WEBHOOK_VERIFY_TOKEN }
+
+  - type: web
+    name: sellora-web
+    runtime: docker
+    region: singapore
+    dockerfilePath: ./sellora-web/Dockerfile
+    dockerContext: ./sellora-web
+    healthCheckPath: /
+    envVars:
+      # The API's private address ("host:port"); the web app adds http://. Passed to the
+      # Docker build too, where Next.js bakes it into the /v1 and /socket.io forwarding.
+      - key: API_INTERNAL_URL
+        fromService:
+          type: web
+          name: sellora-api
+          property: hostport
+      # This app's public address, e.g. https://sellora-web.onrender.com
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false

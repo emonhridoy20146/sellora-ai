@@ -16,5 +16,8 @@ Each folder's `README.md` explains how to set it up and run it. `sellora-api/doc
 architecture decisions (ADRs), the feature tracker (what is done, partial or not started) and
 the build log.
 
+To put it online for a first test (Railway, MongoDB Atlas, Cloudflare R2), follow
+[`DEPLOY.md`](DEPLOY.md); `render.yaml` does the same on Render.
+
 Secrets live only in environment variables: copy each app's `.env.example` to `.env` (API) or
 `.env.local` (web, storefront) and fill it in. No real credentials are committed.
