@@ -12,11 +12,16 @@ import { CartsService } from '../carts/carts.service.js';
 import { CustomersService } from '../commerce/customers.service.js';
 import { OrdersService, type OrderDoc } from '../commerce/orders.service.js';
 import { OrderRepository, ProductRepository } from '../commerce/repositories.js';
-import type { OrderAttribution, Product } from '../commerce/schemas.js';
+import type { OrderAttribution, Product, ShopGatewayKey } from '../commerce/schemas.js';
 import { ShopSettingsService } from '../commerce/shop-settings.service.js';
 import { runIdempotent } from '../stores/idempotency.js';
 import { StoreLinksService } from '../stores/store-links.service.js';
 import { StorefrontService, type ResolvedStore } from '../stores/storefront.service.js';
+import {
+  ShopPaymentsService,
+  type PaymentChoice,
+  type PaymentStart,
+} from '../shop-payments/shop-payments.service.js';
 import {
   dayKey,
   MAX_FREE_QUANTITY,
@@ -60,6 +65,8 @@ export interface LandingOrderInput {
   attribution?: OrderAttribution;
   /** The saved cart this order comes from (ADR 0018), closed when the order is made. */
   cartToken?: string;
+  /** Cash on delivery (the default) or online, and the gateway (ADR 0029). */
+  payment?: PaymentChoice;
 }
 
 export interface LandingCartInput {
@@ -101,6 +108,7 @@ export class LandingStorefrontService {
     private readonly links: StoreLinksService,
     private readonly limits: RateLimitService,
     private readonly carts: CartsService,
+    private readonly shopPayments: ShopPaymentsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -296,6 +304,8 @@ export class LandingStorefrontService {
         currency,
         // The order form says reminders may come only when the business has them on.
         cartReminders: state === 'live' && (await this.carts.capturing()),
+        // How the shopper may pay (ADR 0029); the form shows the advance as they choose.
+        payments: await this.shopPayments.rules(currency),
       };
     });
   }
@@ -410,7 +420,7 @@ export class LandingStorefrontService {
       undefined,
       { sort: { placedAt: -1 } },
     );
-    if (previous) return this.placed(l, previous, true);
+    if (previous) return this.placed(l, previous, true, null);
 
     const unavailable = () =>
       AppError.conflict('offer_not_available', 'This offer is not available right now.');
@@ -456,6 +466,7 @@ export class LandingStorefrontService {
       },
     ];
     let discountMinor = main.discountMinor;
+    let goodsMinor = main.totalMinor;
 
     if (input.addOn && offer.addOn) {
       const extra = await this.products.findById(offer.addOn.productId);
@@ -481,13 +492,25 @@ export class LandingStorefrontService {
         unitPriceMinor: charge.unitPriceMinor,
       });
       discountMinor += charge.discountMinor;
+      goodsMinor += charge.totalMinor;
     }
 
     const settings = await this.shopSettings.get();
-    if (settings.deliveryZones.length) {
-      if (!input.zoneId || !settings.deliveryZones.some((z) => z.id === input.zoneId))
-        throw AppError.validation([{ path: 'zoneId', message: 'Choose a delivery area' }]);
-    }
+    const zone = settings.deliveryZones.length
+      ? settings.deliveryZones.find((z) => z.id === input.zoneId)
+      : undefined;
+    if (settings.deliveryZones.length && (!input.zoneId || !zone))
+      throw AppError.validation([{ path: 'zoneId', message: 'Choose a delivery area' }]);
+    const deliveryChargeMinor = zone?.chargeMinor ?? 0;
+    const plan = this.shopPayments.plan(
+      input.payment,
+      await this.shopPayments.options({
+        totalMinor: goodsMinor + deliveryChargeMinor,
+        deliveryChargeMinor,
+        zoneId: zone?.id ?? null,
+        currency: org.currency,
+      }),
+    );
 
     const note = [packageLabel ? `Package: ${packageLabel}` : '', input.note?.trim() ?? '']
       .filter(Boolean)
@@ -507,7 +530,7 @@ export class LandingStorefrontService {
         items,
         discountMinor,
         deliveryZoneId: settings.deliveryZones.length ? input.zoneId : null,
-        payment: { method: 'cod' },
+        payment: { method: plan.method, ...(plan.online ? { online: plan.online } : {}) },
         ...(note ? { customerNote: note } : {}),
         status: 'pending',
         source: 'landing_page',
@@ -536,7 +559,29 @@ export class LandingStorefrontService {
       revenueMinor: order.totalMinor,
     });
     await this.storefront.closeCart(input.cartToken, order);
-    return this.placed(l, order, false);
+    let payment: PaymentStart | null = null;
+    if (plan.online) {
+      const receipt = this.links.receiptToken(store._id.toHexString(), order._id.toHexString());
+      payment = await this.storefront.startPayment(
+        l.store,
+        order,
+        plan.online.gateway,
+        this.thanksUrl(l, receipt),
+      );
+    }
+    return this.placed(l, order, false, payment);
+  }
+
+  /** The page's thank-you address for an order (where gateways send the shopper back). */
+  thanksUrl(l: ResolvedLanding, receipt: string): string {
+    return `${this.links.url(l.store.store).replace(/\/$/, '')}/${l.page.slug}/thanks?receipt=${encodeURIComponent(receipt)}`;
+  }
+
+  /** "Pay now" on the thank-you page: like the store's, back to this page's thank-you. */
+  pay(l: ResolvedLanding, receipt: string, gateway: ShopGatewayKey): Promise<PaymentStart> {
+    return this.inPage(l, () =>
+      this.storefront.pay(l.store, receipt, gateway, this.thanksUrl(l, receipt)),
+    );
   }
 
   /**
@@ -609,7 +654,12 @@ export class LandingStorefrontService {
     });
   }
 
-  private placed(l: ResolvedLanding, order: OrderDoc, duplicate: boolean) {
+  private placed(
+    l: ResolvedLanding,
+    order: OrderDoc,
+    duplicate: boolean,
+    payment: PaymentStart | null,
+  ) {
     return {
       orderNumber: order.number,
       totalMinor: order.totalMinor,
@@ -617,6 +667,8 @@ export class LandingStorefrontService {
       receipt: this.links.receiptToken(l.store.store._id.toHexString(), order._id.toHexString()),
       /** True when this is the receipt of an order the shopper placed a moment ago. */
       duplicate,
+      /** The online payment started for the order, if the shopper chose one (ADR 0029). */
+      payment,
     };
   }
 

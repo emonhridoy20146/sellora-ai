@@ -336,9 +336,30 @@ export const PAYMENT_METHODS = [
   'bank',
   'card',
   'cash',
+  /** Paid through a card or wallet gateway (SSLCommerz, aamarPay, shurjoPay) at checkout. */
+  'online',
   'other',
 ] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+/** Gateways a shopper can pay a business through at checkout, with its own account (ADR 0029). */
+export const SHOP_GATEWAYS = ['bkash', 'nagad', 'sslcommerz', 'aamarpay', 'shurjopay'] as const;
+export type ShopGatewayKey = (typeof SHOP_GATEWAYS)[number];
+export const ONLINE_PAYMENT_STATUSES = ['awaiting', 'paid', 'failed'] as const;
+export type OnlinePaymentStatus = (typeof ONLINE_PAYMENT_STATUSES)[number];
+
+/**
+ * What the shopper was asked to pay online at checkout: the whole order, or an advance with
+ * the rest on delivery. `status` follows the latest attempt; `sandbox` marks test money.
+ */
+export interface OrderOnlinePayment {
+  gateway: ShopGatewayKey;
+  purpose: 'full' | 'advance';
+  dueMinor: number;
+  status: OnlinePaymentStatus;
+  sandbox: boolean;
+  paidAt?: Date;
+}
 export const PAYMENT_STATUSES = ['unpaid', 'partial', 'paid', 'refunded'] as const;
 export type OrderPaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
@@ -421,6 +442,7 @@ export interface Order {
     status: OrderPaymentStatus;
     paidMinor: number;
     reference?: string;
+    online?: OrderOnlinePayment;
   };
   /** True while the items' quantities are taken out of stock. */
   stockCommitted: boolean;
@@ -502,6 +524,17 @@ export const orderSchema = tenantSchema<Order>({
       status: { type: String, enum: PAYMENT_STATUSES, default: 'unpaid' },
       paidMinor: { type: Number, default: 0, min: 0 },
       reference: String,
+      online: new Schema(
+        {
+          gateway: { type: String, enum: SHOP_GATEWAYS, required: true },
+          purpose: { type: String, enum: ['full', 'advance'], required: true },
+          dueMinor: { type: Number, required: true, min: 0 },
+          status: { type: String, enum: ONLINE_PAYMENT_STATUSES, required: true },
+          sandbox: { type: Boolean, default: false },
+          paidAt: Date,
+        },
+        { _id: false, strict: 'throw' },
+      ),
     },
     { _id: false, strict: 'throw' },
   ),

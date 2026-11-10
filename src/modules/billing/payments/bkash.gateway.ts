@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { toMinor } from '../../../common/money/money.js';
+import { AppConfig } from '../../../config/app-config.js';
 import {
   GATEWAY_FETCH,
   GATEWAY_TIMEOUT_MS,
@@ -13,12 +15,19 @@ import {
   str,
 } from './gateway.types.js';
 
-const HOSTS = {
-  sandbox: 'https://tokenized.sandbox.bka.sh/v1.2.0-beta',
-  live: 'https://tokenized.pay.bka.sh/v1.2.0-beta',
-};
-
 type Creds = GatewayCredentials['bkash'];
+
+/**
+ * Tokens are cached per full set of credentials, not per app key: many businesses connect
+ * their own bKash accounts (ADR 0029), and an app key alone must never reuse another's token.
+ */
+function tokenKey(creds: Creds, sandbox: boolean): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify([sandbox, creds.appKey, creds.appSecret, creds.username, creds.password]),
+    )
+    .digest('hex');
+}
 
 /**
  * bKash tokenized checkout. Flow: grant token → create payment (payer is sent to
@@ -29,10 +38,15 @@ type Creds = GatewayCredentials['bkash'];
 export class BkashGateway {
   private readonly tokens = new Map<string, { token: string; expiresAt: number }>();
 
-  constructor(@Inject(GATEWAY_FETCH) private readonly http: GatewayFetch) {}
+  constructor(
+    @Inject(GATEWAY_FETCH) private readonly http: GatewayFetch,
+    private readonly config: AppConfig,
+  ) {}
 
   private base(sandbox: boolean) {
-    return sandbox ? HOSTS.sandbox : HOSTS.live;
+    return this.config
+      .get(sandbox ? 'PAYMENT_BKASH_SANDBOX_URL' : 'PAYMENT_BKASH_LIVE_URL')
+      .replace(/\/$/, '');
   }
 
   private async call(
@@ -58,7 +72,7 @@ export class BkashGateway {
 
   /** Grant tokens are valid for an hour; reuse them instead of granting per request. */
   private async token(creds: Creds, sandbox: boolean): Promise<string> {
-    const key = `${sandbox ? 's' : 'l'}:${creds.appKey}`;
+    const key = tokenKey(creds, sandbox);
     const cached = this.tokens.get(key);
     if (cached && cached.expiresAt > Date.now()) return cached.token;
     const json = await this.call(
@@ -77,6 +91,12 @@ export class BkashGateway {
       expiresAt: Date.now() + Math.max(60, ttl - 120) * 1000,
     });
     return json.id_token;
+  }
+
+  /** Whether bKash grants a token for these credentials (checked before they are saved). */
+  async check(creds: Creds, sandbox: boolean): Promise<void> {
+    this.tokens.delete(tokenKey(creds, sandbox));
+    await this.token(creds, sandbox);
   }
 
   private async authed(creds: Creds, sandbox: boolean, path: string, body: unknown) {

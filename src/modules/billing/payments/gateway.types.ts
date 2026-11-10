@@ -35,7 +35,8 @@ export interface VerifiedPayment {
 
 export class GatewayError extends Error {
   constructor(
-    readonly gateway: GatewayKey,
+    /** A platform gateway key, or a shop gateway key (ADR 0029). */
+    readonly gateway: string,
     message: string,
     readonly details: Record<string, unknown> = {},
   ) {

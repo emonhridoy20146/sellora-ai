@@ -102,6 +102,10 @@ export class BillingSeeder implements OnApplicationBootstrap {
     BillingSeeder,
   ],
   exports: [
+    // Shops take shoppers' payments with these clients too, with their own keys (ADR 0029).
+    GATEWAY_FETCH,
+    SslCommerzGateway,
+    BkashGateway,
     AiUsageRepository,
     BillingJobsService,
     PlatformBillingService,

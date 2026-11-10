@@ -29,6 +29,7 @@ import { LandingPagesService } from './landing-pages.service.js';
 import { LandingReviewService } from './landing-review.service.js';
 import { LandingStorefrontService, type ResolvedLanding } from './landing-storefront.service.js';
 import { STARTER_TEXTS, TEMPLATES } from './templates.js';
+import * as payDto from '../shop-payments/shop-payments.dto.js';
 
 // ---------------------------------------------------------------- merchant
 
@@ -297,7 +298,7 @@ export class LandingStorefrontController {
   @Post(':slug/orders')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
   @ApiOperation({
-    summary: 'Place a cash-on-delivery order from the page (pending until confirmed)',
+    summary: 'Place an order from the page (pending until confirmed); online payment starts',
   })
   async order(
     @Headers(STORE_HOST_HEADER) host: string | undefined,
@@ -324,6 +325,17 @@ export class LandingStorefrontController {
   ) {
     // Previews never save carts: `page` is resolved without the preview token.
     return this.landing.saveCart(await this.page(host, slug), body);
+  }
+
+  @Post(':slug/pay')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Start paying what is still due online, from the thank-you page' })
+  async pay(
+    @Headers(STORE_HOST_HEADER) host: string | undefined,
+    @ZodParam('slug', dto.slugParam) slug: string,
+    @ZodBody(payDto.payBody) body: z.infer<typeof payDto.payBody>,
+  ) {
+    return this.landing.pay(await this.page(host, slug), body.receipt, body.gateway);
   }
 
   @Get(':slug/receipt')

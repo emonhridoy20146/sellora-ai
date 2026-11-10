@@ -5,6 +5,7 @@ import { attribution } from '../stores/stores.dto.js';
 import { LANDING_LANGUAGES, landingContentSchema, MAX_FREE_QUANTITY } from './blocks.js';
 import { REVIEW_FILTERS } from './landing-review.service.js';
 import { TEMPLATE_KEYS } from './templates.js';
+import { paymentChoice } from '../shop-payments/shop-payments.dto.js';
 
 const text = (max: number) => z.string().trim().max(max);
 /** Checked in full by the service (format and reserved words); this only bounds the size. */
@@ -112,6 +113,8 @@ export const orderBody = z
     attribution: attribution.optional(),
     /** The saved cart this order comes from (abandoned cart reminders). */
     cartToken: cartToken.optional(),
+    /** Cash on delivery (the default) or online, with the gateway (ADR 0029). */
+    payment: paymentChoice.optional(),
   })
   .strict();
 

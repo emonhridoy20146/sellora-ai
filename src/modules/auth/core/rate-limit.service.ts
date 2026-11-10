@@ -45,6 +45,9 @@ export class RateLimitService {
       'checkout:ip': { points: 10, durationSec: 600 },
       'checkout:phone': { points: 5, durationSec: 3600 },
       'track:ip': { points: 30, durationSec: 600 },
+      // Shoppers paying online (ADR 0029): payment starts per order, gateway returns per address.
+      'shop-pay:order': { points: 10, durationSec: 3600 },
+      'shop-pay:return': { points: 60, durationSec: 60 },
       // "Check now" on a custom domain (each check asks DNS servers four questions).
       'domain-check:domain': { points: 6, durationSec: 60 },
       // Landing page visit counts (one beacon per page view at most).

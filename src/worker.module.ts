@@ -12,6 +12,7 @@ import { FraudCoreModule } from './modules/fraud/fraud.module.js';
 import { FilesCoreModule } from './modules/files/files.module.js';
 import { MetaCoreModule } from './modules/meta/meta.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
+import { ShopPaymentsCoreModule } from './modules/shop-payments/shop-payments.module.js';
 import { SmsCoreModule } from './modules/sms/sms.module.js';
 import { StoresCoreModule } from './modules/stores/stores.module.js';
 import { TelegramCoreModule } from './modules/telegram/telegram.module.js';
@@ -47,6 +48,7 @@ export class WorkerModule {
         CouriersCoreModule,
         FraudCoreModule,
         StoresCoreModule,
+        ShopPaymentsCoreModule,
         SmsCoreModule,
         CartsCoreModule,
         CampaignsCoreModule,
