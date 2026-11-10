@@ -11,7 +11,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     <>
       <PageHeader
         title="Settings"
-        description="Your business details, delivery charges, invoices, chat channels, couriers, SMS and backups."
+        description="Your business details, delivery charges, invoices, chat channels, payments, couriers, SMS and backups."
       />
       <TabNav
         tabs={[
@@ -20,6 +20,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
           ...(can('org.integrations.manage')
             ? [
                 { href: `${base}/channels`, label: 'Channels' },
+                { href: `${base}/payments`, label: 'Payments' },
                 { href: `${base}/couriers`, label: 'Couriers' },
               ]
             : []),

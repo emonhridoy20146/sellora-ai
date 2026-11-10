@@ -42,14 +42,14 @@ GitHub repository.
 
 ## Scripts
 
-| Command                           | What it does                                                                                                   |
-| --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`                     | Development server with Turbopack.                                                                             |
-| `npm run build` / `npm start`     | Production build (standalone output) and server.                                                               |
-| `npm run typecheck`               | `tsc --noEmit` (run `npx next typegen` first on a fresh checkout for route types).                             |
-| `npm run lint` / `npm run format` | ESLint (Next.js rules) and Prettier.                                                                           |
-| `npm test`                        | Unit tests (Vitest): money and date formatting, credit estimates, chart ticks, order, inbox and store helpers. |
-| `npm run e2e`                     | Browser smoke test against a running app + API (see below).                                                    |
+| Command                           | What it does                                                                                                            |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`                     | Development server with Turbopack.                                                                                      |
+| `npm run build` / `npm start`     | Production build (standalone output) and server.                                                                        |
+| `npm run typecheck`               | `tsc --noEmit` (run `npx next typegen` first on a fresh checkout for route types).                                      |
+| `npm run lint` / `npm run format` | ESLint (Next.js rules) and Prettier.                                                                                    |
+| `npm test`                        | Unit tests (Vitest): money and date formatting, credit estimates, chart ticks, order, inbox, store and payment helpers. |
+| `npm run e2e`                     | Browser smoke test against a running app + API (see below).                                                             |
 
 ### Browser smoke test
 
@@ -413,6 +413,27 @@ again. Needs the admin credentials as well:
 node scripts/carts-flow.mjs
 ```
 
+### Payments at checkout browser flow
+
+`scripts/checkout-payments-flow.mjs` needs the live store from stores-flow, the storefront on
+:3100, the API and worker started with `PAYMENT_<GATEWAY>_SANDBOX_URL` pointing at the
+payment stand-in (`node scripts/payment-stand-in.mjs` in sellora-api, on :4110; it is **not a
+payment gateway** and no money moves) and the admin credentials (to approve its landing page).
+The business opens Settings › Payments with nothing connected, has wrong SSLCommerz keys
+refused, connects all five gateways in test mode with the stand-in's demo keys and asks the
+delivery charge as an advance outside Dhaka. A shopper at the store checkout pays that advance
+with bKash on the stand-in's page and comes back to a receipt that says so; a shopper on a
+phone chooses to pay everything with SSLCommerz, cancels, and pays from the receipt with
+shurjoPay; a landing page shopper pays the advance with Nagad. The orders list and the order
+page must show each payment and every try, and turning bKash off must take it off the
+checkout. Earlier runs can leave tries the stand-in never settled, so the flow closes its own
+leftovers in MongoDB (reads `../sellora-api/.env`, or `SELLORA_API_DIR`) before removing the
+gateways. It cancels its orders at the end. Screenshots go to `smoke-output/payments/`.
+
+```bash
+node scripts/checkout-payments-flow.mjs
+```
+
 ### Campaign and automation browser flow
 
 `scripts/campaigns-flow.mjs` needs the same as carts-flow (Sellora SMS ready for the demo
@@ -583,7 +604,11 @@ Products › Import and sync brings products in from Shopify, WooCommerce, a Goo
 CSV file and keeps them up to date, tried only against a stand-in for those shops. "Your
 website" reads the business's own site once it proves ownership (DNS record or meta tag):
 products from its product pages, and its pages for the AI sales agent to answer from, tried
-only against a demo site stand-in and the DNS and Claude stand-ins.
+only against a demo site stand-in and the DNS and Claude stand-ins. Payments at checkout work
+(Phase 2: Settings › Payments, the payment on the orders list and order page, and the checkout,
+receipt and landing page in `sellora-storefront`) with the business's own bKash, Nagad,
+SSLCommerz, aamarPay and shurjoPay accounts, but only against fakes and a payment stand-in;
+no real payment has gone through any of them yet.
 Analytics appears in the merchant
 sidebar as a disabled "Soon" item. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.

@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Table, TBody, TD, TH, THead, TR } from '@/components/ui/table';
 import type { FraudBatch, Order } from '@/lib/api/types';
 import { formatDateTime, formatMoney } from '@/lib/format';
-import { OrderStatusBadge, PaymentBadge } from './badges';
+import { OnlinePaymentBadge, OrderStatusBadge, PaymentBadge } from './badges';
 
 function PhoneRisk({ risk }: { risk: FraudBatch['items'][number] | undefined }) {
   if (!risk) return null;
@@ -112,7 +112,10 @@ export function OrdersTable({
               {formatMoney(o.totalMinor, o.currency)}
             </TD>
             <TD>
-              <PaymentBadge status={o.payment.status} />
+              <span className="flex flex-wrap gap-1">
+                <PaymentBadge status={o.payment.status} />
+                <OnlinePaymentBadge online={o.payment.online} />
+              </span>
             </TD>
             <TD>
               <OrderStatusBadge status={o.status} />

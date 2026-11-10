@@ -1,6 +1,12 @@
 import { Badge } from '@/components/ui/badge';
-import type { OrderPaymentStatus, OrderStatus, ProductStatus } from '@/lib/api/types';
+import type {
+  OrderOnlinePayment,
+  OrderPaymentStatus,
+  OrderStatus,
+  ProductStatus,
+} from '@/lib/api/types';
 import { ORDER_STATUS, PAYMENT_STATUS } from '@/lib/commerce';
+import { onlinePaymentBadge } from '@/lib/shop-payments';
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
   const s = ORDER_STATUS[status];
@@ -9,6 +15,13 @@ export function OrderStatusBadge({ status }: { status: OrderStatus }) {
 
 export function PaymentBadge({ status }: { status: OrderPaymentStatus }) {
   const s = PAYMENT_STATUS[status];
+  return <Badge tone={s.tone}>{s.label}</Badge>;
+}
+
+/** The payment asked at checkout; nothing when the order had none. */
+export function OnlinePaymentBadge({ online }: { online?: OrderOnlinePayment | null }) {
+  if (!online) return null;
+  const s = onlinePaymentBadge(online);
   return <Badge tone={s.tone}>{s.label}</Badge>;
 }
 

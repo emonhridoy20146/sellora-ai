@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { AddressFields, cleanAddress, emptyAddress } from '@/components/commerce/address-fields';
-import { OrderStatusBadge, PaymentBadge } from '@/components/commerce/badges';
+import { OnlinePaymentBadge, OrderStatusBadge, PaymentBadge } from '@/components/commerce/badges';
 import { commerceKeys, useShopSettings } from '@/components/commerce/hooks';
 import {
   ItemsEditor,
@@ -18,6 +18,7 @@ import {
 import { MoneyInput } from '@/components/commerce/money-input';
 import { CourierCard } from '@/components/couriers/courier-card';
 import { RiskCard } from '@/components/couriers/risk-card';
+import { OnlinePaymentRows } from '@/components/shop-payments/online-payment-rows';
 import { OrderSmsCard } from '@/components/sms/messages-card';
 import { PageError } from '@/components/commerce/page-error';
 import { ProductPicker } from '@/components/commerce/product-picker';
@@ -38,6 +39,7 @@ import { ApiError, errorMessage } from '@/lib/api/errors';
 import type { Address, Order, OrderStatus, PaymentMethod } from '@/lib/api/types';
 import {
   ORDER_SOURCE_LABEL,
+  ONLINE_METHOD,
   ORDER_STATUS,
   PAYMENT_METHODS,
   STATUS_ACTION,
@@ -351,7 +353,10 @@ function PaymentDialog({
                 value={method}
                 onChange={(e) => setMethod(e.target.value as PaymentMethod)}
               >
-                {PAYMENT_METHODS.map((m) => (
+                {(order.payment.method === 'online'
+                  ? [...PAYMENT_METHODS, ONLINE_METHOD]
+                  : PAYMENT_METHODS
+                ).map((m) => (
                   <option key={m.value} value={m.value}>
                     {m.label}
                   </option>
@@ -603,6 +608,7 @@ export default function OrderPage() {
           <span className="inline-flex flex-wrap items-center gap-2">
             <span className="font-mono">{o.number}</span> <OrderStatusBadge status={o.status} />
             <PaymentBadge status={o.payment.status} />
+            <OnlinePaymentBadge online={o.payment.online} />
           </span>
         }
         description={`Placed ${formatDateTime(o.placedAt, org.timezone)} · ${ORDER_SOURCE_LABEL[o.source] ?? o.source}${o.landingPage ? `: ${o.landingPage.name}` : ''}`}
@@ -725,6 +731,7 @@ export default function OrderPage() {
                   </div>
                 )}
               </dl>
+              <OnlinePaymentRows order={o} />
               {o.refundDueMinor > 0 && (
                 <Alert tone="warning" className="mt-3" title="Refund due">
                   <p>
