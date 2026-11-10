@@ -187,7 +187,72 @@ export interface Quote {
   canCheckout: boolean;
   /** The business texts reminders about carts left with a phone number (shown under it). */
   cartReminders?: boolean;
+  /** How the shopper may pay for this cart (ADR 0029). */
+  payments?: CheckoutPayments;
 }
+
+export type ShopGatewayKey = 'bkash' | 'nagad' | 'sslcommerz' | 'aamarpay' | 'shurjopay';
+
+/** A gateway the business switched on; `sandbox` means test mode, no real money. */
+export interface GatewayChoice {
+  key: ShopGatewayKey;
+  name: string;
+  hint: string;
+  sandbox: boolean;
+}
+
+export interface CheckoutPayments {
+  cod: boolean;
+  fullOnline: boolean;
+  gateways: GatewayChoice[];
+  /** Paid online first when the shopper chooses cash on delivery; 0 when none. */
+  advanceMinor: number;
+}
+
+export interface AdvanceRule {
+  mode: 'delivery' | 'fixed' | 'percent';
+  fixedMinor: number;
+  percent: number;
+  zoneIds: string[];
+  minTotalMinor: number;
+}
+
+/** A landing page prices its own form, so it gets the advance rule rather than an amount. */
+export interface LandingPayments {
+  cod: boolean;
+  fullOnline: boolean;
+  gateways: GatewayChoice[];
+  advance: AdvanceRule | null;
+}
+
+/** The payment started after an order; no `redirectUrl` when the gateway could not start. */
+export interface PaymentStart {
+  gateway: ShopGatewayKey;
+  amountMinor: number;
+  redirectUrl: string | null;
+  error: string | null;
+}
+
+export interface ReceiptPayment {
+  method: string;
+  status: 'unpaid' | 'partial' | 'paid' | 'refunded';
+  paidMinor: number;
+  /** Still to pay in all (online or on delivery). */
+  dueMinor: number;
+  online: {
+    gateway: ShopGatewayKey;
+    gatewayName: string;
+    purpose: 'full' | 'advance';
+    dueMinor: number;
+    status: 'awaiting' | 'paid' | 'failed';
+    sandbox: boolean;
+  } | null;
+  /** What can be paid online now, and with which gateways; null when nothing. */
+  payNow: { amountMinor: number; gateways: GatewayChoice[] } | null;
+}
+
+/** Where the gateway sent the shopper back, as the API says (`?payment=`). */
+export type ReturnState = 'paid' | 'pending' | 'failed' | 'cancelled' | 'unstarted';
 
 export interface Shipment {
   status: string;
@@ -219,6 +284,7 @@ export interface Receipt {
   deliveryZone: string | null;
   timeline: { status: string; at: string }[];
   shipment: Shipment | null;
+  payment?: ReceiptPayment;
 }
 
 export interface Tracking {
@@ -412,6 +478,8 @@ export interface LandingView extends LandingHead {
   currency: string;
   /** The business texts reminders about carts left with a phone number (shown under it). */
   cartReminders?: boolean;
+  /** How the shopper may pay (ADR 0029). */
+  payments?: LandingPayments;
 }
 
 export type Landing = LandingHead | LandingView;
@@ -443,6 +511,8 @@ export interface LandingPlaced {
   receipt: string;
   /** True when this is the order the shopper placed a moment ago, shown again. */
   duplicate: boolean;
+  /** The online payment started for the order, if the shopper chose one. */
+  payment?: PaymentStart | null;
 }
 
 export interface LandingReceipt {

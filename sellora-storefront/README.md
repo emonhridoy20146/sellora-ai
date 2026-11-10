@@ -3,8 +3,9 @@
 The online stores of Sellora AI. One Next.js app serves every business's shop: the `Host`
 header says which store a request is for (`<handle>.<STOREFRONT_BASE_DOMAIN>`, set in
 sellora-api, or a business's own domain once it is connected). Shoppers browse, add to a cart
-and order with cash on delivery, or order one product straight from a landing page
-(`<store>/<slug>`); the order lands in the business's Orders in the dashboard like any other.
+and order with cash on delivery (perhaps with an advance paid online) or pay online with the
+business's own gateway, or order one product straight from a landing page (`<store>/<slug>`);
+the order lands in the business's Orders in the dashboard like any other.
 
 Next.js 16 (App Router), React 19, TypeScript (strict), Tailwind CSS 4. No database: every
 page renders on the server from [sellora-api](../sellora-api)'s storefront routes.
@@ -12,7 +13,8 @@ page renders on the server from [sellora-api](../sellora-api)'s storefront route
 Stores are created, designed and sent for review in sellora-web (Online store), and approved by
 the super-admin there; landing pages likewise (Landing pages). See
 `docs/adr/0014-online-stores.md` (stores), `docs/adr/0015-store-custom-domains.md` (custom
-domains) and `docs/adr/0016-landing-pages.md` (landing pages) in sellora-api for the design.
+domains), `docs/adr/0016-landing-pages.md` (landing pages) and
+`docs/adr/0029-payments-at-checkout.md` (paying at checkout) in sellora-api for the design.
 
 ## Run it locally
 
@@ -102,8 +104,8 @@ sellora-web, and connecting a custom domain by `scripts/domains-flow.mjs` there.
 | `/`                           | The home page sections the business arranged (hero, categories, products, features …).                                                                                           |
 | `/products`                   | All products, by category, search and sort, with pages.                                                                                                                          |
 | `/products/[slug]`            | Pictures, sizes and colours with live stock, add to cart.                                                                                                                        |
-| `/cart`, `/checkout`          | Cart (kept in the browser), then name, phone, address, delivery area and note.                                                                                                   |
-| `/order?receipt=…`            | The receipt after ordering (a signed token valid for 90 days).                                                                                                                   |
+| `/cart`, `/checkout`          | Cart (kept in the browser), then name, phone, address, delivery area, note and how to pay.                                                                                       |
+| `/order?receipt=…`            | The receipt after ordering (a signed token valid for 90 days), with what came back from the gateway (`&payment=`) and Pay now while something is due online.                     |
 | `/track`                      | Order tracking by order number and phone.                                                                                                                                        |
 | `/pages/[key]`                | The business's pages: about, delivery, returns, privacy, terms.                                                                                                                  |
 | `/[slug]`                     | A landing page: its sections, the order form, a sticky order button on phones.                                                                                                   |
@@ -176,6 +178,17 @@ suspended store shows "not available", and an address with no store shows a page
   browser id from local storage (`sl_vid`, shared with landing pages); the API counts a
   shopper once per step and day and stores only counts. The checkout sends the kept tags with
   the order. `/api/events` answers without counting when the browser holds a preview link.
+- **Payments at checkout** (ADR 0029 in sellora-api). The cart quote says how the shopper may
+  pay (`payments`: cash on delivery, the whole amount online, the switched-on gateways and the
+  advance for this cart); landing pages get the advance rule instead and work out the amount
+  as the form changes (`lib/payments.ts` mirrors the API's rule). `components/payment-choice.tsx`
+  shows the choice; the order goes out with `payment`, and when the answer has a
+  `redirectUrl` the browser goes to the gateway's page. The gateway sends the shopper to the
+  API, which asks the gateway before counting anything and then sends them to the receipt or
+  thank-you page with `payment=paid|pending|failed|cancelled` (`unstarted` when the gateway
+  could not start). The page believes the order over that word (`returnMessage`), and
+  `components/pay-now.tsx` starts a new try through `/api/orders/pay` or
+  `/api/landing/[slug]/pay`. A gateway in test mode is marked "Test" everywhere.
 - **Security headers.** No framing, no referrer beyond the origin, no camera, microphone or
   location (`next.config.ts`).
 
@@ -190,8 +203,8 @@ src/
       products/ cart/ checkout/ order/ track/ pages/[key]/
       [...rest]/          the store's 404 for deeper unknown paths
     (landing)/[slug]/     a landing page's own root layout, the page and thanks/
-    api/                  cart, checkout, track and landing (order, visit) routes for the
-                          browser (same-site only)
+    api/                  cart, checkout, orders/pay, track and landing (order, visit, pay)
+                          routes for the browser (same-site only)
     preview/              opens a signed preview (reached as /__preview)
     sitemap.xml/ robots.txt/
   components/
@@ -199,7 +212,8 @@ src/
     landing/              landing page sections, order form, countdown, sticky button,
                           visit beacon
     header, footer, mobile nav, product card, gallery, add to cart, cart view,
-    checkout form, track form, order status, holding page
+    checkout form, payment choice, pay now, payment summary, track form, order status,
+    holding page
   lib/
     api.ts                server-side API calls with the storefront key
     forward.ts            browser → API forwarding for the /api routes
@@ -207,6 +221,7 @@ src/
     main-address.ts       where to send shoppers on another address of the store
     landing.ts            the landing page for a slug (server, cached per request)
     landing-offer.ts      package prices, totals, countdown, video and attribution helpers
+    payments.ts           the advance rule, the shopper's pick, receipt payment words
     shopper.ts            the shopper's saved name, phone and address
     cart.ts, cart-lines.ts  the cart in localStorage (30 lines, 50 of each)
     money.ts phone.ts color.ts i18n.ts theme-style.ts types.ts
@@ -214,7 +229,8 @@ src/
 
 ## Not built yet
 
-- Online payments at checkout: cash on delivery only.
+- Payments at checkout ran only against the API's fakes and the payment stand-in, never a real
+  bKash, Nagad, SSLCommerz, aamarPay or shurjoPay account.
 - Landing page videos were checked only by the player address: YouTube is not reachable from
   the build machine, so a stand-in answered the player in the browser test.
 - Tested only on development addresses (`*.sellora.localhost` and made-up custom domains

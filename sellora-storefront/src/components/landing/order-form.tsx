@@ -1,6 +1,6 @@
 'use client';
 
-import { Banknote, Minus, Plus } from 'lucide-react';
+import { Minus, Plus } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useId, useMemo, useState, useSyncExternalStore } from 'react';
 import { cartToken, landingCartTokenKey, setCartToken, useCartCapture } from '@/lib/cart-capture';
@@ -15,6 +15,14 @@ import {
   variantFor,
 } from '@/lib/landing-offer';
 import { formatMoney, formatNumber } from '@/lib/money';
+import {
+  firstPick,
+  landingOptions,
+  paymentBody,
+  payingNow,
+  validPick,
+  type PaymentPick,
+} from '@/lib/payments';
 import { asciiDigits, isBdMobile } from '@/lib/phone';
 import { fieldErrors, readJson } from '@/lib/problem';
 import { DETAILS_KEY, load, noSubscribe, parseDetails, readRaw, save } from '@/lib/shopper';
@@ -24,9 +32,11 @@ import type {
   Language,
   LandingAddOnOffer,
   LandingPackage,
+  LandingPayments,
   LandingPlaced,
   LandingProduct,
 } from '@/lib/types';
+import { PaymentChoice } from '../payment-choice';
 
 const inputClass =
   'h-12 w-full rounded-store border border-line bg-surface px-3 text-base text-ink placeholder:text-muted aria-invalid:border-red-600';
@@ -77,12 +87,15 @@ export interface LandingOrderFormProps {
   buttonLabel: string;
   /** The business texts reminders about orders left with a phone number. */
   cartReminders: boolean;
+  /** How shoppers may pay; without it, cash on delivery only. */
+  payments?: LandingPayments | undefined;
 }
 
 /**
  * The page's order form: package, option, add-on, name, phone, address and delivery area,
- * paid in cash on delivery. Totals here are for the shopper to read; the API prices the
- * order again from the published page and refuses anything that does not match it.
+ * paid in cash on delivery (perhaps with an advance) or online. Totals here are for the
+ * shopper to read; the API prices the order again from the published page and refuses
+ * anything that does not match it.
  */
 export function LandingOrderForm(props: LandingOrderFormProps) {
   const { slug, pageId, preview, language, currency, product, packages, addOn, zones } = props;
@@ -128,6 +141,15 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
     addOn: withAddOn,
     zoneId,
   });
+  const options = landingOptions(props.payments, {
+    totalMinor: totals?.totalMinor ?? 0,
+    deliveryChargeMinor: totals?.deliveryMinor ?? 0,
+    zoneId: zones.length ? zoneId : null,
+  });
+  const [rawPick, setPick] = useState<PaymentPick | null>(null);
+  const pick = validPick(rawPick ?? firstPick(options), options);
+  const payNow = totals ? payingNow(pick, options, totals.totalMinor) : 0;
+  const [redirecting, setRedirecting] = useState(false);
   const maxQty = Math.min(props.maxFreeQuantity, variant?.maxQuantity ?? props.maxFreeQuantity);
   const wanted = pkg ? pkg.quantity : quantity;
   const stockProblem = !variant
@@ -167,6 +189,7 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
     address: { line1: details.line1.trim() },
     zoneId: zones.length ? zoneId : null,
     ...(props.noteField && note.trim() ? { note: note.trim() } : {}),
+    ...(paymentBody(pick, options) ? { payment: paymentBody(pick, options) } : {}),
   });
 
   /** One key per order as filled in: a retry after a lost answer cannot order twice. */
@@ -238,8 +261,15 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
         );
         save(`sl_lp_${pageId}`, null, 'session');
         setCartToken(tokenKey, null);
+        const paying = r.data.payment;
+        // Off to the gateway's own page; it sends the shopper back to the thank-you page.
+        if (paying?.redirectUrl) {
+          setRedirecting(true);
+          window.location.assign(paying.redirectUrl);
+          return;
+        }
         router.replace(
-          `/${slug}/thanks?receipt=${encodeURIComponent(r.data.receipt)}${r.data.duplicate ? '&again=1' : ''}`,
+          `/${slug}/thanks?receipt=${encodeURIComponent(r.data.receipt)}${r.data.duplicate ? '&again=1' : ''}${paying ? '&payment=unstarted' : ''}`,
         );
         return;
       }
@@ -586,13 +616,31 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
             <dt>{t.total}</dt>
             <dd>{totals ? money(totals.totalMinor) : '–'}</dd>
           </div>
+          {totals && payNow > 0 ? (
+            <>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">{t.payNowLabel}</dt>
+                <dd className="font-semibold">{money(payNow)}</dd>
+              </div>
+              {totals.totalMinor > payNow ? (
+                <div className="flex justify-between gap-3">
+                  <dt className="text-muted">{t.payOnDelivery}</dt>
+                  <dd>{money(totals.totalMinor - payNow)}</dd>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </dl>
-        <div className="flex items-center gap-3 rounded-store bg-tint p-3">
-          <Banknote className="size-5 shrink-0 text-primary" aria-hidden="true" />
-          <p className="text-sm">
-            <span className="font-semibold">{t.cod}.</span> {t.codHint}
-          </p>
-        </div>
+        <PaymentChoice
+          id={fid('payment')}
+          options={options}
+          pick={pick}
+          onPick={setPick}
+          money={money}
+          t={t}
+          error={errors['payment.gateway'] ?? errors['payment.method']}
+          bold
+        />
         {preview ? (
           <p className="rounded-store bg-ink p-3 text-sm text-white">{t.previewLandingForm}</p>
         ) : null}
@@ -606,13 +654,17 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
           disabled={placing || preview || Boolean(stockProblem)}
           className="flex h-14 w-full items-center justify-center rounded-store bg-primary text-lg font-bold text-on-primary shadow-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {placing
-            ? t.placing
-            : buttonLabelWithTotal(
-                props.buttonLabel,
-                totals && totals.deliveryMinor !== null ? totals.totalMinor : undefined,
-                money,
-              )}
+          {redirecting
+            ? t.goingToPay
+            : placing
+              ? t.placing
+              : payNow > 0 && totals?.deliveryMinor !== null
+                ? t.placeAndPay(money(payNow))
+                : buttonLabelWithTotal(
+                    props.buttonLabel,
+                    totals && totals.deliveryMinor !== null ? totals.totalMinor : undefined,
+                    money,
+                  )}
         </button>
       </div>
     </form>
