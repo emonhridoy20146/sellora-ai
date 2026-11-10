@@ -134,6 +134,7 @@ try {
       ['/settings', 'settings'],
       ['/settings/selling', 'settings-selling'],
       ['/settings/channels', 'settings-channels'],
+      ['/settings/payments', 'settings-payments'],
       ['/settings/couriers', 'settings-couriers'],
       ['/settings/sms', 'settings-sms'],
       ['/settings/backups', 'settings-backups'],

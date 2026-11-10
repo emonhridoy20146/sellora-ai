@@ -56,7 +56,11 @@ export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'other', label: 'Other' },
 ];
 
+/** Set only by a payment at checkout, so staff never pick it for a new order. */
+export const ONLINE_METHOD = { value: 'online' as const, label: 'Online payment' };
+
 export function paymentMethodLabel(m: PaymentMethod): string {
+  if (m === 'online') return ONLINE_METHOD.label;
   return PAYMENT_METHODS.find((p) => p.value === m)?.label ?? m;
 }
 

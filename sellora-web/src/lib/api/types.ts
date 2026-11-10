@@ -753,7 +753,7 @@ export interface Customer {
 export type OrderStatus =
   'pending' | 'confirmed' | 'packed' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
 export type PaymentMethod =
-  'cod' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'card' | 'cash' | 'other';
+  'cod' | 'bkash' | 'nagad' | 'rocket' | 'bank' | 'card' | 'cash' | 'online' | 'other';
 export type OrderPaymentStatus = 'unpaid' | 'partial' | 'paid' | 'refunded';
 
 export interface OrderItem {
@@ -795,6 +795,8 @@ export interface Order {
     status: OrderPaymentStatus;
     paidMinor: number;
     reference: string | null;
+    /** Asked online at checkout: the whole order, or an advance on cash on delivery. */
+    online?: OrderOnlinePayment | null;
   };
   stockCommitted: boolean;
   customerNote: string;
@@ -819,6 +821,89 @@ export interface Order {
   placedAt: IsoDate;
   createdAt: IsoDate;
   updatedAt: IsoDate;
+}
+
+export type ShopGatewayKey = 'bkash' | 'nagad' | 'sslcommerz' | 'aamarpay' | 'shurjopay';
+
+export interface OrderOnlinePayment {
+  gateway: ShopGatewayKey;
+  purpose: 'full' | 'advance';
+  dueMinor: number;
+  status: 'awaiting' | 'paid' | 'failed';
+  sandbox: boolean;
+  paidAt: IsoDate | null;
+}
+
+/** One try at paying an order online (GET /orgs/:orgId/orders/:orderId/online-payments). */
+export interface OnlinePaymentAttempt {
+  id: string;
+  ref: string;
+  gateway: ShopGatewayKey;
+  gatewayName: string;
+  purpose: 'full' | 'advance';
+  amountMinor: number;
+  currency: string;
+  status: 'started' | 'succeeded' | 'failed' | 'cancelled';
+  /** The gateway gave a final answer; otherwise Sellora asks again later. */
+  settled: boolean;
+  sandbox: boolean;
+  gatewayRef: string | null;
+  reason: string | null;
+  createdAt: IsoDate;
+  verifiedAt: IsoDate | null;
+}
+
+export interface ShopGatewayDescriptor {
+  key: ShopGatewayKey;
+  name: string;
+  shopperHint: string;
+  fields: {
+    key: string;
+    label: string;
+    secret: boolean;
+    multiline?: boolean;
+    placeholder?: string;
+  }[];
+  /** Whether Sellora can check the keys with the gateway before a payment. */
+  checkable: boolean;
+  help: string;
+}
+
+export interface ShopPaymentAccount {
+  id: string;
+  gateway: ShopGatewayKey;
+  name: string;
+  enabled: boolean;
+  sandbox: boolean;
+  credentialsHint: string;
+  lastCheck: { at: IsoDate; checked: boolean; summary: string };
+  lastError: { at: IsoDate; message: string } | null;
+  lastPaymentAt: IsoDate | null;
+  createdAt: IsoDate;
+  updatedAt: IsoDate;
+}
+
+export type AdvanceMode = 'off' | 'delivery' | 'fixed' | 'percent';
+
+export interface ShopPaymentSettings {
+  cod: boolean;
+  fullOnline: boolean;
+  advance: {
+    mode: AdvanceMode;
+    fixedMinor: number;
+    percent: number;
+    /** Empty: every delivery area. */
+    zoneIds: string[];
+    minTotalMinor: number;
+  };
+}
+
+/** GET /orgs/:orgId/shop-payments */
+export interface ShopPaymentsOverview {
+  gateways: ShopGatewayDescriptor[];
+  accounts: ShopPaymentAccount[];
+  settings: ShopPaymentSettings;
+  zones: { id: string; name: string; chargeMinor: number }[];
 }
 
 export type OrderCounts = Record<OrderStatus | 'all', number>;
