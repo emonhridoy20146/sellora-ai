@@ -28,6 +28,8 @@ import {
   type ShipmentStatus,
   type ShopSettings,
   type OrderAttribution,
+  type OnlinePaymentStatus,
+  type ShopGatewayKey,
 } from './schemas.js';
 import { ShopSettingsService } from './shop-settings.service.js';
 import { escapeRegex } from './text.js';
@@ -104,7 +106,21 @@ export interface CreateOrderInput {
   /** Overrides the zone's charge. */
   deliveryChargeMinor?: number;
   discountMinor?: number;
-  payment?: { method: PaymentMethod; paidMinor?: number; reference?: string };
+  payment?: {
+    method: PaymentMethod;
+    paidMinor?: number;
+    reference?: string;
+    /**
+     * Online payment asked at checkout (ADR 0029). `due` gets the order's own totals, so the
+     * amount always matches what the order costs.
+     */
+    online?: {
+      gateway: ShopGatewayKey;
+      purpose: 'full' | 'advance';
+      sandbox: boolean;
+      due: (totals: { totalMinor: number; deliveryChargeMinor: number }) => number;
+    };
+  };
   customerNote?: string;
   internalNote?: string;
   /** Defaults to the shop setting (confirmed when auto-confirm is on). */
@@ -194,6 +210,16 @@ export function toOrderDto(o: OrderDoc) {
       status: o.payment.status,
       paidMinor: o.payment.paidMinor,
       reference: o.payment.reference ?? null,
+      online: o.payment.online
+        ? {
+            gateway: o.payment.online.gateway,
+            purpose: o.payment.online.purpose,
+            dueMinor: o.payment.online.dueMinor,
+            status: o.payment.online.status,
+            sandbox: o.payment.online.sandbox,
+            paidAt: o.payment.online.paidAt?.toISOString() ?? null,
+          }
+        : null,
     },
     stockCommitted: o.stockCommitted,
     conversationId: o.conversationId?.toHexString() ?? null,
@@ -796,6 +822,20 @@ export class OrdersService {
           status: paymentStatus(paidMinor, totals.totalMinor),
           paidMinor,
           ...(input.payment?.reference ? { reference: input.payment.reference } : {}),
+          ...(input.payment?.online
+            ? {
+                online: {
+                  gateway: input.payment.online.gateway,
+                  purpose: input.payment.online.purpose,
+                  dueMinor: Math.min(
+                    totals.totalMinor,
+                    Math.max(0, Math.round(input.payment.online.due(totals))),
+                  ),
+                  status: 'awaiting' as const,
+                  sandbox: input.payment.online.sandbox,
+                },
+              }
+            : {}),
         },
         stockCommitted: false,
         customerNote: input.customerNote ?? '',
@@ -1087,6 +1127,79 @@ export class OrdersService {
     return after;
   }
 
+  /**
+   * Adds money a gateway confirmed (ADR 0029) to the order. Called once per verified
+   * attempt; the caller makes sure of that. Recorded even on a cancelled order, so the
+   * business sees the money it has to give back.
+   */
+  async recordOnlinePayment(
+    id: string,
+    input: { amountMinor: number; reference?: string; paymentId: string; at?: Date },
+  ): Promise<OrderDoc> {
+    const at = input.at ?? new Date();
+    let before = await this.get(id);
+    let after: OrderDoc | null = null;
+    // Compare-and-set on the paid amount: staff may record a payment at the same moment.
+    for (let attempt = 0; attempt < 5 && !after; attempt += 1) {
+      if (attempt > 0) before = await this.get(id);
+      const paidMinor = before.payment.paidMinor + input.amountMinor;
+      const set: Record<string, unknown> = {
+        'payment.paidMinor': paidMinor,
+        'payment.status':
+          before.payment.status === 'refunded'
+            ? 'refunded'
+            : paymentStatus(paidMinor, before.totalMinor),
+      };
+      if (before.payment.online) {
+        set['payment.online.status'] = 'paid';
+        set['payment.online.paidAt'] = at;
+      }
+      if (input.reference && !before.payment.reference) set['payment.reference'] = input.reference;
+      after = await this.orders.findOneAndUpdate(
+        { _id: before._id, 'payment.paidMinor': before.payment.paidMinor },
+        { $set: set },
+      );
+    }
+    if (!after) throw AppError.notFound('order');
+    await this.audit.record({
+      action: 'order.paid_online',
+      orgId: this.orgId(),
+      target: { type: 'order', id, label: after.number },
+      metadata: {
+        gateway: before.payment.online?.gateway ?? null,
+        purpose: before.payment.online?.purpose ?? null,
+        amountMinor: input.amountMinor,
+        reference: input.reference ?? null,
+        paymentId: input.paymentId,
+        sandbox: before.payment.online?.sandbox ?? false,
+        orderStatus: after.status,
+        paidMinor: after.payment.paidMinor,
+      },
+    });
+    return after;
+  }
+
+  /**
+   * Follows the latest online payment attempt: a new attempt with another gateway, or one
+   * that failed. A paid online payment is never set back.
+   */
+  async setOnlinePayment(
+    id: string,
+    input: {
+      status: Exclude<OnlinePaymentStatus, 'paid'>;
+      gateway?: ShopGatewayKey;
+      sandbox?: boolean;
+    },
+  ): Promise<OrderDoc | null> {
+    const set: Record<string, unknown> = { 'payment.online.status': input.status };
+    if (input.gateway) set['payment.online.gateway'] = input.gateway;
+    if (input.sandbox !== undefined) set['payment.online.sandbox'] = input.sandbox;
+    return this.orders.findOneAndUpdate(
+      { _id: new Types.ObjectId(id), 'payment.online.status': { $in: ['awaiting', 'failed'] } },
+      { $set: set },
+    );
+  }
+
   /** Records what the customer has paid (or that the money was refunded). */
   async updatePayment(
     id: string,
@@ -1103,6 +1216,10 @@ export class OrdersService {
     if (input.paidMinor !== undefined && paidMinor > before.totalMinor)
       throw AppError.validation([
         { path: 'paidMinor', message: 'The paid amount is more than the order total' },
+      ]);
+    if (input.method === 'online' && before.payment.method !== 'online')
+      throw AppError.validation([
+        { path: 'method', message: 'Only a payment at checkout can be marked as paid online' },
       ]);
     const refunded = input.refunded ?? before.payment.status === 'refunded';
     if (refunded && paidMinor <= 0)

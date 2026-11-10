@@ -35,6 +35,7 @@ import { HealthModule } from './modules/health/health.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
 import { PlatformSettingsModule } from './modules/platform/platform-settings.module.js';
 import { PlatformModule } from './modules/platform/platform.module.js';
+import { ShopPaymentsModule } from './modules/shop-payments/shop-payments.module.js';
 import { SmsModule } from './modules/sms/sms.module.js';
 import { StoresModule } from './modules/stores/stores.module.js';
 import { TelegramModule } from './modules/telegram/telegram.module.js';
@@ -118,6 +119,7 @@ export class AppModule {
         FraudModule,
         StoresModule,
         LandingPagesModule,
+        ShopPaymentsModule,
         SmsModule,
         CartsModule,
         CampaignsModule,

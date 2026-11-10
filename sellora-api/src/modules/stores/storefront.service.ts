@@ -24,6 +24,12 @@ import { escapeRegex } from '../commerce/text.js';
 import { CourierAccountsService } from '../couriers/courier-accounts.service.js';
 import type { CourierKey } from '../couriers/courier.types.js';
 import { OrgsService, type OrganizationDoc } from '../orgs/orgs.service.js';
+import type { ShopGatewayKey } from '../commerce/schemas.js';
+import {
+  ShopPaymentsService,
+  type PaymentChoice,
+  type PaymentStart,
+} from '../shop-payments/shop-payments.service.js';
 import type { Store, StorePageKey } from './schemas.js';
 import { runIdempotent } from './idempotency.js';
 import { StoreDomainsService } from './store-domains.service.js';
@@ -66,6 +72,8 @@ export interface CheckoutInput {
   cartToken?: string;
   /** Where the shopper came from (ADR 0027), kept on the order. */
   attribution?: OrderAttribution;
+  /** Cash on delivery (the default) or online, and the gateway (ADR 0029). */
+  payment?: PaymentChoice;
 }
 
 /** Products shown per home page section, at most. */
@@ -107,6 +115,7 @@ export class StorefrontService {
     private readonly limits: RateLimitService,
     private readonly carts: CartsService,
     private readonly stats: StoreStatsService,
+    private readonly shopPayments: ShopPaymentsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -509,6 +518,15 @@ export class StorefrontService {
       throw AppError.unprocessable('below_minimum', 'The cart is below the minimum order.', {
         minOrderMinor: quote.minOrderMinor,
       });
+    const plan = this.shopPayments.plan(
+      input.payment,
+      await this.shopPayments.options({
+        totalMinor: quote.totalMinor,
+        deliveryChargeMinor: quote.deliveryChargeMinor,
+        zoneId: quote.zoneId,
+        currency: quote.currency,
+      }),
+    );
 
     let order: OrderDoc;
     try {
@@ -532,7 +550,7 @@ export class StorefrontService {
           quantity: i.quantity,
         })),
         deliveryZoneId: quote.zoneId,
-        payment: { method: 'cod' },
+        payment: { method: plan.method, ...(plan.online ? { online: plan.online } : {}) },
         ...(input.note ? { customerNote: input.note } : {}),
         status: 'pending',
         source: 'store',
@@ -563,12 +581,51 @@ export class StorefrontService {
     }
     await this.closeCart(input.cartToken, order);
     await this.stats.orderPlaced(r, order, input.attribution);
+    const receipt = this.links.receiptToken(r.store._id.toHexString(), order._id.toHexString());
     return {
       orderNumber: order.number,
       totalMinor: order.totalMinor,
       currency: order.currency,
-      receipt: this.links.receiptToken(r.store._id.toHexString(), order._id.toHexString()),
+      receipt,
+      payment: plan.online
+        ? await this.startPayment(r, order, plan.online.gateway, this.receiptUrl(r, receipt, true))
+        : null,
     };
+  }
+
+  /** The shop's receipt page for an order; `fresh` shows the thank-you message on it. */
+  receiptUrl(r: ResolvedStore, receipt: string, fresh: boolean): string {
+    return `${this.links.url(r.store).replace(/\/$/, '')}/order?receipt=${encodeURIComponent(receipt)}${fresh ? '&new=1' : ''}`;
+  }
+
+  /** Starts the online payment of an order with the business's own gateway (ADR 0029). */
+  startPayment(
+    r: ResolvedStore,
+    order: OrderDoc,
+    gateway: ShopGatewayKey,
+    returnUrl: string,
+  ): Promise<PaymentStart> {
+    return this.shopPayments.start(order, gateway, {
+      returnUrl,
+      description: `Order ${order.number} · ${r.store.name}`,
+    });
+  }
+
+  /**
+   * "Pay now" on a receipt: a new attempt for what is still due online, with a gateway the
+   * shopper chooses. Limited per order.
+   */
+  async pay(
+    r: ResolvedStore,
+    receipt: string,
+    gateway: ShopGatewayKey,
+    returnUrl?: string,
+  ): Promise<PaymentStart> {
+    const orderId = this.links.verifyReceipt(r.store._id.toHexString(), receipt);
+    const order = orderId ? await this.orderRepo.findById(orderId) : null;
+    if (!order) throw AppError.notFound('order');
+    await this.limits.consume('shop-pay:order', order._id.toHexString());
+    return this.startPayment(r, order, gateway, returnUrl ?? this.receiptUrl(r, receipt, false));
   }
 
   /** Closes the saved cart an order came from. Never fails the order. */
@@ -585,7 +642,16 @@ export class StorefrontService {
   /** A cart price for the checkout page, and whether the cart may be saved for reminders. */
   async cartQuote(r: ResolvedStore, items: CartLineInput[], zoneId?: string | null) {
     const quote = await this.quote(r, items, zoneId);
-    return { ...quote, cartReminders: r.state === 'open' && (await this.carts.capturing()) };
+    const [cartReminders, payments] = await Promise.all([
+      this.carts.capturing(),
+      this.shopPayments.options({
+        totalMinor: quote.totalMinor,
+        deliveryChargeMinor: quote.deliveryChargeMinor,
+        zoneId: quote.zoneId,
+        currency: quote.currency,
+      }),
+    ]);
+    return { ...quote, cartReminders: r.state === 'open' && cartReminders, payments };
   }
 
   /**
@@ -683,6 +749,7 @@ export class StorefrontService {
       deliveryChargeMinor: order.deliveryChargeMinor,
       totalMinor: order.totalMinor,
       paymentMethod: order.payment.method,
+      payment: await this.shopPayments.receiptView(order),
       customer: { name: order.customer.name, phone: maskPhone(order.customer.phone) },
       address: {
         line1: order.shippingAddress.line1,

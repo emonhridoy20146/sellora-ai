@@ -6,6 +6,7 @@ import { BUSINESS_CATEGORY_KEYS } from '../orgs/business-categories.js';
 import { DOMAIN_STATUSES, STORE_STATUSES } from './schemas.js';
 import { STORE_EVENTS } from './store-stats.service.js';
 import { THEME_KEYS, themeSettingsSchema } from './themes.js';
+import { paymentChoice } from '../shop-payments/shop-payments.dto.js';
 
 const text = (max: number) => z.string().trim().max(max);
 
@@ -191,6 +192,8 @@ export const checkoutBody = z
     cartToken: cartToken.optional(),
     /** Where the shopper came from (the ad's tags or the referring site), ADR 0027. */
     attribution: attribution.optional(),
+    /** Cash on delivery (the default) or online, with the gateway (ADR 0029). */
+    payment: paymentChoice.optional(),
   })
   .strict();
 

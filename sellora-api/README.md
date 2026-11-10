@@ -174,6 +174,20 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
   `SelloraBot/1.0 (+<WEB_APP_URL>/bot)`; the web app's `/bot` page explains the crawler). To
   try it locally, run `node scripts/site-stand-in.mjs` (a demo site, not a real shop) with
   `SYNC_ALLOW_PRIVATE_NETWORK=true`, and add `http://localhost:4095`.
+- Payments at checkout (ADR 0029, Settings › Payments): needs no keys of ours. Each business
+  connects its own bKash, Nagad, SSLCommerz, aamarPay or shurjoPay merchant account; the keys
+  are checked with the gateway where it allows, stored encrypted with the
+  `DATA_ENCRYPTION_KEYS` and never returned. Gateways send shoppers back to
+  `<API_PUBLIC_URL>/v1/shop-payments/<ref>/return/...` (SSLCommerz also notifies `/notify`), so
+  `API_PUBLIC_URL` must be an address shoppers' browsers and the gateways can reach. Money is
+  counted only after the API asks the gateway; the worker asks again every 5 minutes for two
+  days (queue `maintenance`, job `shop-payments`), so run `npm run dev:worker`.
+  `PAYMENT_<GATEWAY>_LIVE_URL` and `PAYMENT_<GATEWAY>_SANDBOX_URL` default to the gateways'
+  published addresses. To try it locally without merchant accounts, run
+  `node scripts/payment-stand-in.mjs` and set `PAYMENT_<GATEWAY>_SANDBOX_URL` to
+  `http://127.0.0.1:4110/<gateway>` (bkash, nagad, sslcommerz, aamarpay, shurjopay), then
+  connect each gateway in test mode with the demo keys in the script's header. It is not a
+  payment gateway: no money moves, and its Pay and Cancel page stands in for the gateway's.
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -203,6 +217,7 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
 | `node scripts/shop-stand-in.mjs`                              | Stand-in for Shopify's GraphQL Admin API, WooCommerce's REST API and a published sheet on :4090, with a page to change prices and stock, for trying catalog sync (not Shopify, WooCommerce or Google).                            |
 | `node scripts/site-stand-in.mjs`                              | A demo shop website on :4095 (robots.txt, sitemap, product pages with schema.org data, delivery and returns pages in Bangla and English), with calls to change prices, hide pages and set the verification tag (not a real shop). |
 | `node scripts/speech-stand-in.mjs`                            | Stand-in for an OpenAI-style speech-to-text API on :4100 for trying voice notes without a key; answers a scripted sentence (set the next with `/__say`) and never listens (not speech recognition).                               |
+| `node scripts/payment-stand-in.mjs`                           | Stand-in for the bKash, Nagad, SSLCommerz, aamarPay and shurjoPay merchant APIs on :4110 with a Pay and Cancel page, for trying payments at checkout without merchant accounts (not a payment gateway; no money moves).           |
 
 ## Tests
 
@@ -263,6 +278,9 @@ src/
                              storefront view and orders, visit numbers (ADR 0016)
     sms/                     SMS provider adapters, Sellora SMS and wallet charging, order
                              messages, sender names, opt-outs, delivery reports (ADR 0017)
+    shop-payments/           payments at checkout with the business's own gateways: adapters
+                             for bKash, Nagad, SSLCommerz, aamarPay and shurjoPay, payment
+                             options and the advance, tries, returns and checks (ADR 0029)
     health/                  liveness and readiness
 test/
   e2e/                       HTTP tests per area, including tenancy.e2e.ts

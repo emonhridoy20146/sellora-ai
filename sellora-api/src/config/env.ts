@@ -220,6 +220,23 @@ export const envSchema = z
     META_GRAPH_BASE_URL: z.union([z.url(), z.literal('')]).optional(),
 
     /**
+     * Payment gateway APIs (ADR 0029): shoppers paying businesses at checkout, and the
+     * platform's own SSLCommerz and bKash billing. The defaults are the gateways' published
+     * live and sandbox addresses; change them only when a gateway moves or for a local stand-in.
+     */
+    PAYMENT_BKASH_LIVE_URL: urlWithDefault('https://tokenized.pay.bka.sh/v1.2.0-beta'),
+    PAYMENT_BKASH_SANDBOX_URL: urlWithDefault('https://tokenized.sandbox.bka.sh/v1.2.0-beta'),
+    PAYMENT_SSLCOMMERZ_LIVE_URL: urlWithDefault('https://securepay.sslcommerz.com'),
+    PAYMENT_SSLCOMMERZ_SANDBOX_URL: urlWithDefault('https://sandbox.sslcommerz.com'),
+    PAYMENT_NAGAD_LIVE_URL: urlWithDefault('https://api.mynagad.com'),
+    PAYMENT_NAGAD_SANDBOX_URL: urlWithDefault(
+      'http://sandbox.mynagad.com:10080/remote-payment-gateway-1.0',
+    ),
+    PAYMENT_AAMARPAY_LIVE_URL: urlWithDefault('https://secure.aamarpay.com'),
+    PAYMENT_AAMARPAY_SANDBOX_URL: urlWithDefault('https://sandbox.aamarpay.com'),
+    PAYMENT_SHURJOPAY_LIVE_URL: urlWithDefault('https://engine.shurjopayment.com'),
+    PAYMENT_SHURJOPAY_SANDBOX_URL: urlWithDefault('https://sandbox.shurjopayment.com'),
+    /**
      * Courier APIs. The defaults are the couriers' published production and sandbox
      * addresses; change them only when a courier moves its API or for a local stand-in.
      */

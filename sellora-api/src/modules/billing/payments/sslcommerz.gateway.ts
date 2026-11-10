@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { currencyInfo, toMinor } from '../../../common/money/money.js';
+import { AppConfig } from '../../../config/app-config.js';
 import {
   GATEWAY_FETCH,
   GATEWAY_TIMEOUT_MS,
@@ -13,11 +14,6 @@ import {
   str,
 } from './gateway.types.js';
 
-const HOSTS = {
-  sandbox: 'https://sandbox.sslcommerz.com',
-  live: 'https://securepay.sslcommerz.com',
-};
-
 /**
  * SSLCommerz hosted checkout (API v4). We create a session, send the payer to the
  * returned GatewayPageURL, and only trust a payment after asking the validation API with
@@ -25,16 +21,23 @@ const HOSTS = {
  */
 @Injectable()
 export class SslCommerzGateway {
-  constructor(@Inject(GATEWAY_FETCH) private readonly http: GatewayFetch) {}
+  constructor(
+    @Inject(GATEWAY_FETCH) private readonly http: GatewayFetch,
+    private readonly config: AppConfig,
+  ) {}
 
   private host(sandbox: boolean) {
-    return sandbox ? HOSTS.sandbox : HOSTS.live;
+    return this.config
+      .get(sandbox ? 'PAYMENT_SSLCOMMERZ_SANDBOX_URL' : 'PAYMENT_SSLCOMMERZ_LIVE_URL')
+      .replace(/\/$/, '');
   }
 
   async createCheckout(
     creds: GatewayCredentials['sslcommerz'],
     sandbox: boolean,
     req: CheckoutRequest,
+    /** What is sold: Sellora's own billing sells a service; shops sell goods (ADR 0029). */
+    goods?: { category: string; address?: string; city?: string },
   ): Promise<CheckoutSession> {
     const form = new URLSearchParams({
       store_id: creds.storeId,
@@ -49,14 +52,14 @@ export class SslCommerzGateway {
       cus_name: req.customer.name,
       cus_email: req.customer.email ?? 'billing@sellora.ai',
       cus_phone: req.customer.phone ?? '01700000000',
-      cus_add1: 'N/A',
-      cus_city: 'Dhaka',
+      cus_add1: (goods?.address ?? 'N/A').slice(0, 50) || 'N/A',
+      cus_city: (goods?.city ?? 'Dhaka').slice(0, 50) || 'Dhaka',
       cus_country: 'Bangladesh',
       shipping_method: 'NO',
       num_of_item: '1',
       product_name: req.description.slice(0, 250),
-      product_category: 'SaaS',
-      product_profile: 'non-physical-goods',
+      product_category: goods?.category ?? 'SaaS',
+      product_profile: goods ? 'physical-goods' : 'non-physical-goods',
       value_a: req.paymentId,
     });
     const res = await this.http(`${this.host(sandbox)}/gwprocess/v4/api.php`, {
@@ -138,6 +141,48 @@ export class SslCommerzGateway {
       currency,
       raw,
       tranId: body.tran_id,
+    };
+  }
+
+  /**
+   * Looks a payment up by our transaction id (the transaction query API), for payments whose
+   * shopper never came back. Answers the `val_id` of a valid payment, if there is one. With
+   * a made-up id it also tells whether the store id and password are right.
+   */
+  async findByTranId(
+    creds: GatewayCredentials['sslcommerz'],
+    sandbox: boolean,
+    tranId: string,
+  ): Promise<{ connected: boolean; reason: string; valId?: string; failed: boolean }> {
+    const url = new URL(`${this.host(sandbox)}/validator/api/merchantTransIDvalidationAPI.php`);
+    url.search = new URLSearchParams({
+      tran_id: tranId,
+      store_id: creds.storeId,
+      store_passwd: creds.storePassword,
+      format: 'json',
+    }).toString();
+    const res = await this.http(url, {
+      method: 'GET',
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+    });
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok)
+      throw new GatewayError('sslcommerz', 'SSLCommerz transaction query failed', {
+        httpStatus: res.status,
+      });
+    const connect = str(body.APIConnect);
+    const elements = Array.isArray(body.element) ? (body.element as Record<string, unknown>[]) : [];
+    const valid = elements.find((e) => e.status === 'VALID' || e.status === 'VALIDATED');
+    const failed =
+      elements.length > 0 &&
+      !valid &&
+      elements.every((e) => e.status === 'FAILED' || e.status === 'CANCELLED');
+    return {
+      connected: connect === 'DONE',
+      reason: connect || 'no answer',
+      ...(valid && typeof valid.val_id === 'string' ? { valId: valid.val_id } : {}),
+      failed,
     };
   }
 }

@@ -31,6 +31,7 @@ import { StorefrontKeyGuard } from './storefront-key.guard.js';
 import { StorefrontService, type ResolvedStore } from './storefront.service.js';
 import * as dto from './stores.dto.js';
 import { StoresService } from './stores.service.js';
+import * as payDto from '../shop-payments/shop-payments.dto.js';
 
 // ---------------------------------------------------------------- merchant
 
@@ -499,7 +500,9 @@ export class StorefrontController {
 
   @Post('checkout')
   @ApiHeader({ name: 'Idempotency-Key', required: true })
-  @ApiOperation({ summary: 'Place a cash-on-delivery order (pending until the business confirms)' })
+  @ApiOperation({
+    summary: 'Place an order (pending until the business confirms); with online payment, start it',
+  })
   checkout(
     @Headers(STORE_HOST_HEADER) host: string | undefined,
     @Headers('idempotency-key') rawKey: string | undefined,
@@ -518,6 +521,18 @@ export class StorefrontController {
     @ZodQuery(dto.receiptQuery) q: z.infer<typeof dto.receiptQuery>,
   ) {
     return this.open(host, undefined, (r) => this.storefront.receipt(r, q.receipt));
+  }
+
+  @Post('orders/pay')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Start paying what is still due online on an order (from its receipt)',
+  })
+  pay(
+    @Headers(STORE_HOST_HEADER) host: string | undefined,
+    @ZodBody(payDto.payBody) body: z.infer<typeof payDto.payBody>,
+  ) {
+    return this.open(host, undefined, (r) => this.storefront.pay(r, body.receipt, body.gateway));
   }
 
   @Post('orders/track')

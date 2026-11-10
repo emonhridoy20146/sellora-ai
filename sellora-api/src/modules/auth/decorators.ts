@@ -37,6 +37,14 @@ export const SignedUrlAuth = () =>
  */
 export const OwnTokenAuth = SignedUrlAuth;
 
+/**
+ * Where a payment gateway sends the shopper back (often a form POST from the gateway's page)
+ * or tells the server about a payment. Nothing in the request is trusted: the handler asks
+ * the gateway itself. No session is read, so a signed-in browser's cookies never trip the
+ * CSRF check. Implies @Public.
+ */
+export const GatewayCallback = SignedUrlAuth;
+
 /** Routes for the super-admin realm: platform tokens only, merchant tokens rejected. */
 export const PlatformApi = (tag: string) =>
   applyDecorators(

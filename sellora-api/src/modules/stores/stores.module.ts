@@ -6,6 +6,7 @@ import { CommerceCoreModule } from '../commerce/commerce.module.js';
 import { CouriersCoreModule } from '../couriers/couriers.module.js';
 import { FilesCoreModule } from '../files/files.module.js';
 import { OrgsModule } from '../orgs/orgs.module.js';
+import { ShopPaymentsCoreModule } from '../shop-payments/shop-payments.module.js';
 import { UsersModule } from '../users/users.module.js';
 import { DNS_LOOKUP, NodeDnsLookup } from './dns-lookup.js';
 import {
@@ -51,6 +52,7 @@ import { StoresService } from './stores.service.js';
     CouriersCoreModule,
     FilesCoreModule,
     OrgsModule,
+    ShopPaymentsCoreModule,
     UsersModule,
     MongooseModule.forFeature([
       { name: 'Store', schema: storeSchema },

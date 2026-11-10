@@ -19,6 +19,11 @@ const text = (max: number) => z.string().trim().max(max);
 const label = (max: number) => z.string().trim().min(1).max(max);
 const queryBool = z.enum(['true', 'false']).transform((v) => v === 'true');
 const quantity = z.number().int().min(1).max(100_000);
+/** Staff record how an order was paid; "online" is set only by a checkout payment (ADR 0029). */
+const staffPaymentMethod = z.enum(PAYMENT_METHODS.filter((m) => m !== 'online') as [
+  Exclude<(typeof PAYMENT_METHODS)[number], 'online'>,
+  ...Exclude<(typeof PAYMENT_METHODS)[number], 'online'>[],
+]);
 
 // ---------------------------------------------------------------- catalog
 
@@ -182,7 +187,7 @@ export const createOrderBody = z
     discountMinor: moneyMinorSchema.optional(),
     payment: z
       .object({
-        method: z.enum(PAYMENT_METHODS),
+        method: staffPaymentMethod,
         paidMinor: moneyMinorSchema.optional(),
         reference: text(120).optional(),
       })

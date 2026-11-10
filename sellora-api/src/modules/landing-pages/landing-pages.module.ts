@@ -5,6 +5,7 @@ import { CartsCoreModule } from '../carts/carts.module.js';
 import { CommerceCoreModule } from '../commerce/commerce.module.js';
 import { FilesCoreModule } from '../files/files.module.js';
 import { OrgsModule } from '../orgs/orgs.module.js';
+import { ShopPaymentsCoreModule } from '../shop-payments/shop-payments.module.js';
 import { StorefrontKeyGuard } from '../stores/storefront-key.guard.js';
 import { StoresCoreModule } from '../stores/stores.module.js';
 import {
@@ -33,6 +34,7 @@ import { landingPageSchema, landingPageStatSchema, landingPageVersionSchema } fr
     CommerceCoreModule,
     FilesCoreModule,
     OrgsModule,
+    ShopPaymentsCoreModule,
     StoresCoreModule,
     MongooseModule.forFeature([
       { name: 'LandingPage', schema: landingPageSchema },
