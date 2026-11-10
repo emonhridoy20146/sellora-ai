@@ -3,10 +3,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { OrderProgress } from '@/components/order-status';
+import { PayNow } from '@/components/pay-now';
+import { PaymentBanner, PaymentRows } from '@/components/payment-summary';
 import { ApiError, apiGet } from '@/lib/api';
 import { dictionary } from '@/lib/i18n';
 import { formatDate, formatMoney } from '@/lib/money';
 import { openStore } from '@/lib/page-store';
+import { isReturnState } from '@/lib/payments';
 import type { Receipt } from '@/lib/types';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -37,9 +40,11 @@ export default async function OrderPage({
   }
   const money = (minor: number) => formatMoney(minor, order.currency, store.language);
   const isNew = params.new === '1';
+  const returned = isReturnState(params.payment) ? params.payment : null;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
+      <PaymentBanner order={order} state={returned} t={t} />
       {isNew ? (
         <div className="mb-8 rounded-store-lg border border-line bg-surface p-6 text-center">
           <CheckCircle2 className="mx-auto size-12 text-primary" aria-hidden="true" />
@@ -54,6 +59,17 @@ export default async function OrderPage({
         </h1>
       )}
 
+      {order.payment?.payNow && store.state === 'open' ? (
+        <div className="mb-6">
+          <PayNow
+            receipt={token}
+            payment={order.payment}
+            endpoint="/api/orders/pay"
+            currency={order.currency}
+            language={store.language}
+          />
+        </div>
+      ) : null}
       <div className="grid gap-6 md:grid-cols-[1fr_280px]">
         <section className="rounded-store-lg border border-line bg-surface p-5">
           <dl className="mb-4 grid grid-cols-2 gap-3 text-sm">
@@ -103,10 +119,7 @@ export default async function OrderPage({
               <dt>{t.total}</dt>
               <dd>{money(order.totalMinor)}</dd>
             </div>
-            <div className="flex justify-between text-muted">
-              <dt>{t.payment}</dt>
-              <dd>{order.paymentMethod === 'cod' ? t.cod : order.paymentMethod}</dd>
-            </div>
+            <PaymentRows order={order} t={t} money={money} />
           </dl>
           <div className="mt-4 border-t border-line pt-4 text-sm">
             <p className="text-muted">{t.shipTo}</p>

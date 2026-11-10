@@ -1,6 +1,5 @@
 'use client';
 
-import { Banknote } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
@@ -8,8 +7,10 @@ import { useCart } from '@/lib/cart';
 import { cartToken, setCartToken, storeCartTokenKey, useCartCapture } from '@/lib/cart-capture';
 import { cn } from '@/lib/cn';
 import { formatMoney } from '@/lib/money';
+import { firstPick, paymentBody, payingNow, validPick, type PaymentPick } from '@/lib/payments';
 import { asciiDigits, isBdMobile } from '@/lib/phone';
 import { fieldErrors, readJson } from '@/lib/problem';
+import type { PaymentStart } from '@/lib/types';
 import { reportStep, storeAttribution } from '@/lib/shop-steps';
 import {
   DETAILS_KEY,
@@ -21,6 +22,7 @@ import {
   type Details,
 } from '@/lib/shopper';
 import { useQuote } from './cart-view';
+import { PaymentChoice } from './payment-choice';
 import { useShop } from './shop-context';
 
 function Field({
@@ -79,11 +81,16 @@ export function CheckoutForm() {
     if (state === 'open') reportStep('checkout');
   }, [state]);
   const [placing, setPlacing] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
   const { quote, error: quoteError } = useQuote(cart.items, chosenZone);
   // Until the shopper picks an area, the shop's default area applies.
   const zoneId = chosenZone !== undefined ? chosenZone : (quote?.zoneId ?? null);
   const setZoneId = (id: string) => setChosenZone(id);
   const money = (minor: number) => formatMoney(minor, quote?.currency ?? currency, language);
+  const [rawPick, setPick] = useState<PaymentPick | null>(null);
+  // Kept valid as the quote changes: a gateway the shop switched off is never sent.
+  const pick = validPick(rawPick ?? firstPick(quote?.payments), quote?.payments);
+  const payNow = quote ? payingNow(pick, quote.payments, quote.totalMinor) : 0;
 
   const cartHash = useMemo(
     () => JSON.stringify(cart.items.map((i) => [i.variantId, i.quantity])),
@@ -159,6 +166,9 @@ export function CheckoutForm() {
         ...(details.district.trim() ? { district: details.district.trim() } : {}),
       },
       zoneId: zoneId ?? null,
+      ...(paymentBody(pick, quote?.payments)
+        ? { payment: paymentBody(pick, quote?.payments) }
+        : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(website ? { website } : {}),
       // Where the shopper came from (the ad or site), kept on the order.
@@ -172,13 +182,26 @@ export function CheckoutForm() {
         headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey() },
         body: JSON.stringify({ ...payload, ...(token ? { cartToken: token } : {}) }),
       });
-      const r = await readJson<{ orderNumber: string; receipt: string }>(res, t);
+      const r = await readJson<{
+        orderNumber: string;
+        receipt: string;
+        payment: PaymentStart | null;
+      }>(res, t);
       if (r.ok) {
         save(DETAILS_KEY, { ...details, email: '' }, 'local');
         setCartToken(tokenKey, null);
         save(`sl_checkout_${storeId}`, null, 'session');
         cart.clear();
-        router.replace(`/order?receipt=${encodeURIComponent(r.data.receipt)}&new=1`);
+        const paying = r.data.payment;
+        // Off to the gateway's own page; it sends the shopper back to the receipt.
+        if (paying?.redirectUrl) {
+          setRedirecting(true);
+          window.location.assign(paying.redirectUrl);
+          return;
+        }
+        router.replace(
+          `/order?receipt=${encodeURIComponent(r.data.receipt)}&new=1${paying ? '&payment=unstarted' : ''}`,
+        );
         return;
       }
       const fields = fieldErrors(r.problem);
@@ -342,15 +365,17 @@ export function CheckoutForm() {
           </div>
         </section>
 
-        <section className="rounded-store-lg border border-line bg-surface p-5">
+        <section className="space-y-3 rounded-store-lg border border-line bg-surface p-5">
           <h2 className="font-semibold">{t.payment}</h2>
-          <div className="mt-3 flex items-center gap-3 rounded-store border border-primary bg-tint p-3">
-            <Banknote className="size-5 text-primary" aria-hidden="true" />
-            <div>
-              <p className="text-sm font-medium">{t.cod}</p>
-              <p className="text-xs text-muted">{t.codHint}</p>
-            </div>
-          </div>
+          <PaymentChoice
+            id={fid('payment')}
+            options={quote?.payments}
+            pick={pick}
+            onPick={setPick}
+            money={money}
+            t={t}
+            error={errors['payment.gateway'] ?? errors['payment.method']}
+          />
         </section>
       </div>
 
@@ -404,6 +429,20 @@ export function CheckoutForm() {
             <dt>{t.total}</dt>
             <dd>{quote ? money(quote.totalMinor) : '…'}</dd>
           </div>
+          {quote && payNow > 0 ? (
+            <>
+              <div className="flex justify-between">
+                <dt className="text-muted">{t.payNowLabel}</dt>
+                <dd className="font-medium">{money(payNow)}</dd>
+              </div>
+              {quote.totalMinor > payNow ? (
+                <div className="flex justify-between">
+                  <dt className="text-muted">{t.payOnDelivery}</dt>
+                  <dd>{money(quote.totalMinor - payNow)}</dd>
+                </div>
+              ) : null}
+            </>
+          ) : null}
         </dl>
         {quote?.belowMinimum ? (
           <p className="text-sm text-red-700">{t.minimumOrder(money(quote.minOrderMinor))}</p>
@@ -427,7 +466,13 @@ export function CheckoutForm() {
           disabled={placing || state === 'preview' || !quote || quote.belowMinimum}
           className="flex h-12 w-full items-center justify-center rounded-store bg-primary font-semibold text-on-primary hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {placing ? t.placing : t.placeOrder}
+          {redirecting
+            ? t.goingToPay
+            : placing
+              ? t.placing
+              : payNow > 0
+                ? t.placeAndPay(money(payNow))
+                : t.placeOrder}
         </button>
       </aside>
     </form>

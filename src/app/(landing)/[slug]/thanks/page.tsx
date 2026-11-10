@@ -3,10 +3,13 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { OrderProgress } from '@/components/order-status';
+import { PayNow } from '@/components/pay-now';
+import { PaymentBanner, PaymentRows } from '@/components/payment-summary';
 import { ApiError, apiGet, contextFrom } from '@/lib/api';
 import { dictionary } from '@/lib/i18n';
 import { isLandingSlug } from '@/lib/landing-offer';
 import { formatMoney } from '@/lib/money';
+import { isReturnState } from '@/lib/payments';
 import type { LandingReceipt } from '@/lib/types';
 
 type Props = {
@@ -40,9 +43,11 @@ export default async function LandingThanks({ params, searchParams }: Props) {
   const language = page.language;
   const t = dictionary(language);
   const money = (minor: number) => formatMoney(minor, order.currency, language);
+  const returned = isReturnState(q.payment) ? q.payment : null;
 
   return (
     <main id="main" className="mx-auto max-w-2xl px-4 py-10">
+      <PaymentBanner order={order} state={returned} t={t} />
       <div className="rounded-store-lg border border-line bg-surface p-6 text-center">
         <CheckCircle2 className="mx-auto size-14 text-primary" aria-hidden="true" />
         <h1 className="mt-3 font-display text-2xl font-bold">{t.thanks}</h1>
@@ -59,6 +64,18 @@ export default async function LandingThanks({ params, searchParams }: Props) {
         ) : null}
         <p className="mt-4 text-xs text-muted">{t.saveLink}</p>
       </div>
+
+      {order.payment?.payNow ? (
+        <div className="mt-6">
+          <PayNow
+            receipt={token}
+            payment={order.payment}
+            endpoint={`/api/landing/${encodeURIComponent(page.slug)}/pay`}
+            currency={order.currency}
+            language={language}
+          />
+        </div>
+      ) : null}
 
       <section className="mt-6 rounded-store-lg border border-line bg-surface p-5">
         <h2 className="mb-3 font-semibold">{t.items}</h2>
@@ -100,10 +117,7 @@ export default async function LandingThanks({ params, searchParams }: Props) {
             <dt>{t.total}</dt>
             <dd>{money(order.totalMinor)}</dd>
           </div>
-          <div className="flex justify-between text-muted">
-            <dt>{t.payment}</dt>
-            <dd>{order.paymentMethod === 'cod' ? t.cod : order.paymentMethod}</dd>
-          </div>
+          <PaymentRows order={order} t={t} money={money} />
         </dl>
         <div className="mt-4 border-t border-line pt-4 text-sm">
           <p className="text-muted">{t.shipTo}</p>
