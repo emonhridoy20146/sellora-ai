@@ -299,6 +299,21 @@ and the credit price list. Then:
 - **Businesses**: after you and your friend sign up, give each business the plan you want them
   to test, for example All-in-one, and add AI credits.
 
+## 6b. Payments at checkout (each business's own gateway)
+
+Nothing to set on the servers: each business enters its own merchant keys in **Settings ›
+Payments**, and the keys are stored encrypted with the `DATA_ENCRYPTION_KEYS`. Gateways send
+shoppers back to `https://<web domain>/v1/shop-payments/...` (`API_PUBLIC_URL`), which the web
+service passes to the API. Keep the worker running: it asks the gateways about payments whose
+shoppers never came back. Never set the `PAYMENT_*_URL` lines here; their defaults are the
+gateways' real addresses, and the payment stand-in is for your computer only.
+
+Before a business takes real money, connect its gateway with **Test mode** on and the
+gateway's sandbox keys, make one payment and one cancel from its store, and check that the
+order shows them. Sellora's gateway code was written from the gateways' published API
+documents and tested only against a stand-in, so this first sandbox payment is the real test.
+Then save the live keys with **Test mode** off.
+
 ## 7. Meta: Messenger, Instagram and WhatsApp
 
 This needs a Meta app at [developers.facebook.com](https://developers.facebook.com). Meta's

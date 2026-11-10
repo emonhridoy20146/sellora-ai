@@ -73,6 +73,45 @@ Finish the platform owner account (password + 2FA) within 24 hours:
 Landing pages work the same way (**Landing pages**, then approve them under **Landing pages**
 in the super-admin panel) and open at `http://nakshi-ghor.sellora.localhost:3100/<page address>`.
 
+### Try payments at checkout
+
+Shoppers can pay online with the business's own bKash, Nagad, SSLCommerz, aamarPay or
+shurjoPay account, in full or as an advance on cash on delivery. To try it without merchant
+accounts, use the payment stand-in. It is **not** a payment gateway: no money moves, and its
+Pay and Cancel page stands in for the gateway's page.
+
+1. Add these lines to the `.env` file next to `compose.yaml` (create it if needed):
+
+   ```
+   PAYMENT_BKASH_SANDBOX_URL=http://payment-stand-in:4110/bkash
+   PAYMENT_NAGAD_SANDBOX_URL=http://payment-stand-in:4110/nagad
+   PAYMENT_SSLCOMMERZ_SANDBOX_URL=http://payment-stand-in:4110/sslcommerz
+   PAYMENT_AAMARPAY_SANDBOX_URL=http://payment-stand-in:4110/aamarpay
+   PAYMENT_SHURJOPAY_SANDBOX_URL=http://payment-stand-in:4110/shurjopay
+   ```
+
+2. Run `docker compose --profile payments-demo up -d`.
+3. Sign in as `shop@demo.sellora.test` and open **Settings › Payments**. Connect a gateway
+   with **Test mode** on and these demo keys:
+
+   | Gateway    | Keys                                                                                                                                 |
+   | ---------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+   | bKash      | App key `demo-bkash-app-key`, app secret `demo-bkash-app-secret`, username `demo-bkash-user`, password `demo-bkash-password`         |
+   | SSLCommerz | Store ID `demosellora01`, store password `demosellora01@ssl`                                                                         |
+   | aamarPay   | Store ID `aamarpaytest`, signature key `demo-aamarpay-signature-key`                                                                 |
+   | shurjoPay  | Username `demo-shurjopay`, password `demo-shurjopay-password`, order prefix `DEMO`                                                   |
+   | Nagad      | Merchant ID `683002007104225`, number `01711428036`, and the two keys shown at http://localhost:4110/__nagad-keys (new each restart) |
+
+4. Under **How shoppers can pay**, choose an advance (for example **Delivery charge** for
+   Outside Dhaka) and save.
+5. Order from the store or a landing page, choose how to pay, and press Pay or Cancel on the
+   stand-in's page. The receipt says what happened (and offers **Pay now** after a cancel),
+   and the order in **Orders** shows the payment and every try.
+
+With real sandbox keys from a gateway instead, leave those lines out: Sellora then uses the
+gateway's own sandbox. Live keys take real money; switch **Test mode** off only when one
+sandbox payment has worked.
+
 ### Turn on the AI sales agent
 
 Create a file named `.env` next to `compose.yaml` (never commit it) with your key:
@@ -105,8 +144,8 @@ Anthropic tokens.
 - SMS with your provider's credentials.
 - Backups. Copies to Google Drive need a Google OAuth client with the redirect
   `http://localhost:3000/v1/backups/google/callback`.
-- Online stores and landing pages, with cash on delivery. Businesses' own domains need the
-  deployed version.
+- Online stores and landing pages, with cash on delivery or online payment (with the payment
+  stand-in or a gateway's sandbox keys). Businesses' own domains need the deployed version.
 
 **Needs the deployed version:**
 
