@@ -32,6 +32,12 @@ import {
 } from './blocks.js';
 import type { LandingPageDoc } from './landing-pages.service.js';
 import { LandingPageRepository, LandingPageStatRepository } from './repositories.js';
+import { AdDestinationsService } from '../ad-tracking/ad-destinations.service.js';
+import {
+  AdEventsService,
+  type BrowserEventInput,
+  type BrowserIds,
+} from '../ad-tracking/ad-events.service.js';
 
 type ProductDoc = WithId<Product>;
 
@@ -67,6 +73,8 @@ export interface LandingOrderInput {
   cartToken?: string;
   /** Cash on delivery (the default) or online, and the gateway (ADR 0029). */
   payment?: PaymentChoice;
+  /** The browser's ad ids and the shopper's tracking choice (ADR 0030). */
+  tracking?: BrowserIds;
 }
 
 export interface LandingCartInput {
@@ -109,6 +117,8 @@ export class LandingStorefrontService {
     private readonly limits: RateLimitService,
     private readonly carts: CartsService,
     private readonly shopPayments: ShopPaymentsService,
+    private readonly adEvents: AdEventsService,
+    private readonly adDestinations: AdDestinationsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -306,6 +316,14 @@ export class LandingStorefrontService {
         cartReminders: state === 'live' && (await this.carts.capturing()),
         // How the shopper may pay (ADR 0029); the form shows the advance as they choose.
         payments: await this.shopPayments.rules(currency),
+        // The business's pixels and tags (ADR 0030); previews load none.
+        tracking:
+          state === 'live'
+            ? await this.adDestinations.publicTracking({
+                type: 'landing',
+                id: page._id.toHexString(),
+              })
+            : null,
       };
     });
   }
@@ -358,6 +376,18 @@ export class LandingStorefrontService {
     return { counted: true };
   }
 
+  /** A shopper step's server copy for the business's ad platforms (live pages only). */
+  async adEvent(l: ResolvedLanding, input: BrowserEventInput): Promise<{ queued: number }> {
+    if (l.state !== 'live') return { queued: 0 };
+    return this.inPage(l, () =>
+      this.adEvents.browserEvent(
+        { type: 'landing', id: l.page._id.toHexString() },
+        input,
+        l.store.org.currency,
+      ),
+    );
+  }
+
   private async bump(
     pageId: Types.ObjectId,
     day: string,
@@ -386,6 +416,7 @@ export class LandingStorefrontService {
           website: undefined,
           attribution: undefined,
           cartToken: undefined,
+          tracking: undefined,
         }),
       ),
       before: async () => {
@@ -559,6 +590,11 @@ export class LandingStorefrontService {
       revenueMinor: order.totalMinor,
     });
     await this.storefront.closeCart(input.cartToken, order);
+    await this.adEvents.orderPlaced(
+      order,
+      { type: 'landing', id: page._id.toHexString() },
+      { ...input.tracking, fbclid: input.attribution?.fbclid, ttclid: input.attribution?.ttclid },
+    );
     let payment: PaymentStart | null = null;
     if (plan.online) {
       const receipt = this.links.receiptToken(store._id.toHexString(), order._id.toHexString());
@@ -688,6 +724,10 @@ export class LandingStorefrontService {
         slug: l.page.slug,
         language: l.page.language,
       },
+      /** The page's ad tags, so the thank-you page can report the purchase (ADR 0030). */
+      tracking: await this.inPage(l, () =>
+        this.adDestinations.publicTracking({ type: 'landing', id: l.page._id.toHexString() }),
+      ),
     };
   }
 }

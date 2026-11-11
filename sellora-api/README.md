@@ -188,6 +188,17 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
   `http://127.0.0.1:4110/<gateway>` (bkash, nagad, sslcommerz, aamarpay, shurjopay), then
   connect each gateway in test mode with the demo keys in the script's header. It is not a
   payment gateway: no money moves, and its Pay and Cancel page stands in for the gateway's.
+- Ad tracking (ADR 0030, Settings › Ad tracking): needs no keys of ours. Each business adds
+  its own Meta Pixel, TikTok Pixel, Google Analytics 4 or Google Ads ids, and optionally the
+  server keys (Meta Conversions API token, TikTok Events API token, GA4 Measurement Protocol
+  secret), stored encrypted with the `DATA_ENCRYPTION_KEYS` and never returned. Server events
+  go out from the worker (queue `ad-events`), so run `npm run dev:worker`.
+  `TRACKING_META_BASE_URL`, `TRACKING_TIKTOK_BASE_URL` and `TRACKING_GA4_BASE_URL` default to
+  the platforms' addresses. To try it locally without ad accounts, run
+  `node scripts/tracking-stand-in.mjs` and set them to `http://127.0.0.1:4120/meta`,
+  `/tiktok` and `/ga4`, then add the demo ids and keys from the script's header. It is not
+  Meta, TikTok or Google: nothing reaches an ad account; `http://localhost:4120/` shows what
+  it received.
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -281,6 +292,9 @@ src/
     shop-payments/           payments at checkout with the business's own gateways: adapters
                              for bKash, Nagad, SSLCommerz, aamarPay and shurjoPay, payment
                              options and the advance, tries, returns and checks (ADR 0029)
+    ad-tracking/             the business's own pixels and tags: tracking ids, browser tags
+                             for the storefront, server events to Meta, TikTok and GA4,
+                             consent, test events and the log (ADR 0030)
     health/                  liveness and readiness
 test/
   e2e/                       HTTP tests per area, including tenancy.e2e.ts

@@ -30,6 +30,7 @@ import { LandingReviewService } from './landing-review.service.js';
 import { LandingStorefrontService, type ResolvedLanding } from './landing-storefront.service.js';
 import { STARTER_TEXTS, TEMPLATES } from './templates.js';
 import * as payDto from '../shop-payments/shop-payments.dto.js';
+import * as adDto from '../ad-tracking/ad-tracking.dto.js';
 
 // ---------------------------------------------------------------- merchant
 
@@ -293,6 +294,18 @@ export class LandingStorefrontController {
     @ZodBody(dto.visitBody) body: z.infer<typeof dto.visitBody>,
   ) {
     return this.landing.visit(await this.page(host, slug), body.visitorId);
+  }
+
+  @Post(':slug/ad-events')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Copy a shopper step to the business’s ad platforms (ADR 0030)' })
+  async adEvent(
+    @Headers(STORE_HOST_HEADER) host: string | undefined,
+    @ZodParam('slug', dto.slugParam) slug: string,
+    @ZodBody(adDto.browserEventBody) body: z.infer<typeof adDto.browserEventBody>,
+  ) {
+    // Previews never send anything: `page` is resolved without the preview token.
+    return this.landing.adEvent(await this.page(host, slug), body);
   }
 
   @Post(':slug/orders')

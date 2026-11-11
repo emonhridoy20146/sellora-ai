@@ -21,6 +21,7 @@ import { SMS_FETCH } from '../../src/modules/sms/sms.types.js';
 import { DNS_LOOKUP, type DnsLookup } from '../../src/modules/stores/dns-lookup.js';
 import { GOOGLE_FETCH } from '../../src/modules/backups/google-drive.js';
 import { TELEGRAM_FETCH } from '../../src/infra/telegram/telegram.client.js';
+import { AD_FETCH } from '../../src/modules/ad-tracking/ad-tracking.types.js';
 import { REDIS } from '../../src/infra/redis/redis.module.js';
 import type { Redis } from 'ioredis';
 import { testEnv } from './env.js';
@@ -73,6 +74,8 @@ export class TestApp {
       googleFetch?: typeof fetch;
       /** Replaces the fetch the Telegram client uses, so tests can play Telegram's part. */
       telegramFetch?: typeof fetch;
+      /** Replaces the fetch ad platforms are called with, so tests can play their part. */
+      adFetch?: typeof fetch;
     } = {},
   ): Promise<TestApp> {
     const env = testEnv(overrides);
@@ -92,6 +95,7 @@ export class TestApp {
       builder = builder.overrideProvider(GOOGLE_FETCH).useValue(opts.googleFetch);
     if (opts.telegramFetch)
       builder = builder.overrideProvider(TELEGRAM_FETCH).useValue(opts.telegramFetch);
+    if (opts.adFetch) builder = builder.overrideProvider(AD_FETCH).useValue(opts.adFetch);
     const moduleRef = await builder.compile();
     const app = moduleRef.createNestApplication<NestExpressApplication>({
       bodyParser: false,

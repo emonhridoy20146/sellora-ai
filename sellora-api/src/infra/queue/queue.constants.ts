@@ -22,6 +22,8 @@ export const QUEUES = {
   telegram: 'telegram',
   /** Catalog sync from Shopify, WooCommerce, sheets and CSV files: a sweep every minute (ADR 0023). */
   catalogSync: 'catalog-sync',
+  /** Server copies of shopper events and purchases for the business's ad platforms (ADR 0030). */
+  adEvents: 'ad-events',
   maintenance: 'maintenance',
 } as const;
 

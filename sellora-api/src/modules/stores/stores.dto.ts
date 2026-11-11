@@ -7,6 +7,7 @@ import { DOMAIN_STATUSES, STORE_STATUSES } from './schemas.js';
 import { STORE_EVENTS } from './store-stats.service.js';
 import { THEME_KEYS, themeSettingsSchema } from './themes.js';
 import { paymentChoice } from '../shop-payments/shop-payments.dto.js';
+import { browserIds } from '../ad-tracking/ad-tracking.dto.js';
 
 const text = (max: number) => z.string().trim().max(max);
 
@@ -194,6 +195,8 @@ export const checkoutBody = z
     attribution: attribution.optional(),
     /** Cash on delivery (the default) or online, with the gateway (ADR 0029). */
     payment: paymentChoice.optional(),
+    /** The browser's ad ids and the shopper's tracking choice (ADR 0030). */
+    tracking: browserIds.optional(),
   })
   .strict();
 
