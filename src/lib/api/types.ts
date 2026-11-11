@@ -2998,3 +2998,79 @@ export interface StoreStats {
   }[];
   currency: string;
 }
+
+// ---------------------------------------------------------------- ad tracking (ADR 0030)
+
+export type AdPlatform = 'meta' | 'tiktok' | 'ga4' | 'google_ads';
+export type AdEventName =
+  'PageView' | 'ViewContent' | 'AddToCart' | 'InitiateCheckout' | 'Purchase' | 'Refund';
+export type AdPurchaseWhen = 'placed' | 'delivered';
+export type AdConsentMode = 'off' | 'ask';
+
+/** What a platform asks for, from the API (the patterns are JavaScript regex sources). */
+export interface AdPlatformDescriptor {
+  key: AdPlatform;
+  name: string;
+  publicIdLabel: string;
+  publicIdHint: string;
+  publicIdPattern: string;
+  secretLabel: string | null;
+  secretHint: string | null;
+  testCodeLabel: string | null;
+  conversionLabel: boolean;
+  serverEvents: AdEventName[];
+  chatOrders: boolean;
+}
+
+/** A pixel or tag of the business's own. Its key is never sent back, only a hint. */
+export interface AdDestination {
+  id: string;
+  platform: AdPlatform;
+  platformName: string;
+  name: string;
+  publicId: string;
+  conversionLabel: string | null;
+  hasSecret: boolean;
+  secretHint: string | null;
+  testCode: string | null;
+  enabled: boolean;
+  everywhere: boolean;
+  storeIds: string[];
+  landingPageIds: string[];
+  purchaseWhen: AdPurchaseWhen;
+  chatOrders: boolean;
+  lastCheck: { at: string; state: 'ok' | 'failed' | 'unchecked'; summary: string };
+  lastSentAt: string | null;
+  lastError: { at: string; message: string } | null;
+  createdAt: string;
+  /** Server events in the last 7 days. */
+  week?: { sent: number; failed: number };
+}
+
+export interface AdTrackingSites {
+  stores: { id: string; name: string }[];
+  landingPages: { id: string; name: string; slug: string }[];
+}
+
+/** GET /orgs/:orgId/ad-tracking */
+export interface AdTrackingOverview {
+  platforms: AdPlatformDescriptor[];
+  destinations: AdDestination[];
+  settings: { consent: AdConsentMode };
+  sites: AdTrackingSites;
+}
+
+/** GET /orgs/:orgId/ad-tracking/events: one server event and what the platform answered. */
+export interface AdEventLogEntry {
+  id: string;
+  destinationId: string;
+  platform: AdPlatform;
+  event: AdEventName;
+  eventId: string;
+  source: 'browser' | 'order' | 'test';
+  orderId: string | null;
+  orderNumber: string | null;
+  status: 'sent' | 'failed';
+  detail: string;
+  at: string;
+}
