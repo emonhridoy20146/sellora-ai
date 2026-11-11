@@ -2,7 +2,7 @@
 
 import { Minus, Plus } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useId, useMemo, useState, useSyncExternalStore } from 'react';
+import { useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { cartToken, landingCartTokenKey, setCartToken, useCartCapture } from '@/lib/cart-capture';
 import { cn } from '@/lib/cn';
 import { dictionary } from '@/lib/i18n';
@@ -36,6 +36,7 @@ import type {
   LandingPlaced,
   LandingProduct,
 } from '@/lib/types';
+import { useAdTags } from '../ad-tags';
 import { PaymentChoice } from '../payment-choice';
 
 const inputClass =
@@ -131,6 +132,8 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [placing, setPlacing] = useState(false);
+  const ads = useAdTags();
+  const checkoutReported = useRef(false);
 
   const variant = variantFor(product, chosen);
   const pkg = packages.find((p) => p.id === packageId);
@@ -250,6 +253,8 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
           ...(website ? { website } : {}),
           ...(attribution && Object.keys(attribution).length ? { attribution } : {}),
           ...(token ? { cartToken: token } : {}),
+          // The ad tags' cookies and page, for the purchase the server reports (ADR 0030).
+          ...(ads.ids() ? { tracking: ads.ids() } : {}),
         }),
       });
       const r = await readJson<LandingPlaced>(res, t);
@@ -296,7 +301,25 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
   const unitMinor = variant?.priceMinor ?? Math.min(...product.variants.map((v) => v.priceMinor));
 
   return (
-    <form onSubmit={submit} noValidate className="space-y-6">
+    <form
+      onSubmit={submit}
+      noValidate
+      className="space-y-6"
+      // The ad tags: the checkout starts when the shopper first touches the form (ADR 0030).
+      onFocusCapture={() => {
+        if (checkoutReported.current || !variant) return;
+        checkoutReported.current = true;
+        ads.track('InitiateCheckout', [
+          {
+            productId: product.id,
+            variantId: variant.id,
+            name: product.name,
+            quantity: wanted,
+            priceMinor: variant.priceMinor,
+          },
+        ]);
+      }}
+    >
       {packages.length ? (
         <fieldset id={fid('packageId')} tabIndex={-1}>
           <legend className="mb-2 text-sm font-semibold">{t.choosePackage}</legend>

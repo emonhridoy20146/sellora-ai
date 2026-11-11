@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useCart } from '@/lib/cart';
 import { cartToken, setCartToken, storeCartTokenKey, useCartCapture } from '@/lib/cart-capture';
 import { cn } from '@/lib/cn';
@@ -21,6 +21,7 @@ import {
   save,
   type Details,
 } from '@/lib/shopper';
+import { useAdTags } from './ad-tags';
 import { useQuote } from './cart-view';
 import { PaymentChoice } from './payment-choice';
 import { useShop } from './shop-context';
@@ -80,6 +81,23 @@ export function CheckoutForm() {
   useEffect(() => {
     if (state === 'open') reportStep('checkout');
   }, [state]);
+  // The business's ad tags: the checkout started, once the cart is known (ADR 0030).
+  const ads = useAdTags();
+  const checkoutReported = useRef(false);
+  useEffect(() => {
+    if (checkoutReported.current || !cart.items.length) return;
+    checkoutReported.current = true;
+    ads.track(
+      'InitiateCheckout',
+      cart.items.map((i) => ({
+        productId: i.productId,
+        variantId: i.variantId,
+        name: i.name,
+        quantity: i.quantity,
+        priceMinor: i.priceMinor,
+      })),
+    );
+  }, [ads, cart.items]);
   const [placing, setPlacing] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
   const { quote, error: quoteError } = useQuote(cart.items, chosenZone);
@@ -173,6 +191,8 @@ export function CheckoutForm() {
       ...(website ? { website } : {}),
       // Where the shopper came from (the ad or site), kept on the order.
       ...(state === 'open' && storeAttribution() ? { attribution: storeAttribution() } : {}),
+      // The ad tags' cookies and page, for the purchase the server reports (ADR 0030).
+      ...(ads.ids() ? { tracking: ads.ids() } : {}),
     };
     // The saved cart this order comes from, if one was saved; the order closes it.
     const token = cartToken(tokenKey, false);

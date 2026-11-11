@@ -2,6 +2,7 @@ import { CheckCircle2 } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { AdPurchase } from '@/components/ad-tags';
 import { OrderProgress } from '@/components/order-status';
 import { PayNow } from '@/components/pay-now';
 import { PaymentBanner, PaymentRows } from '@/components/payment-summary';
@@ -44,6 +45,8 @@ export default async function OrderPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
+      {/* The purchase for the business's ad tags, once, on the day it was placed (ADR 0030). */}
+      <AdPurchase purchase={order.tracking?.purchase} placedAt={order.placedAt} />
       <PaymentBanner order={order} state={returned} t={t} />
       {isNew ? (
         <div className="mb-8 rounded-store-lg border border-line bg-surface p-6 text-center">
