@@ -314,6 +314,21 @@ order shows them. Sellora's gateway code was written from the gateways' publishe
 documents and tested only against a stand-in, so this first sandbox payment is the real test.
 Then save the live keys with **Test mode** off.
 
+## 6c. Ad tracking (each business's own pixels and tags)
+
+Nothing to set on the servers either: each business adds its own Meta Pixel, TikTok Pixel,
+Google Analytics 4 and Google Ads ids, and the optional server keys, in **Settings › Ad
+tracking**; the keys are stored encrypted with the `DATA_ENCRYPTION_KEYS`. Server events go
+out from the worker, so keep it running. Never set the `TRACKING_*_BASE_URL` lines here: their
+defaults are the platforms' real addresses, and the tracking stand-in is for your computer
+only.
+
+Before a business relies on it, press **Send test event** on each id and check that it shows
+in Meta's or TikTok's **Events Manager › Test events** or Google Analytics' **DebugView**, then
+place one test order and look for the purchase. Sellora's tracking was written from the
+platforms' public documents and tested only against a stand-in, so this first test is the real
+one. If a business sells to shoppers in Europe or the UK, choose **Ask first**.
+
 ## 7. Meta: Messenger, Instagram and WhatsApp
 
 This needs a Meta app at [developers.facebook.com](https://developers.facebook.com). Meta's

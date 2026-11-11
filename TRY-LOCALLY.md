@@ -112,6 +112,43 @@ With real sandbox keys from a gateway instead, leave those lines out: Sellora th
 gateway's own sandbox. Live keys take real money; switch **Test mode** off only when one
 sandbox payment has worked.
 
+### Try ad tracking
+
+A business can put its own Meta Pixel, TikTok Pixel, Google Analytics 4 and Google Ads tags on
+its store and landing pages, and send the same events from the server. To see what would be
+sent without ad accounts, use the tracking stand-in. It is **not** Meta, TikTok or Google:
+nothing reaches an ad account. (The browser tags still try to load Meta's, TikTok's and
+Google's real scripts; with the demo ids those platforms simply ignore them.)
+
+1. Add these lines to the `.env` file next to `compose.yaml`:
+
+   ```
+   TRACKING_META_BASE_URL=http://tracking-stand-in:4120/meta
+   TRACKING_TIKTOK_BASE_URL=http://tracking-stand-in:4120/tiktok
+   TRACKING_GA4_BASE_URL=http://tracking-stand-in:4120/ga4
+   ```
+
+2. Run `docker compose --profile ads-demo up -d`.
+3. Sign in as `shop@demo.sellora.test` and open **Settings › Ad tracking**. Add:
+
+   | Platform           | Demo ids and keys                                                                                             |
+   | ------------------ | ------------------------------------------------------------------------------------------------------------- |
+   | Meta Pixel         | Pixel ID `1234567890123456`, access token `demo-meta-capi-token-not-real`, test event code `TEST12345`        |
+   | TikTok Pixel       | Pixel ID `CDEMOPIXEL000000001`, access token `demo-tiktok-events-token-not-real`, test event code `TEST67890` |
+   | Google Analytics 4 | Measurement ID `G-DEMO123456`, API secret `demo-ga4-api-secret-not-real`                                      |
+   | Google Ads         | Conversion ID `AW-123456789`, label `AbCdEf12` (browser only: nothing reaches the stand-in)                   |
+
+4. Press **Send test event** on each, then look at http://localhost:4120: each test arrives
+   there with its test code.
+5. Open the store, look at a product, add it to the cart and order. The stand-in's page shows
+   the product view, add to cart, checkout and purchase as Meta, TikTok and Google Analytics
+   would receive them, and **What was sent** in Settings lists them too. Try **Ask first** to
+   see the banner shoppers get.
+
+With your real ids and keys instead, leave those lines out, and send a test event from
+Settings: it shows in Meta's and TikTok's **Events Manager › Test events**, or Google
+Analytics' **DebugView**.
+
 ### Turn on the AI sales agent
 
 Create a file named `.env` next to `compose.yaml` (never commit it) with your key:
@@ -146,6 +183,8 @@ Anthropic tokens.
   `http://localhost:3000/v1/backups/google/callback`.
 - Online stores and landing pages, with cash on delivery or online payment (with the payment
   stand-in or a gateway's sandbox keys). Businesses' own domains need the deployed version.
+- Ad tracking with the tracking stand-in, or with your own Meta, TikTok and Google ids and
+  keys (server events go out from your computer to the real platforms).
 
 **Needs the deployed version:**
 

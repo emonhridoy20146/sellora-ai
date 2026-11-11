@@ -15,6 +15,10 @@
 # Payments at checkout without merchant accounts: the payment stand-in (NOT a payment gateway,
 # no money moves). Put the five PAYMENT_*_SANDBOX_URL lines from TRY-LOCALLY.md in .env, then
 #   docker compose --profile payments-demo up -d
+#
+# Ad tracking without ad accounts: the tracking stand-in (NOT Meta, TikTok or Google; nothing
+# reaches an ad account). Put the three TRACKING_*_BASE_URL lines from TRY-LOCALLY.md in .env,
+#   docker compose --profile ads-demo up -d
 
 name: sellora
 
@@ -49,6 +53,10 @@ x-api-env: &api-env
     PAYMENT_SSLCOMMERZ_SANDBOX_URL: ${PAYMENT_SSLCOMMERZ_SANDBOX_URL:-}
     PAYMENT_AAMARPAY_SANDBOX_URL: ${PAYMENT_AAMARPAY_SANDBOX_URL:-}
     PAYMENT_SHURJOPAY_SANDBOX_URL: ${PAYMENT_SHURJOPAY_SANDBOX_URL:-}
+    # Empty means Meta's, TikTok's and Google's real APIs; see the tracking-stand-in service.
+    TRACKING_META_BASE_URL: ${TRACKING_META_BASE_URL:-}
+    TRACKING_TIKTOK_BASE_URL: ${TRACKING_TIKTOK_BASE_URL:-}
+    TRACKING_GA4_BASE_URL: ${TRACKING_GA4_BASE_URL:-}
 
 services:
   mongo:
@@ -155,6 +163,24 @@ services:
       STAND_IN_PUBLIC_URL: http://localhost:4110
     ports:
       - "4110:4110"
+    restart: unless-stopped
+
+  # A stand-in for Meta's Conversions API, TikTok's Events API and GA4's Measurement Protocol,
+  # with a page at http://localhost:4120 showing what it received
+  # (sellora-api/scripts/tracking-stand-in.mjs). It is NOT Meta, TikTok or Google. Only with
+  # --profile ads-demo.
+  tracking-stand-in:
+    build:
+      context: ./sellora-api
+      target: build
+    image: sellora-local/api-tools
+    profiles: ["ads-demo"]
+    command: ["node", "scripts/tracking-stand-in.mjs"]
+    environment:
+      HOST: 0.0.0.0
+      PORT: "4120"
+    ports:
+      - "4120:4120"
     restart: unless-stopped
 
   # docker compose run --rm keys > local-secrets.env
