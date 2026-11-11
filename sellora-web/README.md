@@ -434,6 +434,30 @@ gateways. It cancels its orders at the end. Screenshots go to `smoke-output/paym
 node scripts/checkout-payments-flow.mjs
 ```
 
+### Ad tracking browser flow
+
+`scripts/ad-tracking-flow.mjs` needs the live store from stores-flow, the storefront on :3100,
+the API and worker started with `TRACKING_META_BASE_URL`, `TRACKING_TIKTOK_BASE_URL` and
+`TRACKING_GA4_BASE_URL` pointing at the tracking stand-in (`node scripts/tracking-stand-in.mjs`
+in sellora-api, on :4120; it is **not Meta, TikTok or Google** and nothing reaches an ad
+account) and the admin credentials (to approve its landing page). The shoppers' browsers get
+small fake tag scripts instead of fbevents.js, TikTok's events.js and gtag.js, which record
+what the page asks of them. The business opens Settings › Ad tracking with nothing added, has
+a wrong Meta token refused, adds Meta, TikTok and GA4 with the stand-in's demo keys and Google
+Ads for one landing page, and sends a test event to each. A store shopper from a Facebook ad
+views a product, adds it, checks out and orders: every step must reach the browser tags and,
+with the same event id, the stand-in, and the purchase must reach Meta, TikTok and GA4 once
+with the hashed phone and the click id. With "Ask first", a phone shopper on the landing page
+must see the banner and load nothing until they allow it, then report the purchase to Meta and
+Google Ads (hashed phone) on the thank-you page; a shopper who says no must load nothing and
+no event about their order may reach the stand-in. Cancelling the store order must send GA4 a
+refund. It removes its tracking ids, page and orders at the end. Screenshots go to
+`smoke-output/ad-tracking/`.
+
+```bash
+node scripts/ad-tracking-flow.mjs
+```
+
 ### Campaign and automation browser flow
 
 `scripts/campaigns-flow.mjs` needs the same as carts-flow (Sellora SMS ready for the demo
@@ -608,7 +632,10 @@ only against a demo site stand-in and the DNS and Claude stand-ins. Payments at 
 (Phase 2: Settings › Payments, the payment on the orders list and order page, and the checkout,
 receipt and landing page in `sellora-storefront`) with the business's own bKash, Nagad,
 SSLCommerz, aamarPay and shurjoPay accounts, but only against fakes and a payment stand-in;
-no real payment has gone through any of them yet.
+no real payment has gone through any of them yet. Ad tracking works (Phase 2: Settings › Ad
+tracking, and the tags, consent banner and purchase reports in `sellora-storefront`) with the
+business's own Meta, TikTok, Google Analytics and Google Ads ids, but only against fakes, a
+tracking stand-in and fake tag scripts; no event has reached a real ad account yet.
 Analytics appears in the merchant
 sidebar as a disabled "Soon" item. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.
