@@ -6,6 +6,7 @@ import { LANDING_LANGUAGES, landingContentSchema, MAX_FREE_QUANTITY } from './bl
 import { REVIEW_FILTERS } from './landing-review.service.js';
 import { TEMPLATE_KEYS } from './templates.js';
 import { paymentChoice } from '../shop-payments/shop-payments.dto.js';
+import { browserIds } from '../ad-tracking/ad-tracking.dto.js';
 
 const text = (max: number) => z.string().trim().max(max);
 /** Checked in full by the service (format and reserved words); this only bounds the size. */
@@ -115,6 +116,8 @@ export const orderBody = z
     cartToken: cartToken.optional(),
     /** Cash on delivery (the default) or online, with the gateway (ADR 0029). */
     payment: paymentChoice.optional(),
+    /** The browser's ad ids and the shopper's tracking choice (ADR 0030). */
+    tracking: browserIds.optional(),
   })
   .strict();
 

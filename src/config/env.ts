@@ -237,6 +237,14 @@ export const envSchema = z
     PAYMENT_SHURJOPAY_LIVE_URL: urlWithDefault('https://engine.shurjopayment.com'),
     PAYMENT_SHURJOPAY_SANDBOX_URL: urlWithDefault('https://sandbox.shurjopayment.com'),
     /**
+     * Ad platforms' server APIs for the businesses' own pixels (ADR 0030): Meta Conversions
+     * API (with META_GRAPH_VERSION), TikTok Events API and GA4 Measurement Protocol. Change
+     * them only for a proxy or the local stand-in (scripts/tracking-stand-in.mjs).
+     */
+    TRACKING_META_BASE_URL: urlWithDefault('https://graph.facebook.com'),
+    TRACKING_TIKTOK_BASE_URL: urlWithDefault('https://business-api.tiktok.com'),
+    TRACKING_GA4_BASE_URL: urlWithDefault('https://www.google-analytics.com'),
+    /**
      * Courier APIs. The defaults are the couriers' published production and sandbox
      * addresses; change them only when a courier moves its API or for a local stand-in.
      */

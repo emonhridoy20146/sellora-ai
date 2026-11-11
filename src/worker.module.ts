@@ -13,6 +13,7 @@ import { FilesCoreModule } from './modules/files/files.module.js';
 import { MetaCoreModule } from './modules/meta/meta.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
 import { ShopPaymentsCoreModule } from './modules/shop-payments/shop-payments.module.js';
+import { AdTrackingCoreModule } from './modules/ad-tracking/ad-tracking.module.js';
 import { SmsCoreModule } from './modules/sms/sms.module.js';
 import { StoresCoreModule } from './modules/stores/stores.module.js';
 import { TelegramCoreModule } from './modules/telegram/telegram.module.js';
@@ -28,6 +29,7 @@ import { MaintenanceProcessor } from './workers/maintenance.processor.js';
 import { MediaProcessor } from './workers/media.processor.js';
 import { OutboxProcessor } from './workers/outbox.processor.js';
 import { SmsProcessor } from './workers/sms.processor.js';
+import { AdEventsProcessor } from './workers/ad-events.processor.js';
 import { TelegramProcessor } from './workers/telegram.processor.js';
 import { CatalogSyncProcessor } from './workers/catalog-sync.processor.js';
 import { WebhooksProcessor } from './workers/webhooks.processor.js';
@@ -49,6 +51,7 @@ export class WorkerModule {
         FraudCoreModule,
         StoresCoreModule,
         ShopPaymentsCoreModule,
+        AdTrackingCoreModule,
         SmsCoreModule,
         CartsCoreModule,
         CampaignsCoreModule,
@@ -65,6 +68,7 @@ export class WorkerModule {
         WebhooksProcessor,
         CouriersProcessor,
         SmsProcessor,
+        AdEventsProcessor,
         CartsProcessor,
         CampaignsProcessor,
         BackupsProcessor,

@@ -28,6 +28,7 @@ import { StoreNotifier } from './store-notifier.service.js';
 import { StoreReviewService } from './store-review.service.js';
 import { StoreStatsService } from './store-stats.service.js';
 import { StorefrontKeyGuard } from './storefront-key.guard.js';
+import { AdTrackingCoreModule } from '../ad-tracking/ad-tracking.module.js';
 import { StorefrontService } from './storefront.service.js';
 import {
   PlatformStoreDomainsController,
@@ -53,6 +54,7 @@ import { StoresService } from './stores.service.js';
     FilesCoreModule,
     OrgsModule,
     ShopPaymentsCoreModule,
+    AdTrackingCoreModule,
     UsersModule,
     MongooseModule.forFeature([
       { name: 'Store', schema: storeSchema },

@@ -147,7 +147,7 @@ Last updated: 2026-11-10.
 | Where orders came from: UTM tags, Facebook, Google and TikTok click ids, referrer host                                                                           | Done        | Stored on the order; ad spend joins in M8.                                                                                                             |
 | Numbers: visitors (once per browser and day), orders, order value and conversion per day, last 30 days                                                           | Done        | Approximate visitor counts, not ad-platform numbers.                                                                                                   |
 | Video sections play real YouTube and Facebook videos                                                                                                             | Partial     | The page embeds the right player address (checked in the browser flow), but the build machine cannot reach YouTube, so a stand-in answered the player. |
-| A/B tests, scheduled publishing, coupons, OTP checks, per-page pixels and Conversions API                                                                        | Not started | Later milestones (payments, M8 ads).                                                                                                                   |
+| A/B tests, scheduled publishing, coupons, OTP checks                                                                                                             | Not started | Later milestones. Per-page pixels and Conversions API: see Ad tracking (Phase 2).                                                                      |
 
 ## M7 — SMS (second part of M7)
 
@@ -298,6 +298,28 @@ demo business, whose chats and AI replies came from the Meta and Claude stand-in
 | Overview: the four headline tiles for the last 30 days                                                                                                                        | Done      |                                                                                      |
 | Analytics page: 7, 30 or 90 days; sales and chats with charts (table view), sources, best sellers, reply times, chats by channel                                              | Done      | Browser flow 8/8 steps.                                                              |
 | Ads analytics and forecasts, report exports, previous-period comparison, per-staff numbers                                                                                    | Not built | Ads need Meta ads access (M8).                                                       |
+
+## Ad tracking: the business's own pixels and tags (Phase 2, module 3)
+
+ADR 0030. Settings › Ad tracking. Platform requests follow Meta's, TikTok's and Google's public
+documents and are tested against fakes (API tests: `test/e2e/ad-tracking.e2e.ts`, the landing
+page tests) and the tracking stand-in (`scripts/tracking-stand-in.mjs`) with fake browser tags
+(browser flow `sellora-web/scripts/ad-tracking-flow.mjs`, 12/12 steps). **Never tried with a
+real Meta, TikTok or Google account**: send a test event from Settings and check Events
+Manager or DebugView first.
+
+| Feature                                                                                                                                                            | Status    | Notes                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- | ------------------------------------------------------------------------------------------------------- |
+| Add Meta Pixel, TikTok Pixel, Google Analytics 4 and Google Ads with the business's own ids; server keys optional, encrypted, never shown again; on/off; up to 12  | Done      | Ids checked against each platform's pattern. Meta's token is checked with Meta before saving.           |
+| Where an id loads: everywhere, or chosen stores and landing pages                                                                                                  | Done      | Previews load nothing.                                                                                  |
+| Browser tags: page views, product view, add to cart, checkout start, purchase on the receipt and thank-you page; Google Ads conversion with hashed email and phone | Partial   | Standard snippets; tested with fake tag scripts in a real browser, not with the platforms' own scripts. |
+| Server copies (Meta Conversions API, TikTok Events API) of browser events with the same event id; purchases from the order once per id, hashed details, click ids  | Partial   | Against fakes and the stand-in only.                                                                    |
+| GA4 purchases and refunds from the server (Measurement Protocol); never from the browser                                                                           | Partial   | GA4 accepts anything, so "sent" means delivered, not counted.                                           |
+| Count purchases when delivered instead of placed (cash on delivery), server only                                                                                   | Done      | What the browser knew is kept 35 days.                                                                  |
+| Inbox and hand-made orders to Meta (chat or other) and GA4                                                                                                         | Done      | TikTok cannot take them.                                                                                |
+| Ask shoppers first: banner (English, Bangla); nothing loads or is sent about them without a yes                                                                    | Done      | Choice kept in the browser; no "change my choice" link yet.                                             |
+| Test event per id, log of what was sent (14 days), 7-day counts, last error on the id                                                                              | Done      | Google Ads has no test from Sellora.                                                                    |
+| Google Ads offline conversions (delivered or inbox orders), Google Tag Manager, other platforms, refunds to Meta and TikTok                                        | Not built | Offline conversions need the Google Ads API (developer token, OAuth).                                   |
 
 ## Later milestones
 

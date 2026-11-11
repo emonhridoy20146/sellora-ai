@@ -30,6 +30,7 @@ import { StoreStatsService } from './store-stats.service.js';
 import { StorefrontKeyGuard } from './storefront-key.guard.js';
 import { StorefrontService, type ResolvedStore } from './storefront.service.js';
 import * as dto from './stores.dto.js';
+import * as adDto from '../ad-tracking/ad-tracking.dto.js';
 import { StoresService } from './stores.service.js';
 import * as payDto from '../shop-payments/shop-payments.dto.js';
 
@@ -399,7 +400,14 @@ export class StorefrontController {
   ) {
     const r = await this.storefront.resolve(this.host(host), preview);
     if (!r) throw AppError.notFound('store');
-    return this.storefront.publicStore(r);
+    return {
+      ...this.storefront.publicStore(r),
+      // Only shoppers of an open store are tracked; previews never are.
+      tracking:
+        r.state === 'open'
+          ? await this.storefront.inStore(r, () => this.storefront.tracking(r))
+          : null,
+    };
   }
 
   @Get('home')
@@ -496,6 +504,17 @@ export class StorefrontController {
   ) {
     // Previews never count: the business and the reviewer are not shoppers.
     return this.open(host, undefined, (r) => this.stats.record(r, body));
+  }
+
+  @Post('ad-events')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Copy a shopper step to the business’s ad platforms (ADR 0030)' })
+  adEvent(
+    @Headers(STORE_HOST_HEADER) host: string | undefined,
+    @ZodBody(adDto.browserEventBody) body: z.infer<typeof adDto.browserEventBody>,
+  ) {
+    // Previews never send anything: the business and the reviewer are not shoppers.
+    return this.open(host, undefined, (r) => this.storefront.adEvent(r, body));
   }
 
   @Post('checkout')

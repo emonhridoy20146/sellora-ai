@@ -20,10 +20,12 @@ const label = (max: number) => z.string().trim().min(1).max(max);
 const queryBool = z.enum(['true', 'false']).transform((v) => v === 'true');
 const quantity = z.number().int().min(1).max(100_000);
 /** Staff record how an order was paid; "online" is set only by a checkout payment (ADR 0029). */
-const staffPaymentMethod = z.enum(PAYMENT_METHODS.filter((m) => m !== 'online') as [
-  Exclude<(typeof PAYMENT_METHODS)[number], 'online'>,
-  ...Exclude<(typeof PAYMENT_METHODS)[number], 'online'>[],
-]);
+const staffPaymentMethod = z.enum(
+  PAYMENT_METHODS.filter((m) => m !== 'online') as [
+    Exclude<(typeof PAYMENT_METHODS)[number], 'online'>,
+    ...Exclude<(typeof PAYMENT_METHODS)[number], 'online'>[],
+  ],
+);
 
 // ---------------------------------------------------------------- catalog
 

@@ -8,6 +8,7 @@ import { OrgsModule } from '../orgs/orgs.module.js';
 import { ShopPaymentsCoreModule } from '../shop-payments/shop-payments.module.js';
 import { StorefrontKeyGuard } from '../stores/storefront-key.guard.js';
 import { StoresCoreModule } from '../stores/stores.module.js';
+import { AdTrackingCoreModule } from '../ad-tracking/ad-tracking.module.js';
 import {
   LandingPagesController,
   LandingStorefrontController,
@@ -35,6 +36,7 @@ import { landingPageSchema, landingPageStatSchema, landingPageVersionSchema } fr
     FilesCoreModule,
     OrgsModule,
     ShopPaymentsCoreModule,
+    AdTrackingCoreModule,
     StoresCoreModule,
     MongooseModule.forFeature([
       { name: 'LandingPage', schema: landingPageSchema },

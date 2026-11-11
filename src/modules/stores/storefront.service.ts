@@ -36,6 +36,12 @@ import { StoreDomainsService } from './store-domains.service.js';
 import { parseStoreHost } from './store-hosts.js';
 import { StoreLinksService } from './store-links.service.js';
 import { StoreStatsService } from './store-stats.service.js';
+import { AdDestinationsService } from '../ad-tracking/ad-destinations.service.js';
+import {
+  AdEventsService,
+  type BrowserEventInput,
+  type BrowserIds,
+} from '../ad-tracking/ad-events.service.js';
 import type { StoreSection } from './themes.js';
 
 type StoreDoc = WithId<Store>;
@@ -74,6 +80,8 @@ export interface CheckoutInput {
   attribution?: OrderAttribution;
   /** Cash on delivery (the default) or online, and the gateway (ADR 0029). */
   payment?: PaymentChoice;
+  /** The browser's ad ids and the shopper's tracking choice (ADR 0030). */
+  tracking?: BrowserIds;
 }
 
 /** Products shown per home page section, at most. */
@@ -116,6 +124,8 @@ export class StorefrontService {
     private readonly carts: CartsService,
     private readonly stats: StoreStatsService,
     private readonly shopPayments: ShopPaymentsService,
+    private readonly adEvents: AdEventsService,
+    private readonly adDestinations: AdDestinationsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -470,6 +480,7 @@ export class StorefrontService {
           website: undefined,
           cartToken: undefined,
           attribution: undefined,
+          tracking: undefined,
         }),
       ),
       before: async () => {
@@ -581,6 +592,11 @@ export class StorefrontService {
     }
     await this.closeCart(input.cartToken, order);
     await this.stats.orderPlaced(r, order, input.attribution);
+    await this.adEvents.orderPlaced(
+      order,
+      { type: 'store', id: r.store._id.toHexString() },
+      { ...input.tracking, fbclid: input.attribution?.fbclid, ttclid: input.attribution?.ttclid },
+    );
     const receipt = this.links.receiptToken(r.store._id.toHexString(), order._id.toHexString());
     return {
       orderNumber: order.number,
@@ -727,6 +743,20 @@ export class StorefrontService {
   }
 
   /** The order a receipt link shows. */
+  /** The browser tags for an open store (previews load none: they are not shoppers). */
+  tracking(r: ResolvedStore) {
+    return this.adDestinations.publicTracking({ type: 'store', id: r.store._id.toHexString() });
+  }
+
+  /** A shopper step's server copy for the business's ad platforms (ADR 0030). */
+  adEvent(r: ResolvedStore, input: BrowserEventInput) {
+    return this.adEvents.browserEvent(
+      { type: 'store', id: r.store._id.toHexString() },
+      input,
+      r.org.currency,
+    );
+  }
+
   async receipt(r: ResolvedStore, token: string) {
     const orderId = this.links.verifyReceipt(r.store._id.toHexString(), token);
     const order = orderId ? await this.orderRepo.findById(orderId) : null;
@@ -760,6 +790,7 @@ export class StorefrontService {
       deliveryZone: order.deliveryZone?.name ?? null,
       timeline: this.timeline(order),
       shipment: this.shipmentView(order),
+      tracking: { purchase: AdEventsService.browserPurchase(order) },
     };
   }
 

@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { drainAdEvents } from '../helpers/ad-events.js';
+import { FakeAdPlatforms } from '../helpers/fake-ad-platforms.js';
 import { TestApp, type Session } from '../helpers/test-app.js';
 
 /** A real 1x1 PNG. */
@@ -66,6 +69,7 @@ describe('landing pages', () => {
   let gel: ProductDto;
   let soap: ProductDto;
   let page: PageDto;
+  const ads = new FakeAdPlatforms();
 
   const handle = 'aloe-bazar';
   const host = `${handle}.shops.test`;
@@ -151,7 +155,7 @@ describe('landing pages', () => {
   };
 
   beforeAll(async () => {
-    t = await TestApp.create({ API_PUBLIC_URL: 'http://api.test' });
+    t = await TestApp.create({ API_PUBLIC_URL: 'http://api.test' }, { adFetch: ads.fetch });
     key = t.env.STOREFRONT_API_KEY!;
     owner = await t.registerUser({ name: 'Owner' });
     orgId = (await t.createOrg(owner, { name: 'Aloe Bazar', category: 'beauty' })).id;
@@ -732,6 +736,87 @@ describe('landing pages', () => {
       };
       expect(closed).toMatchObject({ status: 'ordered', recovered: false });
       await O().patch(url('/carts/settings')).send({ enabled: false }).expect(200);
+    });
+
+    it('loads a pixel kept for this page only, and sends its purchase with the page’s address (ADR 0030)', async () => {
+      const added = await O()
+        .post(url('/ad-tracking/destinations'))
+        .send({
+          platform: 'meta',
+          publicId: ads.meta.pixelId,
+          secret: ads.meta.token,
+          everywhere: false,
+          landingPageIds: [page.id],
+        })
+        .expect(201);
+      const view = await shop('get', `/${page.slug}`).expect(200);
+      expect(view.body.tracking).toMatchObject({
+        consent: 'off',
+        meta: [{ pixelId: ads.meta.pixelId, purchase: true }],
+      });
+      // Kept for this page only: the store itself (not open to shoppers here) loads nothing.
+      const store = await t
+        .http()
+        .get('/v1/storefront/resolve')
+        .set('x-storefront-key', key)
+        .set('x-store-host', host)
+        .expect(200);
+      expect(store.body.tracking?.meta ?? []).toEqual([]);
+
+      const ev = await shop('post', `/${page.slug}/ad-events`)
+        .set('x-shopper-agent', 'Mozilla/5.0 test')
+        .send({
+          event: 'ViewContent',
+          eventId: 'lp-view-000001',
+          items: [{ productId: gel.id, quantity: 1 }],
+          url: `https://${host}/${page.slug}`,
+        })
+        .expect(200);
+      expect(ev.body).toEqual({ queued: 1 });
+      const placed = await shop('post', `/${page.slug}/orders`)
+        .set('x-shopper-ip', '203.0.113.77')
+        .set('x-shopper-agent', 'Mozilla/5.0 test')
+        .set('idempotency-key', 'lp-ads-order-0001')
+        .send(
+          orderBody({
+            customer: { name: 'Shirin Akter', phone: '01911000777' },
+            tracking: { url: `https://${host}/${page.slug}`, fbp: 'fb.1.1700000000000.42' },
+          }),
+        )
+        .expect(201);
+      expect((await drainAdEvents(t)).map((r) => r.result)).toEqual(['sent', 'sent']);
+      const sent = ads.events('meta');
+      const view1 = sent.find((e) => e.event_name === 'ViewContent');
+      const purchase = sent.find((e) => e.event_name === 'Purchase');
+      expect(view1).toMatchObject({ event_name: 'ViewContent', event_id: 'lp-view-000001' });
+      expect(purchase).toMatchObject({
+        event_name: 'Purchase',
+        action_source: 'website',
+        event_source_url: `https://${host}/${page.slug}`,
+        user_data: {
+          ph: [createHash('sha256').update('8801911000777').digest('hex')],
+          fbp: 'fb.1.1700000000000.42',
+        },
+        custom_data: { order_id: placed.body.orderNumber },
+      });
+      // The thank-you page reports the same purchase from the browser, with the same event id.
+      const thanks = await shop(
+        'get',
+        `/${page.slug}/receipt?receipt=${encodeURIComponent(placed.body.receipt as string)}`,
+      ).expect(200);
+      expect(thanks.body.tracking.meta).toEqual([{ pixelId: ads.meta.pixelId, purchase: true }]);
+      expect(thanks.body.order.tracking.purchase).toMatchObject({
+        eventId: purchase!.event_id,
+        orderNumber: placed.body.orderNumber,
+        hashedPhone: createHash('sha256').update('+8801911000777').digest('hex'),
+      });
+      // The page's ad click id (fbclid) becomes Meta's fbc when the browser had none.
+      expect(String((purchase!.user_data as Record<string, unknown>).fbc)).toMatch(
+        /^fb\.1\.\d{13}\.IwAR0abc$/,
+      );
+      await O()
+        .delete(url(`/ad-tracking/destinations/${added.body.id as string}`))
+        .expect(204);
     });
 
     it('stops taking orders while paused', async () => {
