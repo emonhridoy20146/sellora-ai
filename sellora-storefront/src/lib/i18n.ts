@@ -137,6 +137,11 @@ const en = {
   noShopTitle: 'No shop here',
   noShopText: 'There is no shop at this address. Check the link and try again.',
   previewBanner: 'Preview: shoppers cannot see this store yet.',
+  consentTitle: 'Ads and analytics',
+  consentText:
+    'This shop uses Meta, TikTok or Google tags to learn which ads bring shoppers. They set cookies in your browser. Allow them?',
+  consentAccept: 'Allow',
+  consentDecline: 'No thanks',
   notFound: 'Page not found',
   notFoundText: 'This page does not exist or was removed.',
   backHome: 'Back to the shop',
@@ -347,6 +352,11 @@ const bn: Dictionary = {
   noShopTitle: 'এখানে কোনো দোকান নেই',
   noShopText: 'এই ঠিকানায় কোনো দোকান নেই। লিংকটি দেখে আবার চেষ্টা করুন।',
   previewBanner: 'প্রিভিউ: ক্রেতারা এখনো এই স্টোর দেখতে পাচ্ছেন না।',
+  consentTitle: 'বিজ্ঞাপন ও পরিসংখ্যান',
+  consentText:
+    'কোন বিজ্ঞাপন থেকে ক্রেতা আসেন তা জানতে এই দোকান Meta, TikTok বা Google-এর ট্যাগ ব্যবহার করে। এগুলো আপনার ব্রাউজারে কুকি রাখে। অনুমতি দেবেন?',
+  consentAccept: 'অনুমতি দিন',
+  consentDecline: 'না, ধন্যবাদ',
   notFound: 'পেজ পাওয়া যায়নি',
   notFoundText: 'এই পেজটি নেই বা সরানো হয়েছে।',
   backHome: 'দোকানে ফিরুন',

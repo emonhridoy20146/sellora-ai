@@ -1,4 +1,5 @@
 import { Phone } from 'lucide-react';
+import { AdTagsProvider } from '../ad-tags';
 import { dictionary } from '@/lib/i18n';
 import type { LandingBrand, LandingHead, LandingView } from '@/lib/types';
 import { ContactList } from '../footer';
@@ -62,7 +63,13 @@ export function LandingPageView({ view }: { view: LandingView }) {
     (form?.type === 'order_form' ? form.buttonLabel : '') ||
     t.orderNow;
   return (
-    <>
+    <AdTagsProvider
+      // Previews load no tags (the API sends none for them either).
+      tags={view.state === 'live' ? view.tracking : null}
+      endpoint={`/api/landing/${encodeURIComponent(view.page.slug)}/ad-events`}
+      currency={view.currency}
+      language={view.page.language}
+    >
       {view.state === 'preview' ? (
         <div className="bg-ink px-4 py-2 text-center text-sm font-medium text-white">
           {t.previewLanding}
@@ -88,8 +95,13 @@ export function LandingPageView({ view }: { view: LandingView }) {
       </main>
       <PageFooter store={view.store} language={view.page.language} />
       {sticky ? <StickyOrder label={stickyLabel} /> : null}
-      <LandingVisit slug={view.page.slug} pageId={view.page.id} live={view.state === 'live'} />
-    </>
+      <LandingVisit
+        slug={view.page.slug}
+        pageId={view.page.id}
+        live={view.state === 'live'}
+        product={view.product}
+      />
+    </AdTagsProvider>
   );
 }
 

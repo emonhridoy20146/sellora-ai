@@ -189,6 +189,17 @@ suspended store shows "not available", and an address with no store shows a page
   could not start). The page believes the order over that word (`returnMessage`), and
   `components/pay-now.tsx` starts a new try through `/api/orders/pay` or
   `/api/landing/[slug]/pay`. A gateway in test mode is marked "Test" everywhere.
+- **Ad tracking** (ADR 0030 in sellora-api). The store and landing page views carry
+  `tracking`: the public ids of the business's own Meta Pixel, TikTok Pixel, GA4 and Google
+  Ads for that page (none in previews). `components/ad-tags.tsx` loads each platform's
+  standard snippet (`lib/ad-tags-browser.ts`) once the shopper may be tracked: at once, or,
+  when the business asks first, after the shopper allows it on the banner (kept as
+  `sl_consent`). Product view, add to cart and checkout start go to the tags with a fresh
+  event id and, with the same id, to `/api/ad-events` or `/api/landing/[slug]/ad-events` for
+  the server copy. Orders carry `tracking` (the tags' cookies, the page and the consent); the
+  receipt and thank-you page report the purchase with the server's event id, once per browser
+  and only on the day it was placed (Google Ads gets only hashed email and phone). GA4
+  purchases come from the server only. `lib/ad-tags.ts` holds the formats and is unit tested.
 - **Security headers.** No framing, no referrer beyond the origin, no camera, microphone or
   location (`next.config.ts`).
 
@@ -203,8 +214,8 @@ src/
       products/ cart/ checkout/ order/ track/ pages/[key]/
       [...rest]/          the store's 404 for deeper unknown paths
     (landing)/[slug]/     a landing page's own root layout, the page and thanks/
-    api/                  cart, checkout, orders/pay, track and landing (order, visit, pay)
-                          routes for the browser (same-site only)
+    api/                  cart, checkout, orders/pay, track, ad-events and landing (order,
+                          visit, pay, ad-events) routes for the browser (same-site only)
     preview/              opens a signed preview (reached as /__preview)
     sitemap.xml/ robots.txt/
   components/
@@ -222,6 +233,8 @@ src/
     landing.ts            the landing page for a slug (server, cached per request)
     landing-offer.ts      package prices, totals, countdown, video and attribution helpers
     payments.ts           the advance rule, the shopper's pick, receipt payment words
+    ad-tags.ts            what each ad tag is told, browser ids, consent and purchase rules
+    ad-tags-browser.ts    loads Meta's, TikTok's and Google's snippets and reports events
     shopper.ts            the shopper's saved name, phone and address
     cart.ts, cart-lines.ts  the cart in localStorage (30 lines, 50 of each)
     money.ts phone.ts color.ts i18n.ts theme-style.ts types.ts
@@ -229,6 +242,9 @@ src/
 
 ## Not built yet
 
+- Ad tags ran only with fake tag scripts in the browser test and the tracking stand-in on the
+  server side, never with a real Meta, TikTok or Google account. A shopper who said no to
+  tracking cannot change their mind without clearing the site's storage.
 - Payments at checkout ran only against the API's fakes and the payment stand-in, never a real
   bKash, Nagad, SSLCommerz, aamarPay or shurjoPay account.
 - Landing page videos were checked only by the player address: YouTube is not reachable from

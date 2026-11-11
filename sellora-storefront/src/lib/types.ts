@@ -102,6 +102,8 @@ export interface OpenStore extends StoreBase {
   seo: { title: string; description: string };
   pages: PageKey[];
   checkout: { note: string; minOrderMinor: number };
+  /** The business's own ad tags for this store; null in a preview (ADR 0030). */
+  tracking?: AdTags | null;
 }
 
 export type Store = OpenStore | ClosedStore;
@@ -285,6 +287,8 @@ export interface Receipt {
   timeline: { status: string; at: string }[];
   shipment: Shipment | null;
   payment?: ReceiptPayment;
+  /** The purchase as the browser reports it to the ad tags, with the server's event id. */
+  tracking?: { purchase: BrowserPurchase };
 }
 
 export interface Tracking {
@@ -480,6 +484,8 @@ export interface LandingView extends LandingHead {
   cartReminders?: boolean;
   /** How the shopper may pay (ADR 0029). */
   payments?: LandingPayments;
+  /** The business's own ad tags for this page; null in a preview (ADR 0030). */
+  tracking?: AdTags | null;
 }
 
 export type Landing = LandingHead | LandingView;
@@ -519,6 +525,8 @@ export interface LandingReceipt {
   order: Receipt;
   store: LandingBrand;
   page: { id: string; name: string; slug: string; language: Language };
+  /** The page's ad tags, for the purchase (ADR 0030). */
+  tracking?: AdTags | null;
 }
 
 export const ATTRIBUTION_KEYS = [
@@ -533,3 +541,30 @@ export const ATTRIBUTION_KEYS = [
   'referrer',
 ] as const;
 export type Attribution = Partial<Record<(typeof ATTRIBUTION_KEYS)[number], string>>;
+
+// ---------------------------------------------------------------- ad tags (ADR 0030)
+
+/** Whether shoppers are asked before any ad tag loads. */
+export type AdConsentMode = 'off' | 'ask';
+
+/** The public ids of the business's own pixels and tags for one store or landing page. */
+export interface AdTags {
+  consent: AdConsentMode;
+  /** `purchase`: the browser reports the purchase when the order is placed. */
+  meta: { pixelId: string; purchase: boolean }[];
+  tiktok: { pixelCode: string; purchase: boolean }[];
+  ga4: { measurementId: string }[];
+  googleAds: { conversionId: string; purchaseLabel: string | null; purchase: boolean }[];
+}
+
+/** An order as the browser reports it to ad tags, with the server's event id. */
+export interface BrowserPurchase {
+  eventId: string;
+  orderNumber: string;
+  currency: string;
+  valueMinor: number;
+  items: { id: string; name: string; quantity: number; priceMinor: number }[];
+  /** SHA-256 of the normalized email and E.164 phone, for Google Ads enhanced conversions. */
+  hashedEmail: string | null;
+  hashedPhone: string | null;
+}

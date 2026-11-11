@@ -8,6 +8,7 @@ import { cn } from '@/lib/cn';
 import { formatNumber } from '@/lib/money';
 import { reportStep } from '@/lib/shop-steps';
 import type { ProductDetail } from '@/lib/types';
+import { useAdTags } from './ad-tags';
 import { Price } from './price';
 import { useShop } from './shop-context';
 
@@ -16,6 +17,7 @@ export function AddToCart({ product }: { product: ProductDetail }) {
   const { storeId, language, currency, state, t } = useShop();
   const cart = useCart(storeId);
   const router = useRouter();
+  const ads = useAdTags();
   const firstAvailable = product.variants.find((v) => v.available) ?? product.variants[0]!;
   const [choice, setChoice] = useState<string[]>(firstAvailable.optionValues);
   const [quantity, setQuantity] = useState(1);
@@ -32,10 +34,32 @@ export function AddToCart({ product }: { product: ProductDetail }) {
   useEffect(() => {
     if (state === 'open') reportStep('product_view', { productId: product.id });
   }, [state, product.id]);
+  // The business's ad tags: a product view, once per product page (ADR 0030).
+  const viewed = firstAvailable;
+  useEffect(() => {
+    ads.track('ViewContent', [
+      {
+        productId: product.id,
+        variantId: viewed.id,
+        name: product.name,
+        quantity: 1,
+        priceMinor: viewed.priceMinor,
+      },
+    ]);
+  }, [ads, product.id, product.name, viewed.id, viewed.priceMinor]);
 
   const put = () => {
     if (!variant || !canBuy) return false;
     if (state === 'open') reportStep('cart_add');
+    ads.track('AddToCart', [
+      {
+        productId: product.id,
+        variantId: variant.id,
+        name: product.name,
+        quantity: Math.min(quantity, max),
+        priceMinor: variant.priceMinor,
+      },
+    ]);
     cart.add({
       productId: product.id,
       variantId: variant.id,

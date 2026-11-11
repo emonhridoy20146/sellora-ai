@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { AdTagsProvider } from '@/components/ad-tags';
 import { Footer } from '@/components/footer';
 import { Header } from '@/components/header';
 import { ShopBeacon } from '@/components/shop-beacon';
@@ -90,12 +91,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 {store.theme.announcement}
               </div>
             ) : null}
-            <ShopBeacon />
-            <Header store={store} />
-            <main id="main" className="min-h-[60vh]">
-              {children}
-            </main>
-            <Footer store={store} />
+            <AdTagsProvider
+              // Previews load no tags: the business and the reviewer are not shoppers.
+              tags={store.state === 'open' ? store.tracking : null}
+              endpoint="/api/ad-events"
+              currency={store.currency}
+              language={store.language}
+            >
+              <ShopBeacon />
+              <Header store={store} />
+              <main id="main" className="min-h-[60vh]">
+                {children}
+              </main>
+              <Footer store={store} />
+            </AdTagsProvider>
           </ShopProvider>
         ) : (
           <HoldingPage store={store} />
