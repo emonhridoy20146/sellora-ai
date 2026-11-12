@@ -14,7 +14,7 @@ export interface FakeRequest {
     messages: { role: string; content: unknown }[];
     tools?: { name: string; strict?: boolean; input_schema: unknown }[];
     cache_control?: unknown;
-    output_config?: { effort?: string };
+    output_config?: { effort?: string; format?: { type: string; schema: unknown } };
     metadata?: { user_id?: string };
     [key: string]: unknown;
   };
@@ -112,6 +112,11 @@ export class FakeAnthropic {
 
   static text(text: string, usage?: Partial<Usage>): Responder {
     return (req) => json(message([{ type: 'text', text }], 'end_turn', usage, req.body.model));
+  }
+
+  /** A structured output answer: the value as JSON text (what `output_config.format` returns). */
+  static json(value: unknown, usage?: Partial<Usage>): Responder {
+    return FakeAnthropic.text(JSON.stringify(value), usage);
   }
 
   /** A turn that calls one or more tools (optionally with text before them). */

@@ -47,6 +47,11 @@ export const RESTORE_PARTS = {
     ],
   },
   coupons: { label: 'Coupons', collections: ['coupons', 'coupon_uses'] },
+  // Search Console data is fetched again from Google; the Google connection is never restored.
+  seo: {
+    label: 'SEO and content studio',
+    collections: ['keyword_research', 'keyword_lists', 'seo_bulk_runs', 'content_drafts'],
+  },
   settings: {
     label: 'Settings',
     collections: [

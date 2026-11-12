@@ -19,6 +19,7 @@ import { SmsCoreModule } from './modules/sms/sms.module.js';
 import { StoresCoreModule } from './modules/stores/stores.module.js';
 import { TelegramCoreModule } from './modules/telegram/telegram.module.js';
 import { CatalogSyncCoreModule } from './modules/catalog-sync/catalog-sync.module.js';
+import { SeoCoreModule } from './modules/seo/seo.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { AiProcessor } from './workers/ai.processor.js';
 import { BackupsProcessor } from './workers/backups.processor.js';
@@ -33,6 +34,7 @@ import { SmsProcessor } from './workers/sms.processor.js';
 import { AdEventsProcessor } from './workers/ad-events.processor.js';
 import { TelegramProcessor } from './workers/telegram.processor.js';
 import { CatalogSyncProcessor } from './workers/catalog-sync.processor.js';
+import { SeoProcessor } from './workers/seo.processor.js';
 import { WebhooksProcessor } from './workers/webhooks.processor.js';
 
 @Module({})
@@ -60,6 +62,7 @@ export class WorkerModule {
         TelegramCoreModule,
         CatalogSyncCoreModule,
         LandingPagesCoreModule,
+        SeoCoreModule,
       ],
       providers: [
         MailProcessor,
@@ -76,6 +79,7 @@ export class WorkerModule {
         BackupsProcessor,
         TelegramProcessor,
         CatalogSyncProcessor,
+        SeoProcessor,
         // Messages that arrive by webhook are stored here, so AI replies are scheduled here too.
         AiRepliesListener,
       ],

@@ -265,6 +265,7 @@ export const DEFAULT_CREDIT_RATE: Omit<CreditRate, 'effectiveFrom' | 'createdBy'
   ],
   minimumCreditsPerRequest: 1,
   transcriptionCreditsPerMinute: 15,
+  keywordLookupCredits: 150,
   usdRateScaled: 1_220_000,
   note: 'Initial price list',
 };

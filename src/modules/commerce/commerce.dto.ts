@@ -67,8 +67,24 @@ const optionBody = z
   .object({ name: label(40), values: z.array(optionValue).min(1).max(50) })
   .strict();
 
+/** Search engine fields of a product (ADR 0032); replaces what was there. */
+export const productSeoBody = z
+  .object({
+    title: text(70).optional(),
+    description: text(170).optional(),
+    keywords: z.array(label(80)).max(10).default([]),
+    faq: z
+      .array(z.object({ question: label(200), answer: label(1000) }).strict())
+      .max(10)
+      .default([]),
+  })
+  .strict();
+
 const productFields = {
   name: label(200),
+  /** The product's address (/products/<slug>); a changed address redirects from the old one. */
+  slug: label(120),
+  seo: productSeoBody.nullable(),
   description: z.string().max(20_000),
   categoryId: objectIdSchema.nullable(),
   tags: z.array(label(40)).max(30),
@@ -81,6 +97,8 @@ const productFields = {
 export const createProductBody = z
   .object({
     ...productFields,
+    slug: productFields.slug.optional(),
+    seo: productFields.seo.optional(),
     description: productFields.description.default(''),
     categoryId: productFields.categoryId.default(null),
     tags: productFields.tags.default([]),

@@ -22,6 +22,7 @@ import { DNS_LOOKUP, type DnsLookup } from '../../src/modules/stores/dns-lookup.
 import { GOOGLE_FETCH } from '../../src/modules/backups/google-drive.js';
 import { TELEGRAM_FETCH } from '../../src/infra/telegram/telegram.client.js';
 import { AD_FETCH } from '../../src/modules/ad-tracking/ad-tracking.types.js';
+import { KEYWORD_FETCH } from '../../src/modules/seo/keyword-data.js';
 import { REDIS } from '../../src/infra/redis/redis.module.js';
 import type { Redis } from 'ioredis';
 import { testEnv } from './env.js';
@@ -76,6 +77,8 @@ export class TestApp {
       telegramFetch?: typeof fetch;
       /** Replaces the fetch ad platforms are called with, so tests can play their part. */
       adFetch?: typeof fetch;
+      /** Replaces the fetch the keyword data client uses (DataForSEO). */
+      keywordFetch?: typeof fetch;
     } = {},
   ): Promise<TestApp> {
     const env = testEnv(overrides);
@@ -96,6 +99,8 @@ export class TestApp {
     if (opts.telegramFetch)
       builder = builder.overrideProvider(TELEGRAM_FETCH).useValue(opts.telegramFetch);
     if (opts.adFetch) builder = builder.overrideProvider(AD_FETCH).useValue(opts.adFetch);
+    if (opts.keywordFetch)
+      builder = builder.overrideProvider(KEYWORD_FETCH).useValue(opts.keywordFetch);
     const moduleRef = await builder.compile();
     const app = moduleRef.createNestApplication<NestExpressApplication>({
       bodyParser: false,

@@ -66,6 +66,12 @@ export class RateLimitService {
       // reminder link restores it.
       'cart-capture:ip': { points: 60, durationSec: 600 },
       'cart-restore:ip': { points: 30, durationSec: 600 },
+      // SEO and content studio (ADR 0032): AI writing per business, keyword research per
+      // business, and calls to the keyword data provider for the whole platform (its live
+      // endpoint takes 12 a minute).
+      'seo-write:org': { points: 120, durationSec: 3600 },
+      'keyword-research:org': { points: 40, durationSec: 3600 },
+      'keyword-volumes:platform': { points: 10, durationSec: 60 },
     };
     const multiplier = config.get('RATE_LIMIT_IP_MULTIPLIER');
     for (const [name, spec] of Object.entries(this.specs)) {

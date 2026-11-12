@@ -66,10 +66,23 @@ export interface Variant {
   weightGrams?: number;
 }
 
+/** What search engines show for a product (ADR 0032). Empty fields fall back to the product's. */
+export interface ProductSeo {
+  title?: string;
+  description?: string;
+  /** Target keywords; the first is the focus keyword. */
+  keywords: string[];
+  /** Questions and answers shown on the product page (and as FAQ structured data). */
+  faq: { question: string; answer: string }[];
+}
+
 export interface Product {
   orgId: Types.ObjectId;
   name: string;
   slug: string;
+  /** Earlier addresses of the product, newest first: they redirect (301) to the current one. */
+  previousSlugs: string[];
+  seo?: ProductSeo;
   description: string;
   categoryId?: Types.ObjectId;
   tags: string[];
@@ -104,6 +117,27 @@ const variantSchema = new Schema<Variant>(
 export const productSchema = tenantSchema<Product>({
   name: { type: String, required: true, trim: true },
   slug: { type: String, required: true, lowercase: true },
+  previousSlugs: { type: [String], default: [] },
+  seo: new Schema(
+    {
+      title: String,
+      description: String,
+      keywords: { type: [String], default: [] },
+      faq: {
+        type: [
+          new Schema(
+            {
+              question: { type: String, required: true },
+              answer: { type: String, required: true },
+            },
+            { _id: false, strict: 'throw' },
+          ),
+        ],
+        default: [],
+      },
+    },
+    { _id: false, strict: 'throw' },
+  ),
   description: { type: String, default: '' },
   categoryId: Schema.Types.ObjectId,
   tags: { type: [String], default: [] },
@@ -160,6 +194,7 @@ export const productSchema = tenantSchema<Product>({
   ),
 });
 productSchema.index({ orgId: 1, slug: 1 }, { unique: true });
+productSchema.index({ orgId: 1, previousSlugs: 1 });
 // One product per item at a source (ADR 0023).
 productSchema.index(
   { orgId: 1, 'sync.sourceId': 1, 'sync.externalId': 1 },

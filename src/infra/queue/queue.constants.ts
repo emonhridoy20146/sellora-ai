@@ -24,6 +24,8 @@ export const QUEUES = {
   catalogSync: 'catalog-sync',
   /** Server copies of shopper events and purchases for the business's ad platforms (ADR 0030). */
   adEvents: 'ad-events',
+  /** SEO studio (ADR 0032): Search Console setup and daily data, and bulk AI suggestions. */
+  seo: 'seo',
   maintenance: 'maintenance',
 } as const;
 

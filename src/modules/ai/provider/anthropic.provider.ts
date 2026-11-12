@@ -157,7 +157,16 @@ export class AnthropicProvider implements AiProvider {
             : {}),
           // Caches the stable prefix (tools, instructions, earlier turns) between turns.
           cache_control: { type: 'ephemeral' },
-          ...(req.effort ? { output_config: { effort: req.effort } } : {}),
+          ...(req.effort || req.outputSchema
+            ? {
+                output_config: {
+                  ...(req.effort ? { effort: req.effort } : {}),
+                  ...(req.outputSchema
+                    ? { format: { type: 'json_schema' as const, schema: req.outputSchema } }
+                    : {}),
+                },
+              }
+            : {}),
           ...(req.endUserId ? { metadata: { user_id: req.endUserId } } : {}),
         },
         req.signal ? { signal: req.signal } : undefined,

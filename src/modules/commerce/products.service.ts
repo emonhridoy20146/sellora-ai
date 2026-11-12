@@ -15,6 +15,7 @@ import type {
   Category,
   Product,
   ProductImage,
+  ProductSeo,
   ProductStatus,
   ProductSync,
   Variant,
@@ -38,8 +39,21 @@ export interface VariantInput {
   weightGrams?: number | null;
 }
 
+export interface ProductSeoInput {
+  title?: string;
+  description?: string;
+  keywords: string[];
+  faq: { question: string; answer: string }[];
+}
+
+/** Earlier addresses kept for redirects, per product. */
+const PREVIOUS_SLUGS_MAX = 20;
+
 export interface ProductInput {
   name: string;
+  /** Leave out for an address made from the name. */
+  slug?: string;
+  seo?: ProductSeoInput | null;
   description: string;
   categoryId: string | null;
   tags: string[];
@@ -57,6 +71,13 @@ export function toProductDto(p: ProductDoc, lowStockThreshold?: number) {
     id: p._id.toHexString(),
     name: p.name,
     slug: p.slug,
+    previousSlugs: p.previousSlugs ?? [],
+    seo: {
+      title: p.seo?.title ?? '',
+      description: p.seo?.description ?? '',
+      keywords: p.seo?.keywords ?? [],
+      faq: (p.seo?.faq ?? []).map((f) => ({ question: f.question, answer: f.answer })),
+    },
     description: p.description,
     categoryId: p.categoryId?.toHexString() ?? null,
     tags: p.tags,
@@ -381,6 +402,38 @@ export class ProductsService {
     return c._id;
   }
 
+  /** True when the address is the one made from the name (renaming then moves it along). */
+  private autoSlug(p: { name: string; slug: string }): boolean {
+    const root = slugify(p.name);
+    return p.slug === root || new RegExp(`^${escapeRegex(root)}-\\d+$`).test(p.slug);
+  }
+
+  /** The earlier addresses after moving from `from` to `to`, newest first. */
+  private movedSlugs(from: string, previous: string[] | undefined, to: string): string[] {
+    return [from, ...(previous ?? [])]
+      .filter((s, i, all) => s !== to && all.indexOf(s) === i)
+      .slice(0, PREVIOUS_SLUGS_MAX);
+  }
+
+  /** An address a product now uses stops redirecting to the product that used it before. */
+  private async claimSlug(slug: string, productId: Types.ObjectId): Promise<void> {
+    await this.products.updateMany(
+      { previousSlugs: slug, _id: { $ne: productId } },
+      { $pull: { previousSlugs: slug } },
+    );
+  }
+
+  private seoFields(seo: ProductSeoInput): ProductSeo {
+    const title = seo.title?.trim();
+    const description = seo.description?.trim();
+    return {
+      ...(title ? { title } : {}),
+      ...(description ? { description } : {}),
+      keywords: [...new Set(seo.keywords.map((k) => k.trim()).filter(Boolean))],
+      faq: seo.faq.map((f) => ({ question: f.question.trim(), answer: f.answer.trim() })),
+    };
+  }
+
   private async uniqueSlug(base: string, exceptId?: Types.ObjectId): Promise<string> {
     const root = slugify(base);
     for (let n = 1; n < 1000; n++) {
@@ -434,12 +487,15 @@ export class ProductsService {
     const categoryId = await this.assertCategory(input.categoryId);
     const org = await this.orgs.get(orgId);
     const productId = new Types.ObjectId();
+    const slug = await this.uniqueSlug(input.slug ?? input.name);
     const product = await this.tx.run(async () => {
+      await this.claimSlug(slug, productId);
       const images = await this.attachImages(productId, input.images);
       const created = await this.products.create({
         _id: productId,
         name: input.name,
-        slug: await this.uniqueSlug(input.name),
+        slug,
+        ...(input.seo ? { seo: this.seoFields(input.seo) } : {}),
         description: input.description,
         ...(categoryId ? { categoryId } : {}),
         tags: input.tags,
@@ -506,10 +562,22 @@ export class ProductsService {
       const categoryId = await this.assertCategory(input.categoryId);
       set.categoryId = categoryId ?? null;
     }
-    if (input.name !== undefined && input.name !== before.name) {
-      set.name = input.name;
-      set.slug = await this.uniqueSlug(input.name, before._id);
+    if (input.name !== undefined && input.name !== before.name) set.name = input.name;
+    // A new address: the one asked for, or one made from the new name when the old address
+    // was made from the old name. The old address keeps working as a redirect.
+    const nextSlug =
+      input.slug !== undefined
+        ? slugify(input.slug) !== before.slug
+          ? await this.uniqueSlug(input.slug, before._id)
+          : undefined
+        : set.name !== undefined && this.autoSlug(before)
+          ? await this.uniqueSlug(input.name!, before._id)
+          : undefined;
+    if (nextSlug && nextSlug !== before.slug) {
+      set.slug = nextSlug;
+      set.previousSlugs = this.movedSlugs(before.slug, before.previousSlugs, nextSlug);
     }
+    if (input.seo !== undefined && input.seo !== null) set.seo = this.seoFields(input.seo);
     if (input.description !== undefined) set.description = input.description;
     if (input.tags !== undefined) set.tags = input.tags;
     if (input.status !== undefined && input.status !== before.status) {
@@ -532,6 +600,7 @@ export class ProductsService {
       delete set.categoryId;
       unset.categoryId = '';
     }
+    if (input.seo === null && before.seo) unset.seo = '';
     const after = await this.tx.run(async () => {
       // Stock of existing variants may have changed since we read it (orders). Write the
       // variants with the stock values read inside the transaction.
@@ -565,6 +634,7 @@ export class ProductsService {
           { type: 'product', id: before._id.toHexString() },
         );
       }
+      if (typeof set.slug === 'string') await this.claimSlug(set.slug, before._id);
       const updated = await this.products.findOneAndUpdate(
         { _id: before._id },
         { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
@@ -584,7 +654,12 @@ export class ProductsService {
       action: 'catalog.product.updated',
       orgId: this.orgId(),
       target: { type: 'product', id, label: after.name },
-      metadata: { fields: Object.keys(set).filter((k) => k !== 'searchText') },
+      metadata: {
+        fields: [...Object.keys(set), ...Object.keys(unset)].filter(
+          (k) => k !== 'searchText' && k !== 'previousSlugs',
+        ),
+        ...(typeof set.slug === 'string' ? { slug: { from: before.slug, to: set.slug } } : {}),
+      },
     });
     return after;
   }
@@ -756,12 +831,14 @@ export class ProductsService {
     if (!existing) {
       const org = await this.orgs.get(orgId);
       const productId = new Types.ObjectId();
+      const slug = await this.uniqueSlug(w.name);
       const product = await this.tx.run(async () => {
         await this.attachSyncedImages(productId, w.images);
+        await this.claimSlug(slug, productId);
         const created = await this.products.create({
           _id: productId,
           name: w.name,
-          slug: await this.uniqueSlug(w.name),
+          slug,
           description: w.description,
           ...(w.categoryId ? { categoryId: w.categoryId } : {}),
           tags: w.tags,
@@ -791,7 +868,13 @@ export class ProductsService {
     };
     if (w.name !== existing.name) {
       set.name = w.name;
-      set.slug = await this.uniqueSlug(w.name, existing._id);
+      if (this.autoSlug(existing)) {
+        const next = await this.uniqueSlug(w.name, existing._id);
+        if (next !== existing.slug) {
+          set.slug = next;
+          set.previousSlugs = this.movedSlugs(existing.slug, existing.previousSlugs, next);
+        }
+      }
     }
     if (w.categoryId) set.categoryId = w.categoryId;
     if (restoring) set.status = w.newStatus;
@@ -847,6 +930,7 @@ export class ProductsService {
       set.variants = variants;
       await this.attachSyncedImages(existing._id, w.images);
       // A source without categories leaves the one set in Sellora.
+      if (typeof set.slug === 'string') await this.claimSlug(set.slug, existing._id);
       const updated = await this.products.findOneAndUpdate({ _id: existing._id }, { $set: set });
       if (added.length) await this.inventory.recordInitial(existing._id, added);
       if (writeOffs.length) await this.inventory.recordWriteOff(existing._id, writeOffs);

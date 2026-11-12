@@ -29,6 +29,7 @@ import { FraudModule } from './modules/fraud/fraud.module.js';
 import { FilesModule } from './modules/files/files.module.js';
 import { InboxModule } from './modules/inbox/inbox.module.js';
 import { LandingPagesModule } from './modules/landing-pages/landing-pages.module.js';
+import { SeoModule } from './modules/seo/seo.module.js';
 import { MetaModule } from './modules/meta/meta.module.js';
 import { AccessGuard } from './modules/auth/guards/access.guard.js';
 import { HealthModule } from './modules/health/health.module.js';
@@ -121,6 +122,7 @@ export class AppModule {
         FraudModule,
         StoresModule,
         LandingPagesModule,
+        SeoModule,
         ShopPaymentsModule,
         AdTrackingModule,
         CouponsModule,

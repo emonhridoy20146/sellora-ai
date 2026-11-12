@@ -232,7 +232,11 @@ export class StorefrontService {
     return {
       ...brand,
       theme: { ...store.theme, sections: store.theme.sections.filter((s) => s.enabled) },
-      seo: { title: store.seo.title || store.name, description: store.seo.description ?? '' },
+      seo: {
+        title: store.seo.title || store.name,
+        description: store.seo.description ?? '',
+        googleVerification: store.seo.googleVerification ?? null,
+      },
       pages: PAGE_KEYS.filter((k) => Boolean(store.pages[k]?.trim())),
       checkout: { note: store.checkout.note ?? '', minOrderMinor: store.checkout.minOrderMinor },
     };
@@ -273,6 +277,10 @@ export class StorefrontService {
       })),
       category: category ? { name: category.name, slug: category.slug } : null,
       currency: p.currency,
+      // Search engine title and description (ADR 0032); null: the page uses the product's own.
+      seo: { title: p.seo?.title || null, description: p.seo?.description || null },
+      faq: (p.seo?.faq ?? []).map((f) => ({ question: f.question, answer: f.answer })),
+      sku: p.variants.find((v) => v.sku)?.sku ?? null,
     };
   }
 
@@ -344,9 +352,21 @@ export class StorefrontService {
     };
   }
 
+  /**
+   * A product page. An address the product used before answers `{ movedTo }` with its
+   * address now, for a permanent redirect (ADR 0032).
+   */
   async product(slug: string) {
-    const p = await this.products.findOne({ slug: slug.toLowerCase(), status: 'active' });
-    if (!p) throw AppError.notFound('product');
+    const key = slug.toLowerCase();
+    const p = await this.products.findOne({ slug: key, status: 'active' });
+    if (!p) {
+      const moved = await this.products.findOne(
+        { previousSlugs: key, status: 'active' },
+        { slug: 1 },
+      );
+      if (moved) return { movedTo: moved.slug };
+      throw AppError.notFound('product');
+    }
     const category = p.categoryId ? await this.categories.findById(p.categoryId) : null;
     const related = p.categoryId
       ? await this.products.find(

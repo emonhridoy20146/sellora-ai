@@ -127,6 +127,22 @@ export function creditsForAudio(rate: CreditRate, audioMs: number): CreditCharge
   };
 }
 
+/**
+ * One keyword search-volume lookup (ADR 0032): a fixed number of credits per lookup,
+ * whatever the number of keywords in it (the data provider charges per request too).
+ */
+export function creditsForKeywordLookup(rate: CreditRate): CreditCharge {
+  if (rate.keywordLookupCredits === undefined)
+    throw new Error(`Credit rate v${rate.version} has no keyword lookup price`);
+  const centiCredits = BigInt(centi(rate.keywordLookupCredits));
+  const billed = ceilDiv(centiCredits * BigInt(rate.creditPriceMinor), 100n);
+  return {
+    credits: Number(centiCredits) / 100,
+    centiCredits: Number(centiCredits),
+    billedMinor: Number(billed),
+  };
+}
+
 /** What the speech-to-text provider charges for `audioMs` of audio, in micro-USD (rounded up). */
 export function providerAudioCostUsdMicros(model: AiModel, audioMs: number): number {
   const perMinute = BigInt(model.audioUsdMicrosPerMinute ?? 0);
