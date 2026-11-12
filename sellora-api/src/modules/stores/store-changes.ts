@@ -78,7 +78,9 @@ export function changedAreas(
   if (before.themeKey !== after.themeKey || differs(before.theme, after.theme))
     areas.push('design');
   if (differs(before.pages, after.pages)) areas.push('pages');
-  if (differs(before.seo, after.seo)) areas.push('seo');
+  // The Google verification code is Sellora's own setting, not the merchant's words.
+  const words = (seo: Store['seo']) => ({ title: seo.title, description: seo.description });
+  if (differs(words(before.seo), words(after.seo))) areas.push('seo');
   if (differs(before.social, after.social)) areas.push('social');
   if ((before.checkout.note ?? '') !== (after.checkout.note ?? '')) areas.push('checkout');
   return areas;

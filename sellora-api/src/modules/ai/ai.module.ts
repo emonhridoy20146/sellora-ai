@@ -20,6 +20,7 @@ import { AnthropicProvider } from './provider/anthropic.provider.js';
 import { OpenAiTranscriber } from './transcription/openai-transcriber.js';
 import { TRANSCRIBERS, type Transcriber } from './transcription/transcriber.js';
 import { VoiceNotesService } from './voice-notes/voice-notes.service.js';
+import { AiWriterService } from './writer/ai-writer.service.js';
 
 /**
  * The AI sales agent without HTTP routes: providers, settings, tools and the reply engine.
@@ -57,8 +58,15 @@ import { VoiceNotesService } from './voice-notes/voice-notes.service.js';
     AgentRunner,
     AiReplyQueue,
     AiRepliesService,
+    AiWriterService,
   ],
-  exports: [AiAgentSettingsService, AiRepliesService, AiProviders, VoiceNotesService],
+  exports: [
+    AiAgentSettingsService,
+    AiRepliesService,
+    AiProviders,
+    VoiceNotesService,
+    AiWriterService,
+  ],
 })
 export class AiCoreModule {}
 

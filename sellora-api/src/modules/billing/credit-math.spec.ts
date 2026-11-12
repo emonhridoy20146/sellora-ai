@@ -196,3 +196,28 @@ describe('AI credit maths', () => {
     });
   });
 });
+
+describe('keyword lookups (ADR 0032)', () => {
+  it('charges a fixed number of credits per lookup', async () => {
+    const { creditsForKeywordLookup } = await import('./credit-math.js');
+    const rate = {
+      version: 3,
+      currency: 'BDT',
+      creditPriceMinor: 10,
+      tiers: [],
+      minimumCreditsPerRequest: 1,
+      keywordLookupCredits: 150,
+      usdRateScaled: 1_220_000,
+      effectiveFrom: new Date(),
+      createdBy: 'x',
+    };
+    expect(creditsForKeywordLookup(rate as never)).toEqual({
+      credits: 150,
+      centiCredits: 15_000,
+      billedMinor: 1_500,
+    });
+    expect(() =>
+      creditsForKeywordLookup({ ...rate, keywordLookupCredits: undefined }),
+    ).toThrow(/no keyword lookup price/);
+  });
+});

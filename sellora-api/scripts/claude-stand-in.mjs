@@ -15,6 +15,11 @@
  * Voice notes reach it as text (Sellora transcribes them first); it answers the words it is
  * given and starts its reply with "Voice note shunechi" so checks can tell.
  *
+ * Structured output (output_config.format, used by the SEO and content studios, ADR 0032)
+ * gets JSON in the asked shape, filled from fixed templates and the shop's own words: product
+ * SEO fields, page SEO fields, keyword ideas and ad copy. It is not real writing, and its
+ * "translations" say they are not translations.
+ *
  * Never point a production deployment at it.
  */
 import { createServer } from 'node:http';
@@ -70,7 +75,230 @@ function heardWords(text) {
   return { heard, customer: [typed, ...heard].filter(Boolean).join('\n') };
 }
 
+// ---------------------------------------------------------------- structured output (ADR 0032)
+
+/** Text between <tag> and </tag> in the prompt. */
+function tagged(prompt, tag) {
+  const m = new RegExp(`<${tag}>\\n([\\s\\S]*?)\\n</${tag}>`).exec(prompt);
+  return m ? m[1] : null;
+}
+
+function taggedJson(prompt, tag) {
+  try {
+    return JSON.parse(tagged(prompt, tag) ?? 'null');
+  } catch {
+    return null;
+  }
+}
+
+/** A few common shop words in Banglish, for addresses and English ideas. */
+const BANGLISH = {
+  শাড়ি: 'shari',
+  জামদানি: 'jamdani',
+  পাঞ্জাবি: 'panjabi',
+  থ্রি: 'three',
+  পিস: 'piece',
+  কুর্তি: 'kurti',
+  জুতা: 'juta',
+  ব্যাগ: 'bag',
+  ঘড়ি: 'ghori',
+  মধু: 'modhu',
+  তেল: 'tel',
+  চা: 'cha',
+  বোরকা: 'borka',
+  হিজাব: 'hijab',
+  ঢাকাই: 'dhakai',
+  সুতি: 'suti',
+  সিল্ক: 'silk',
+  লাল: 'lal',
+};
+
+function banglish(text) {
+  return text
+    .split(/\s+/)
+    .map((w) => BANGLISH[w] ?? (BENGALI.test(w) ? '' : w))
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function clip(text, max) {
+  const chars = [...text];
+  return chars.length <= max
+    ? text
+    : `${chars
+        .slice(0, max - 1)
+        .join('')
+        .trimEnd()}…`;
+}
+
+function productSeo(system, prompt) {
+  const bn = /in Bangla \(in Bengali script\)/.test(system);
+  const p = taggedJson(prompt, 'product') ?? {};
+  const name = String(p.name ?? 'Product').trim();
+  const focus = (tagged(prompt, 'focus_keyword') ?? name).trim().toLowerCase();
+  const photos = Number(/Write exactly (\d+) image alt texts/.exec(system)?.[1] ?? 0);
+  const latin = banglish(focus) || banglish(name) || 'product';
+  const keywords = bn
+    ? [focus, `${focus} দাম`, `${focus} অনলাইন`, latin, `${latin} price in bangladesh`]
+    : [focus, `${focus} price in bangladesh`, `buy ${focus} online`, `best ${focus}`];
+  let seoTitle = bn ? `${focus} | ${name} অনলাইনে কিনুন` : `${focus}: ${name}, order online`;
+  if ([...seoTitle].length < 30) seoTitle += bn ? ' — হোম ডেলিভারি' : ' with home delivery';
+  const metaDescription = bn
+    ? `${name} অনলাইনে অর্ডার করুন। ${focus} সারা বাংলাদেশে হোম ডেলিভারি, পণ্য হাতে পেয়ে টাকা দিন।`
+    : `Order ${name} online. ${focus} with home delivery across Bangladesh; pay when the parcel arrives.`;
+  const description = [
+    bn ? `${focus}: ${name}।` : `${focus}: ${name}.`,
+    String(p.description ?? '').trim(),
+    bn
+      ? 'ওয়েবসাইটে অর্ডার করুন অথবা আমাদের পেজে মেসেজ দিন।'
+      : 'Order on the website or message our page.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  return {
+    focusKeyword: focus,
+    keywords,
+    seoTitle: clip(seoTitle, 60),
+    slug: latin.replace(/\s+/g, '-'),
+    metaDescription: clip(metaDescription, 158),
+    description,
+    tags: [...new Set([...focus.split(/\s+/), ...(p.tags ?? [])])].slice(0, 6),
+    imageAlts: Array.from({ length: photos }, (_, i) =>
+      bn ? `${name}, ছবি ${i + 1}` : `${name}, photo ${i + 1}`,
+    ),
+    faq: bn
+      ? [
+          { question: 'কীভাবে অর্ডার করব?', answer: 'ওয়েবসাইটে অর্ডার করুন অথবা পেজে মেসেজ দিন।' },
+          { question: 'টাকা কখন দেব?', answer: 'পণ্য হাতে পেয়ে টাকা দিন (ক্যাশ অন ডেলিভারি)।' },
+        ]
+      : [
+          {
+            question: `How do I order ${name}?`,
+            answer: 'Order on the website or message our page.',
+          },
+          {
+            question: 'When do I pay?',
+            answer: 'You pay when the parcel arrives (cash on delivery).',
+          },
+        ],
+  };
+}
+
+function pageSeo(system, prompt) {
+  const bn = /in Bangla \(in Bengali script\)/.test(system);
+  const page = taggedJson(prompt, 'page') ?? {};
+  const name = String(page.name ?? 'Shop').trim();
+  const focus = (tagged(prompt, 'focus_keyword') ?? name).trim();
+  const store = /home page of an online shop/.test(system);
+  const seoTitle = bn
+    ? `${name}: ${store ? 'অনলাইন শপ, সারা দেশে হোম ডেলিভারি' : 'আজই অর্ডার করুন'}`
+    : `${name}: ${store ? 'online shop with home delivery' : 'order today'}`;
+  const metaDescription = bn
+    ? `${focus} — ${name} থেকে অনলাইনে অর্ডার করুন। সারা বাংলাদেশে হোম ডেলিভারি, পণ্য হাতে পেয়ে টাকা দিন।`
+    : `${focus} from ${name}. Order online with home delivery across Bangladesh and pay when the parcel arrives.`;
+  return {
+    focusKeyword: focus,
+    seoTitle: clip(seoTitle, 60),
+    metaDescription: clip(metaDescription, 158),
+  };
+}
+
+function keywordIdeas(system, prompt) {
+  const seed = (tagged(prompt, 'seed') ?? 'product').trim().toLowerCase();
+  const latin = banglish(seed) || seed.replace(/[^\p{L}\p{N} ]/gu, '').trim() || 'product';
+  const bangla = BENGALI.test(seed) ? seed : null;
+  const only =
+    /(Bangla \(Bengali script\)|English|Banglish \(Bangla in Latin letters\)) phrases only/.exec(
+      system,
+    )?.[1];
+  const want = (script) =>
+    !only ||
+    (script === 'bangla' && only.startsWith('Bangla (')) ||
+    (script === 'english' && only === 'English') ||
+    (script === 'banglish' && only.startsWith('Banglish'));
+  const ideas = [
+    bangla && { keyword: `${bangla} দাম`, script: 'bangla', intent: 'buy' },
+    bangla && { keyword: `${bangla} অনলাইন`, script: 'bangla', intent: 'buy' },
+    bangla && { keyword: `ঢাকায় ${bangla}`, script: 'bangla', intent: 'local' },
+    bangla && { keyword: `সেরা ${bangla}`, script: 'bangla', intent: 'compare' },
+    bangla && { keyword: `${bangla} চেনার উপায়`, script: 'bangla', intent: 'learn' },
+    { keyword: `${latin} price in bangladesh`, script: 'english', intent: 'buy' },
+    { keyword: `buy ${latin} online`, script: 'english', intent: 'buy' },
+    { keyword: `best ${latin}`, script: 'english', intent: 'compare' },
+    { keyword: `${latin} dhaka`, script: 'english', intent: 'local' },
+    { keyword: `how to care for ${latin}`, script: 'english', intent: 'learn' },
+    { keyword: `${latin} dam koto`, script: 'banglish', intent: 'buy' },
+    { keyword: `${latin} kinbo`, script: 'banglish', intent: 'buy' },
+    { keyword: `${latin} er dam`, script: 'banglish', intent: 'buy' },
+    { keyword: `valo ${latin} kothay pabo`, script: 'banglish', intent: 'local' },
+  ];
+  return { ideas: ideas.filter(Boolean).filter((i) => want(i.script)) };
+}
+
+function content(system, prompt) {
+  const n = Number(/Write (\d+) (different|product)/.exec(system)?.[1] ?? 1);
+  const bn = /in Bangla \(in Bengali script\)/.test(system);
+  const name = (tagged(prompt, 'product_name') ?? '').trim();
+  const material = (tagged(prompt, 'material') ?? tagged(prompt, 'text') ?? '').trim();
+  const first = material.split('\n').find((l) => l.trim()) ?? name;
+  if (/^Translate the material/m.test(system))
+    return {
+      variants: [
+        {
+          headline: '',
+          text: `(Stand-in, not a real translation) ${material}`,
+          hashtags: [],
+        },
+      ],
+    };
+  const caption = /post captions/.test(system);
+  const ad = /ad versions/.test(system);
+  const openers = bn
+    ? ['নতুন এসেছে!', 'আজই অর্ডার করুন', 'সবার পছন্দ', 'সীমিত স্টক', 'উপহারের জন্য সেরা']
+    : ['Just in!', 'Order today', 'A customer favourite', 'Back in stock', 'Made for gifting'];
+  return {
+    variants: Array.from({ length: Math.max(1, Math.min(5, n)) }, (_, i) => ({
+      headline: caption ? '' : clip(`${openers[i]} ${name}`.trim(), 40),
+      text: [
+        `${openers[i]} ${first}`,
+        ad || caption
+          ? bn
+            ? 'অর্ডার করতে পেজে মেসেজ দিন অথবা ওয়েবসাইটে অর্ডার করুন।'
+            : 'Message our page or order on the website.'
+          : material,
+      ].join('\n'),
+      hashtags: caption
+        ? [name, 'onlineshopping', 'bangladesh', 'homedelivery']
+            .filter(Boolean)
+            .map((h) => `#${h.replace(/\s+/g, '')}`)
+        : [],
+    })),
+  };
+}
+
+/** A JSON answer in the shape the request asked for. */
+function structured(body) {
+  const system =
+    typeof body.system === 'string'
+      ? body.system
+      : (body.system ?? []).map((b) => b.text ?? '').join('\n');
+  const first = (body.messages ?? []).find((m) => m.role === 'user');
+  const prompt =
+    typeof first?.content === 'string'
+      ? first.content
+      : (first?.content ?? []).map((b) => b.text ?? '').join('\n');
+  const props = Object.keys(body.output_config.format.schema?.properties ?? {});
+  if (props.includes('imageAlts')) return productSeo(system, prompt);
+  if (props.includes('ideas')) return keywordIdeas(system, prompt);
+  if (props.includes('variants')) return content(system, prompt);
+  if (props.includes('seoTitle')) return pageSeo(system, prompt);
+  return {};
+}
+
 function reply(body) {
+  if (body.output_config?.format?.type === 'json_schema')
+    return [{ type: 'text', text: JSON.stringify(structured(body)) }];
   const { heard } = heardWords(lastCustomerTurn(body.messages ?? []).text);
   const content = answer(body);
   if (heard.length && content[0]?.type === 'text')

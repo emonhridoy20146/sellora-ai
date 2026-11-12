@@ -62,6 +62,11 @@ export interface AiTurnRequest {
   tools: AiToolSpec[];
   maxOutputTokens: number;
   effort?: AiEffort;
+  /**
+   * Ask for the answer as JSON matching this schema (structured output) instead of free
+   * text. Same subset as tool schemas; the caller still validates what comes back.
+   */
+  outputSchema?: Record<string, unknown>;
   /** Opaque id of the end user for the provider's abuse monitoring. Never personal data. */
   endUserId?: string;
   signal?: AbortSignal;

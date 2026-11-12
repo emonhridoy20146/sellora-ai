@@ -153,6 +153,8 @@ export const publishRateBody = z
     minimumCreditsPerRequest: decimalRate.default(1),
     /** Credits per minute of voice note turned into text; leave out to keep voice notes audio only. */
     transcriptionCreditsPerMinute: decimalRate.optional(),
+    /** Credits per keyword search-volume lookup; leave out to show keyword ideas without volumes. */
+    keywordLookupCredits: decimalRate.optional(),
     usdRate: z.number().positive().max(100_000).describe('Local currency per 1 USD, e.g. 122.5'),
     effectiveFrom: isoDate.optional(),
     note: z.string().trim().max(500).optional(),

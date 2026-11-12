@@ -28,6 +28,11 @@ export interface CreditRate {
    * into text until a version with a price is published.
    */
   transcriptionCreditsPerMinute?: number;
+  /**
+   * Credits per keyword search-volume lookup (ADR 0032), whatever the number of keywords.
+   * Unset: keyword research shows AI ideas without volumes.
+   */
+  keywordLookupCredits?: number;
   /** Platform-only: local currency per USD, scaled by 10,000 (122.5 = 1,225,000). */
   usdRateScaled: number;
   effectiveFrom: Date;
@@ -55,6 +60,7 @@ export const creditRateSchema = platformSchema<CreditRate>(
     },
     minimumCreditsPerRequest: { type: Number, default: 1, min: 0 },
     transcriptionCreditsPerMinute: { type: Number, min: 0 },
+    keywordLookupCredits: { type: Number, min: 0 },
     usdRateScaled: { type: Number, required: true, min: 1 },
     effectiveFrom: { type: Date, required: true },
     createdBy: { type: String, required: true },

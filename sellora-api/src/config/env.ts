@@ -189,6 +189,16 @@ export const envSchema = z
     CRAWL_USER_AGENT: z.string().max(200).optional(),
     CRAWL_MIN_DELAY_MS: z.coerce.number().int().min(0).max(10_000).default(250),
 
+    /**
+     * Keyword search volumes for the SEO studio (ADR 0032), from DataForSEO's Google Ads data.
+     * Without a login keyword ideas show without volumes.
+     */
+    KEYWORDS_DATAFORSEO_LOGIN: z.string().optional(),
+    KEYWORDS_DATAFORSEO_PASSWORD: z.string().optional(),
+    KEYWORDS_DATAFORSEO_URL: urlWithDefault('https://api.dataforseo.com'),
+    /** Google Ads location the volumes are for (2050: Bangladesh). */
+    KEYWORDS_LOCATION_CODE: z.coerce.number().int().min(1).default(2050),
+
     AI_ANTHROPIC_API_KEY: z.string().optional(),
     /** Only for a gateway or proxy in front of the Anthropic API. Empty: the public API. */
     AI_ANTHROPIC_BASE_URL: z.union([z.url(), z.literal('')]).optional(),
@@ -424,6 +434,12 @@ export const envSchema = z
         path: ['BACKUP_OFFSITE_S3_BUCKET'],
         message:
           'BACKUP_OFFSITE_S3_BUCKET, BACKUP_OFFSITE_S3_ACCESS_KEY_ID and BACKUP_OFFSITE_S3_SECRET_ACCESS_KEY go together',
+      });
+    if (Boolean(env.KEYWORDS_DATAFORSEO_LOGIN) !== Boolean(env.KEYWORDS_DATAFORSEO_PASSWORD))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['KEYWORDS_DATAFORSEO_LOGIN'],
+        message: 'KEYWORDS_DATAFORSEO_LOGIN and KEYWORDS_DATAFORSEO_PASSWORD go together',
       });
     if (Boolean(env.GOOGLE_OAUTH_CLIENT_ID) !== Boolean(env.GOOGLE_OAUTH_CLIENT_SECRET))
       ctx.addIssue({

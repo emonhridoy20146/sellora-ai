@@ -14,6 +14,7 @@ import { DEFAULT_AI_MODELS, DEFAULT_CREDIT_RATE } from './billing-defaults.js';
 import {
   creditsFor,
   creditsForAudio,
+  creditsForKeywordLookup,
   maxChargeFor,
   promptTokens,
   providerAudioCostUsdMicros,
@@ -74,6 +75,7 @@ export interface PublishRateInput {
   tiers: TierRate[];
   minimumCreditsPerRequest: number;
   transcriptionCreditsPerMinute?: number;
+  keywordLookupCredits?: number;
   usdRateScaled: number;
   effectiveFrom?: Date;
   note?: string;
@@ -123,6 +125,7 @@ export function toPublicRateDto(rate: CreditRateDoc) {
     creditPriceMinor: rate.creditPriceMinor,
     minimumCreditsPerRequest: rate.minimumCreditsPerRequest,
     transcriptionCreditsPerMinute: rate.transcriptionCreditsPerMinute ?? null,
+    keywordLookupCredits: rate.keywordLookupCredits ?? null,
     tiers: rate.tiers.map((t) => ({
       tier: t.tier,
       inputCreditsPer1k: t.inputCreditsPer1k,
@@ -234,6 +237,18 @@ export class CreditsService {
             transcriptionCreditsPerMinute: DEFAULT_CREDIT_RATE.transcriptionCreditsPerMinute,
           },
         },
+      )
+      .exec();
+    // Likewise the keyword lookup price (ADR 0032), once.
+    await this.rates
+      .updateOne(
+        {
+          currency: DEFAULT_CREDIT_RATE.currency,
+          version: DEFAULT_CREDIT_RATE.version,
+          createdBy: 'system:seed',
+          keywordLookupCredits: { $exists: false },
+        },
+        { $set: { keywordLookupCredits: DEFAULT_CREDIT_RATE.keywordLookupCredits } },
       )
       .exec();
     this.rateCache.clear();
@@ -451,6 +466,51 @@ export class CreditsService {
     return { credits: charge.credits, amountMinor: charge.billedMinor, currency };
   }
 
+  /** What one keyword search-volume lookup costs; null when the price list has none. */
+  async quoteKeywordLookup() {
+    const currency = (await this.wallet.get()).currency;
+    const rate = await this.currentRate(currency).catch(() => null);
+    if (!rate || rate.keywordLookupCredits === undefined) return null;
+    const charge = creditsForKeywordLookup(rate);
+    return { credits: charge.credits, amountMinor: charge.billedMinor, currency };
+  }
+
+  /**
+   * Holds the price of one keyword search-volume lookup (ADR 0032). Throws
+   * `keywords_not_priced` when the price list in force has none.
+   */
+  async reserveKeywordLookup(input: {
+    requestId: string;
+    feature: string;
+    reference?: ReserveInput['reference'];
+  }): Promise<AiUsageDoc> {
+    return this.hold(input, (rate) => {
+      if (rate.keywordLookupCredits === undefined)
+        throw AppError.unprocessable(
+          'keywords_not_priced',
+          'Keyword search volumes have no credit price yet. Contact support.',
+        );
+      return creditsForKeywordLookup(rate);
+    });
+  }
+
+  /** Charges a keyword lookup at the fixed price; `costUsdMicros` is what the provider billed. */
+  async settleKeywordLookup(input: {
+    requestId: string;
+    provider: string;
+    costUsdMicros: number;
+  }): Promise<AiUsageDoc> {
+    return this.charge(
+      { requestId: input.requestId, provider: input.provider, model: 'search_volume' },
+      (_usage, rate) => ({
+        charge: creditsForKeywordLookup(rate),
+        costUsdMicros: Math.max(0, Math.round(input.costUsdMicros)),
+        fields: {},
+      }),
+      { catalogue: false },
+    );
+  }
+
   async reserve(input: ReserveInput): Promise<AiUsageDoc> {
     return this.hold(input, (rate) =>
       maxChargeFor(rate, input.tier, input.estimatedInputTokens, input.maxOutputTokens),
@@ -546,6 +606,7 @@ export class CreditsService {
       rate: CreditRateDoc,
       model: AiModelDoc | null,
     ) => { charge: CreditCharge; costUsdMicros: number; fields: Partial<AiUsage> },
+    opts: { catalogue?: boolean } = {},
   ): Promise<AiUsageDoc> {
     const result = await this.tx.run(async () => {
       const usage = await this.usage.findOne({ requestId: input.requestId });
@@ -557,8 +618,10 @@ export class CreditsService {
           .findOne({ currency: wallet.currency, version: usage.creditRateVersion })
           .lean<CreditRateDoc>()
           .exec()) ?? (await this.currentRate(wallet.currency));
-      const model = await this.modelByName(input.provider, input.model);
-      if (!model)
+      // Keyword lookups are not AI models: their cost comes from the provider's own answer.
+      const model =
+        opts.catalogue === false ? null : await this.modelByName(input.provider, input.model);
+      if (!model && opts.catalogue !== false)
         this.logger.warn(
           { provider: input.provider, model: input.model },
           'Settling usage for a model missing from the catalogue; cost recorded as 0',

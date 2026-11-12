@@ -203,6 +203,16 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
   winners are handled by the worker's `landing-pages` sweep every minute, so run
   `npm run dev:worker` for them. Coupons need no settings; the storefront sends the
   shopper's A/B id as `x-shopper-ab`.
+- AI SEO studio and content studio (ADR 0032): the writers use the same AI provider as the
+  sales agent. Keyword search volumes need a DataForSEO API login
+  (`KEYWORDS_DATAFORSEO_LOGIN`, `KEYWORDS_DATAFORSEO_PASSWORD`) and a lookup price in Admin ›
+  AI pricing; without them keyword ideas say there is no volume data. Search Console uses the
+  Google OAuth client from merchant backups with a second redirect URI,
+  `<API_PUBLIC_URL>/v1/seo/google/callback`, and the Google Search Console API and Site
+  Verification API turned on; the worker runs the setup steps, daily copies and bulk runs (the
+  `seo` queue). To try it locally, run `node scripts/keyword-stand-in.mjs` (made-up volumes,
+  not DataForSEO) with the three `KEYWORDS_*` lines in its header, and the Google and Claude
+  stand-ins above (not Google, not an AI).
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -210,29 +220,30 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
 
 ## Scripts
 
-| Command                                                       | What it does                                                                                                                                                                                                                      |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `npm run dev` / `npm run dev:worker`                          | API / worker with reload (reads `.env`).                                                                                                                                                                                          |
-| `npm run build` then `npm start` / `npm run start:worker`     | Production build (SWC) and processes.                                                                                                                                                                                             |
-| `npm run typecheck` · `npm run lint` · `npm run format:check` | Static checks.                                                                                                                                                                                                                    |
-| `npm test`                                                    | Unit and end-to-end tests (see below).                                                                                                                                                                                            |
-| `npm run db:indexes`                                          | Builds every MongoDB index (run on deploy; `MONGODB_AUTO_INDEX=false` in production).                                                                                                                                             |
-| `npm run keys:generate`                                       | New JWT key pair and encryption keys.                                                                                                                                                                                             |
-| `npm run platform:bootstrap`                                  | First platform owner (only when there are no platform accounts).                                                                                                                                                                  |
-| `npm run openapi:export`                                      | Writes the OpenAPI document.                                                                                                                                                                                                      |
-| `npm run backup -- verify <file>`                             | Checks a downloaded backup file (`.slbk`) and lists what it holds; `decrypt <file> <out>` writes it as JSON lines; `restore <file> --uri … --db <new>` loads it into an empty database. Needs only `BACKUP_ENCRYPTION_KEYS`.      |
-| `npm run dev:seed`                                            | Demo data: two businesses (one with a 12-product catalog for an online store; its pictures are generated patterns), staff, wallet money, AI usage and a platform owner.                                                           |
-| `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI; cannot see photos, says how many it got).                                                                                                          |
-| `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).                                                                                                                                                      |
-| `node scripts/courier-stand-in.mjs`                           | Stand-in for the Steadfast, Pathao and RedX APIs for local demos without courier accounts (not a courier).                                                                                                                        |
-| `node scripts/dns-stand-in.mjs`                               | DNS server on 127.0.0.1:5300 for trying custom domains with made-up names; records are set over HTTP on :4050 (not a DNS provider or resolver).                                                                                   |
-| `node scripts/sms-stand-in.mjs`                               | Stand-in for the BulkSMSBD and Alpha SMS APIs with an inbox page, for local demos without SMS accounts (not an SMS gateway).                                                                                                      |
-| `node scripts/google-stand-in.mjs`                            | Stand-in for Google's sign-in and Google Drive with a consent page and a Drive page, for trying Drive backups without a Google client (not Google).                                                                               |
-| `node scripts/telegram-stand-in.mjs`                          | Stand-in for the Telegram Bot API with a page of chats you can type in, for trying owner reports, alerts and commands without a bot (not Telegram).                                                                               |
-| `node scripts/shop-stand-in.mjs`                              | Stand-in for Shopify's GraphQL Admin API, WooCommerce's REST API and a published sheet on :4090, with a page to change prices and stock, for trying catalog sync (not Shopify, WooCommerce or Google).                            |
-| `node scripts/site-stand-in.mjs`                              | A demo shop website on :4095 (robots.txt, sitemap, product pages with schema.org data, delivery and returns pages in Bangla and English), with calls to change prices, hide pages and set the verification tag (not a real shop). |
-| `node scripts/speech-stand-in.mjs`                            | Stand-in for an OpenAI-style speech-to-text API on :4100 for trying voice notes without a key; answers a scripted sentence (set the next with `/__say`) and never listens (not speech recognition).                               |
-| `node scripts/payment-stand-in.mjs`                           | Stand-in for the bKash, Nagad, SSLCommerz, aamarPay and shurjoPay merchant APIs on :4110 with a Pay and Cancel page, for trying payments at checkout without merchant accounts (not a payment gateway; no money moves).           |
+| Command                                                       | What it does                                                                                                                                                                                                                          |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev` / `npm run dev:worker`                          | API / worker with reload (reads `.env`).                                                                                                                                                                                              |
+| `npm run build` then `npm start` / `npm run start:worker`     | Production build (SWC) and processes.                                                                                                                                                                                                 |
+| `npm run typecheck` · `npm run lint` · `npm run format:check` | Static checks.                                                                                                                                                                                                                        |
+| `npm test`                                                    | Unit and end-to-end tests (see below).                                                                                                                                                                                                |
+| `npm run db:indexes`                                          | Builds every MongoDB index (run on deploy; `MONGODB_AUTO_INDEX=false` in production).                                                                                                                                                 |
+| `npm run keys:generate`                                       | New JWT key pair and encryption keys.                                                                                                                                                                                                 |
+| `npm run platform:bootstrap`                                  | First platform owner (only when there are no platform accounts).                                                                                                                                                                      |
+| `npm run openapi:export`                                      | Writes the OpenAPI document.                                                                                                                                                                                                          |
+| `npm run backup -- verify <file>`                             | Checks a downloaded backup file (`.slbk`) and lists what it holds; `decrypt <file> <out>` writes it as JSON lines; `restore <file> --uri … --db <new>` loads it into an empty database. Needs only `BACKUP_ENCRYPTION_KEYS`.          |
+| `npm run dev:seed`                                            | Demo data: two businesses (one with a 12-product catalog for an online store; its pictures are generated patterns), staff, wallet money, AI usage and a platform owner.                                                               |
+| `node scripts/claude-stand-in.mjs`                            | Scripted stand-in for the Claude API for local demos without a key (not an AI; cannot see photos, says how many it got).                                                                                                              |
+| `node scripts/graph-stand-in.mjs`                             | Stand-in for Meta's Graph API for local demos without a Meta app (not Meta).                                                                                                                                                          |
+| `node scripts/courier-stand-in.mjs`                           | Stand-in for the Steadfast, Pathao and RedX APIs for local demos without courier accounts (not a courier).                                                                                                                            |
+| `node scripts/dns-stand-in.mjs`                               | DNS server on 127.0.0.1:5300 for trying custom domains with made-up names; records are set over HTTP on :4050 (not a DNS provider or resolver).                                                                                       |
+| `node scripts/sms-stand-in.mjs`                               | Stand-in for the BulkSMSBD and Alpha SMS APIs with an inbox page, for local demos without SMS accounts (not an SMS gateway).                                                                                                          |
+| `node scripts/google-stand-in.mjs`                            | Stand-in for Google's sign-in, Google Drive, Site Verification and Search Console with a consent page and pages to look at, for trying Drive backups and Search Console without a Google client (made-up search numbers; not Google). |
+| `node scripts/telegram-stand-in.mjs`                          | Stand-in for the Telegram Bot API with a page of chats you can type in, for trying owner reports, alerts and commands without a bot (not Telegram).                                                                                   |
+| `node scripts/shop-stand-in.mjs`                              | Stand-in for Shopify's GraphQL Admin API, WooCommerce's REST API and a published sheet on :4090, with a page to change prices and stock, for trying catalog sync (not Shopify, WooCommerce or Google).                                |
+| `node scripts/site-stand-in.mjs`                              | A demo shop website on :4095 (robots.txt, sitemap, product pages with schema.org data, delivery and returns pages in Bangla and English), with calls to change prices, hide pages and set the verification tag (not a real shop).     |
+| `node scripts/speech-stand-in.mjs`                            | Stand-in for an OpenAI-style speech-to-text API on :4100 for trying voice notes without a key; answers a scripted sentence (set the next with `/__say`) and never listens (not speech recognition).                                   |
+| `node scripts/payment-stand-in.mjs`                           | Stand-in for the bKash, Nagad, SSLCommerz, aamarPay and shurjoPay merchant APIs on :4110 with a Pay and Cancel page, for trying payments at checkout without merchant accounts (not a payment gateway; no money moves).               |
+| `node scripts/keyword-stand-in.mjs`                           | Stand-in for DataForSEO's Google Ads search volume endpoint on :4130 with made-up volumes from a hash of the keyword, for trying keyword research without an account (not DataForSEO; the numbers mean nothing).                      |
 
 ## Tests
 
@@ -303,6 +314,9 @@ src/
     ad-tracking/             the business's own pixels and tags: tracking ids, browser tags
                              for the storefront, server events to Meta, TikTok and GA4,
                              consent, test events and the log (ADR 0030)
+    seo/                     AI SEO studio and content studio: the score, AI writer tasks,
+                             keyword research and volumes (DataForSEO, cached 30 days),
+                             keyword lists, audit and bulk runs, Search Console (ADR 0032)
     health/                  liveness and readiness
 test/
   e2e/                       HTTP tests per area, including tenancy.e2e.ts

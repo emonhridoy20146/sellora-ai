@@ -44,6 +44,31 @@ export class FakeGoogle {
   readonly calls: { method: string; url: string }[] = [];
   /** The next upload fails with this Drive answer. */
   failNextUpload: { status: number; reason: string; message: string } | null = null;
+  /** Search Console: sites each account can see, by email, with the permission level. */
+  readonly sites = new Map<string, Map<string, string>>();
+  /** Site Verification tokens handed out, by site. */
+  readonly verifyTokens = new Map<string, string>();
+  /** Sitemaps submitted, as `site sitemap`. */
+  readonly sitemaps: string[] = [];
+  /**
+   * How Google "reads" a site's home page when asked to verify: true when the meta tag with
+   * `token` is there. Tests point it at the store's data.
+   */
+  verifier: (siteUrl: string, token: string) => Promise<boolean> = () => Promise.resolve(false);
+  /** Search performance the fake answers with, per site. */
+  readonly search = new Map<
+    string,
+    {
+      daily: { date: string; clicks: number; impressions: number; position: number }[];
+      rows: {
+        query: string;
+        page: string;
+        clicks: number;
+        impressions: number;
+        position: number;
+      }[];
+    }
+  >();
   private seq = 0;
   private uploads = new Map<string, { name: string; parents: string[]; mimeType: string }>();
 
@@ -101,19 +126,23 @@ export class FakeGoogle {
         return json(401, { error: 'invalid_client' });
       if (f.get('grant_type') === 'authorization_code') {
         const issued = this.codes.get(f.get('code') ?? '');
-        if (!issued || !f.get('redirect_uri')?.endsWith('/v1/backups/google/callback'))
+        if (!issued || !/\/v1\/(backups|seo)\/google\/callback$/.test(f.get('redirect_uri') ?? ''))
           return json(400, { error: 'invalid_grant' });
         this.codes.delete(f.get('code')!);
         const rt = `rt-${++this.seq}`;
         const at = `at-${++this.seq}`;
         this.refresh.set(rt, { email: issued.email, revoked: false });
         this.access.set(at, rt);
+        const idToken = issued.scope.split(' ').includes('email')
+          ? `e30.${Buffer.from(JSON.stringify({ email: issued.email, email_verified: true })).toString('base64url')}.c2ln`
+          : undefined;
         return json(200, {
           access_token: at,
           refresh_token: rt,
           scope: issued.scope,
           expires_in: 3599,
           token_type: 'Bearer',
+          ...(idToken ? { id_token: idToken } : {}),
         });
       }
       if (f.get('grant_type') === 'refresh_token') {
@@ -179,6 +208,105 @@ export class FakeGoogle {
         error: { code: 401, message: 'Invalid Credentials', errors: [{ reason: 'authError' }] },
       });
     const path = url.pathname.replace(/^\/api/, '');
+
+    const email = this.refresh.get(rt)!.email;
+    const mine = () => {
+      let m = this.sites.get(email);
+      if (!m) this.sites.set(email, (m = new Map()));
+      return m;
+    };
+    if (path === '/webmasters/v3/sites' && method === 'GET')
+      return json(200, {
+        siteEntry: [...mine().entries()].map(([siteUrl, permissionLevel]) => ({
+          siteUrl,
+          permissionLevel,
+        })),
+      });
+    if (path === '/siteVerification/v1/token' && method === 'POST') {
+      const body = JSON.parse(bodyText()) as {
+        site: { identifier: string };
+        verificationMethod: string;
+      };
+      if (body.verificationMethod !== 'META')
+        return json(400, { error: { code: 400, message: 'Unsupported method' } });
+      const token =
+        this.verifyTokens.get(body.site.identifier) ?? `gsv-${++this.seq}-${'x'.repeat(20)}`;
+      this.verifyTokens.set(body.site.identifier, token);
+      return json(200, {
+        method: 'META',
+        token: `<meta name="google-site-verification" content="${token}" />`,
+      });
+    }
+    if (path === '/siteVerification/v1/webResource' && method === 'POST') {
+      const body = JSON.parse(bodyText()) as { site: { identifier: string } };
+      const site = body.site.identifier;
+      const token = this.verifyTokens.get(site);
+      if (!token || !(await this.verifier(site, token)))
+        return json(400, {
+          error: {
+            code: 400,
+            message: 'The necessary verification token could not be found on your site.',
+          },
+        });
+      mine().set(site, 'siteOwner');
+      return json(200, { id: encodeURIComponent(site), site: body.site, owners: [email] });
+    }
+    const sc = /^\/webmasters\/v3\/sites\/([^/]+)(\/.*)?$/.exec(path);
+    if (sc) {
+      const site = decodeURIComponent(sc[1]!);
+      const rest = sc[2] ?? '';
+      const level = mine().get(site);
+      if (!rest && method === 'PUT') {
+        if (!level) mine().set(site, 'siteUnverifiedUser');
+        return new Response(null, { status: 204 });
+      }
+      if (!level || level === 'siteUnverifiedUser')
+        return json(403, {
+          error: {
+            code: 403,
+            message: `User does not have sufficient permission for site '${site}'.`,
+            errors: [{ reason: 'forbidden' }],
+          },
+        });
+      const sm = /^\/sitemaps\/(.+)$/.exec(rest);
+      if (sm && method === 'PUT') {
+        this.sitemaps.push(`${site} ${decodeURIComponent(sm[1]!)}`);
+        return new Response(null, { status: 204 });
+      }
+      if (rest === '/searchAnalytics/query' && method === 'POST') {
+        const q = JSON.parse(bodyText()) as {
+          startDate: string;
+          endDate: string;
+          dimensions: string[];
+        };
+        const data = this.search.get(site) ?? { daily: [], rows: [] };
+        const ctr = (c: number, i: number) => (i ? c / i : 0);
+        if (q.dimensions.join() === 'date')
+          return json(200, {
+            rows: data.daily
+              .filter((d) => d.date >= q.startDate && d.date <= q.endDate)
+              .map((d) => ({
+                keys: [d.date],
+                clicks: d.clicks,
+                impressions: d.impressions,
+                ctr: ctr(d.clicks, d.impressions),
+                position: d.position,
+              })),
+            responseAggregationType: 'byProperty',
+          });
+        if (q.dimensions.join() === 'query,page')
+          return json(200, {
+            rows: data.rows.map((r) => ({
+              keys: [r.query, r.page],
+              clicks: r.clicks,
+              impressions: r.impressions,
+              ctr: ctr(r.clicks, r.impressions),
+              position: r.position,
+            })),
+          });
+        return json(400, { error: { code: 400, message: 'Unsupported dimensions' } });
+      }
+    }
 
     if (path === '/drive/v3/about')
       return json(200, { user: { emailAddress: this.refresh.get(rt)!.email } });

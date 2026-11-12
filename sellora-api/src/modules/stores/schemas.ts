@@ -93,7 +93,11 @@ export interface Store {
   theme: ThemeSettings;
   contact: { phone?: string; whatsapp?: string; email?: string; address?: string };
   social: { facebook?: string; instagram?: string; youtube?: string; tiktok?: string };
-  seo: { title?: string; description?: string };
+  /**
+   * `googleVerification`: the Search Console verification code Sellora puts in the home
+   * page's meta tag when the business connects Search Console (ADR 0032).
+   */
+  seo: { title?: string; description?: string; googleVerification?: string };
   /** Policy and information pages, plain text with blank lines between paragraphs. */
   pages: Partial<Record<StorePageKey, string>>;
   checkout: {
@@ -143,7 +147,10 @@ export const storeSchema = tenantSchema<Store>({
     default: () => ({}),
   },
   seo: {
-    type: new Schema({ title: String, description: String }, { _id: false, strict: 'throw' }),
+    type: new Schema(
+      { title: String, description: String, googleVerification: String },
+      { _id: false, strict: 'throw' },
+    ),
     default: () => ({}),
   },
   pages: {
