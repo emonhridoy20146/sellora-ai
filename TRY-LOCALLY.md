@@ -149,6 +149,33 @@ With your real ids and keys instead, leave those lines out, and send a test even
 Settings: it shows in Meta's and TikTok's **Events Manager › Test events**, or Google
 Analytics' **DebugView**.
 
+### Try the landing page extras
+
+Do this after the store is open (above). In the super-admin panel, **Settings › Publish landing
+pages without a person reviewing them** saves approving each version by hand; otherwise
+approve each one under **Landing pages**.
+
+1. Sign in as `shop@demo.sellora.test`. In **Landing pages › New page**, pick a product and a
+   template, for example **Fashion › Eid and festive wear** or a Bangla one. Change the words
+   the editor lists as still to change. **Add section** shows all 41 blocks in groups.
+2. Open **Coupons** in the menu and create a code, for example 10% off with a ৳300 cap, for the
+   store and all landing pages. Add a **Coupon code** block on the page with that code.
+3. **Publish changes › Now**. Open the page on your phone or in a narrow window: **Use this
+   code** puts the code in the order form, **Choose** on a package card picks the package, and
+   the total shows the discount. Order, then see the code on the order and the use counted in
+   **Coupons**. The same code works at the store checkout ("Have a coupon code?").
+4. Change the headline, then **Publish changes › At a time** a few minutes ahead. The page
+   shows **Goes live on …** with **Publish now**, **Change time** and **Cancel**; at the time,
+   the new headline is live within about a minute.
+5. Change the headline again, then **Publish changes › As an A/B test**. Open the page in a few
+   private windows: each window keeps seeing one version. **A/B tests** counts visitors, buyers
+   and orders for each and says when one sells clearly better; **Make B live** or **Keep A**
+   ends it by hand.
+6. In the page's **Settings**, set **Offer ends at** a few minutes ahead: at that time the page
+   pauses itself. **Resume** brings it back.
+7. In the page's **⋯** menu, **Save as template**, then find it under **My templates** when you
+   make a new page.
+
 ### Turn on the AI sales agent
 
 Create a file named `.env` next to `compose.yaml` (never commit it) with your key:
@@ -183,6 +210,7 @@ Anthropic tokens.
   `http://localhost:3000/v1/backups/google/callback`.
 - Online stores and landing pages, with cash on delivery or online payment (with the payment
   stand-in or a gateway's sandbox keys). Businesses' own domains need the deployed version.
+- Coupons, scheduled publishing, offer ends and A/B tests on landing pages.
 - Ad tracking with the tracking stand-in, or with your own Meta, TikTok and Google ids and
   keys (server events go out from your computer to the real platforms).
 
