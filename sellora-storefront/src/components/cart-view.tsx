@@ -10,11 +10,24 @@ import type { Quote } from '@/lib/types';
 import { useShop } from './shop-context';
 
 /** Prices the cart on the server whenever it or the delivery area changes. */
-export function useQuote(items: CartItem[], zoneId: string | null | undefined) {
+export function useQuote(
+  items: CartItem[],
+  zoneId: string | null | undefined,
+  /** A coupon code to price the cart with (ADR 0031), and the phone typed so far. */
+  coupon?: { code: string; phone?: string | undefined } | null,
+) {
   const { t } = useShop();
+  const code = coupon?.code ?? null;
+  const phone = coupon?.phone ?? null;
   const key = useMemo(
-    () => JSON.stringify([items.map((i) => [i.productId, i.variantId, i.quantity]), zoneId]),
-    [items, zoneId],
+    () =>
+      JSON.stringify([
+        items.map((i) => [i.productId, i.variantId, i.quantity]),
+        zoneId,
+        code,
+        code ? phone : null,
+      ]),
+    [items, zoneId, code, phone],
   );
   // The answer for the cart as it was when asked; a newer cart means a new answer is coming.
   const [result, setResult] = useState<{ key: string; quote: Quote | null; error: string | null }>({
@@ -24,9 +37,11 @@ export function useQuote(items: CartItem[], zoneId: string | null | undefined) {
   });
 
   useEffect(() => {
-    const [lines, zone] = JSON.parse(key) as [
+    const [lines, zone, couponCode, couponPhone] = JSON.parse(key) as [
       [string, string, number][],
       string | null | undefined,
+      string | null,
+      string | null,
     ];
     if (!lines.length) return;
     const ctrl = new AbortController();
@@ -40,6 +55,8 @@ export function useQuote(items: CartItem[], zoneId: string | null | undefined) {
           quantity,
         })),
         ...(zone !== undefined ? { zoneId: zone } : {}),
+        ...(couponCode ? { couponCode } : {}),
+        ...(couponCode && couponPhone ? { phone: couponPhone } : {}),
       }),
       signal: ctrl.signal,
     })

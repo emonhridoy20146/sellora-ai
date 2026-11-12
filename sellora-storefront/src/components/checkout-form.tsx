@@ -6,6 +6,7 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } fro
 import { useCart } from '@/lib/cart';
 import { cartToken, setCartToken, storeCartTokenKey, useCartCapture } from '@/lib/cart-capture';
 import { cn } from '@/lib/cn';
+import { checkRefusal, couponProblemText, normalizeCode } from '@/lib/coupon';
 import { formatMoney } from '@/lib/money';
 import { firstPick, paymentBody, payingNow, validPick, type PaymentPick } from '@/lib/payments';
 import { asciiDigits, isBdMobile } from '@/lib/phone';
@@ -23,6 +24,7 @@ import {
 } from '@/lib/shopper';
 import { useAdTags } from './ad-tags';
 import { useQuote } from './cart-view';
+import { CouponBox, type CouponBoxState } from './coupon-box';
 import { PaymentChoice } from './payment-choice';
 import { useShop } from './shop-context';
 
@@ -100,7 +102,39 @@ export function CheckoutForm() {
   }, [ads, cart.items]);
   const [placing, setPlacing] = useState(false);
   const [redirecting, setRedirecting] = useState(false);
-  const { quote, error: quoteError } = useQuote(cart.items, chosenZone);
+  // The code the shopper applied; the cart is priced with it (the API says if it works).
+  const [couponCode, setCouponCode] = useState<string | null>(null);
+  const couponPhone = isBdMobile(details.phone)
+    ? asciiDigits(details.phone).replace(/[\s-]/g, '')
+    : undefined;
+  const {
+    quote,
+    error: quoteError,
+    loading: quoting,
+  } = useQuote(
+    cart.items,
+    chosenZone,
+    couponCode ? { code: couponCode, phone: couponPhone } : null,
+  );
+  const couponCheck =
+    couponCode && quote?.coupon && quote.coupon.code === normalizeCode(couponCode)
+      ? quote.coupon
+      : null;
+  const couponState: CouponBoxState = !couponCode
+    ? { status: 'idle' }
+    : quoting
+      ? { status: 'checking', code: couponCode }
+      : couponCheck?.valid
+        ? { status: 'applied', code: couponCheck.code }
+        : couponCheck
+          ? {
+              status: 'refused',
+              code: couponCode,
+              message: checkRefusal(couponCheck, t, (m) =>
+                formatMoney(m, quote?.currency ?? currency, language),
+              ),
+            }
+          : { status: 'refused', code: couponCode, message: quoteError ?? t.tryAgain };
   // Until the shopper picks an area, the shop's default area applies.
   const zoneId = chosenZone !== undefined ? chosenZone : (quote?.zoneId ?? null);
   const setZoneId = (id: string) => setChosenZone(id);
@@ -187,6 +221,7 @@ export function CheckoutForm() {
       ...(paymentBody(pick, quote?.payments)
         ? { payment: paymentBody(pick, quote?.payments) }
         : {}),
+      ...(couponCheck?.valid ? { couponCode: couponCheck.code } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
       ...(website ? { website } : {}),
       // Where the shopper came from (the ad or site), kept on the order.
@@ -226,7 +261,13 @@ export function CheckoutForm() {
       }
       const fields = fieldErrors(r.problem);
       setErrors(fields);
-      setFormError(r.problem.code === 'cart_changed' ? t.fixCart : r.problem.detail);
+      setFormError(
+        r.problem.code === 'cart_changed'
+          ? t.fixCart
+          : r.problem.code === 'coupon_invalid'
+            ? couponProblemText(r.problem, t, money)
+            : r.problem.detail,
+      );
     } catch {
       setFormError(t.tryAgain);
     }
@@ -428,11 +469,28 @@ export function CheckoutForm() {
             );
           })}
         </ul>
+        {state === 'open' && (quote?.couponBox || couponCode) ? (
+          <div className="border-t border-line pt-4">
+            <CouponBox
+              id={`${formId}-couponCode`}
+              t={t}
+              state={couponState}
+              onApply={(code) => setCouponCode(code)}
+              onRemove={() => setCouponCode(null)}
+            />
+          </div>
+        ) : null}
         <dl className="space-y-2 border-t border-line pt-4 text-sm">
           <div className="flex justify-between">
             <dt className="text-muted">{t.subtotal}</dt>
             <dd>{quote ? money(quote.subtotalMinor) : '…'}</dd>
           </div>
+          {couponCheck?.valid && (quote?.discountMinor ?? 0) > 0 ? (
+            <div className="flex justify-between text-primary">
+              <dt>{t.couponLine(couponCheck.code)}</dt>
+              <dd>−{money(quote!.discountMinor!)}</dd>
+            </div>
+          ) : null}
           <div className="flex justify-between">
             <dt className="text-muted">{t.delivery}</dt>
             <dd>
@@ -440,6 +498,8 @@ export function CheckoutForm() {
                 '…'
               ) : quote.zones.length && !zoneId ? (
                 <span className="text-muted">{t.chooseArea}</span>
+              ) : couponCheck?.valid && couponCheck.freeDelivery ? (
+                <span className="text-primary">{t.free}</span>
               ) : (
                 money(quote.deliveryChargeMinor)
               )}

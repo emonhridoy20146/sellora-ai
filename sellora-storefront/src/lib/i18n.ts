@@ -1,4 +1,4 @@
-import type { Language, LineProblem, PageKey } from './types';
+import type { CouponReason, Language, LineProblem, PageKey } from './types';
 
 /** Every word the storefront shows, in English and Bangla. The shop's language picks one. */
 const en = {
@@ -212,6 +212,32 @@ const en = {
   payNowAdvance: 'The shop asks this advance before it sends a cash on delivery order.',
   payAmountWith: (amount: string, gateway: string) => `Pay ${amount} with ${gateway}`,
   methodOnline: 'Online payment',
+  // Coupons and the new landing page sections (ADR 0031)
+  haveCoupon: 'Have a coupon code?',
+  couponCode: 'Coupon code',
+  apply: 'Apply',
+  couponChecking: 'Checking…',
+  couponApplied: (code: string) => `${code} applied`,
+  couponLine: (code: string) => `Coupon ${code}`,
+  couponFreeDelivery: 'Free delivery with the coupon',
+  couponReason: {
+    invalid: 'This code is not valid.',
+    not_started: 'This code cannot be used yet.',
+    ended: 'This code has ended.',
+    used_up: 'This code has been used up.',
+    not_here: 'This code cannot be used here.',
+    min_order: 'Spend a little more to use this code.',
+    customer_limit: 'You have already used this code.',
+    no_saving: 'This code does not lower this order.',
+  } satisfies Record<CouponReason, string>,
+  couponMinOrder: (amount: string) => `This code works on orders of ${amount} or more.`,
+  couponTooMany: 'Too many codes tried. Wait a few minutes and try again.',
+  useCode: 'Use this code',
+  choose: 'Choose',
+  openMap: 'Open in Google Maps',
+  payWhenArrives: 'Pay in cash when the parcel reaches you.',
+  advanceFirst: 'A small advance is paid online first; the rest on delivery.',
+  payOnlineWith: (names: string) => `Pay online with ${names}.`,
 };
 
 type Dictionary = typeof en;
@@ -424,6 +450,31 @@ const bn: Dictionary = {
   payNowAdvance: 'ক্যাশ অন ডেলিভারি অর্ডার পাঠানোর আগে দোকান এই অগ্রিম চায়।',
   payAmountWith: (amount, gateway) => `${gateway} দিয়ে ${amount} দিন`,
   methodOnline: 'অনলাইন পেমেন্ট',
+  haveCoupon: 'কুপন কোড আছে?',
+  couponCode: 'কুপন কোড',
+  apply: 'প্রয়োগ করুন',
+  couponChecking: 'দেখা হচ্ছে…',
+  couponApplied: (code) => `${code} প্রয়োগ হয়েছে`,
+  couponLine: (code) => `কুপন ${code}`,
+  couponFreeDelivery: 'কুপনে ফ্রি ডেলিভারি',
+  couponReason: {
+    invalid: 'এই কোডটি সঠিক নয়।',
+    not_started: 'এই কোডটি এখনো ব্যবহার করা যাবে না।',
+    ended: 'এই কোডের মেয়াদ শেষ।',
+    used_up: 'এই কোডটি আর ব্যবহার করা যাবে না।',
+    not_here: 'এই কোডটি এখানে চলবে না।',
+    min_order: 'এই কোড ব্যবহার করতে আরেকটু বেশি কিনুন।',
+    customer_limit: 'আপনি এই কোডটি আগেই ব্যবহার করেছেন।',
+    no_saving: 'এই কোডে এই অর্ডারের দাম কমে না।',
+  },
+  couponMinOrder: (amount) => `${amount} বা তার বেশি অর্ডারে এই কোড চলবে।`,
+  couponTooMany: 'অনেকগুলো কোড চেষ্টা করা হয়েছে। কয়েক মিনিট পরে আবার চেষ্টা করুন।',
+  useCode: 'কোডটি ব্যবহার করুন',
+  choose: 'বেছে নিন',
+  openMap: 'গুগল ম্যাপে দেখুন',
+  payWhenArrives: 'পণ্য হাতে পেয়ে নগদ টাকা দিন।',
+  advanceFirst: 'আগে অনলাইনে অল্প অগ্রিম, বাকিটা ডেলিভারিতে।',
+  payOnlineWith: (names) => `${names} দিয়ে অনলাইনে পেমেন্ট করুন।`,
 };
 
 export type { Dictionary };

@@ -1,6 +1,7 @@
 import 'server-only';
 import { headers } from 'next/headers';
 import { cache } from 'react';
+import { AB_HEADER, validAbId } from './ab';
 import { ApiError, apiGet, contextFrom } from './api';
 import { isLandingSlug } from './landing-offer';
 import { LANDING_PREVIEW_HEADER } from './request';
@@ -19,7 +20,7 @@ export const getLanding = cache(async (slug: string): Promise<Landing | null> =>
   try {
     return await apiGet<Landing>(
       `/landing-pages/${encodeURIComponent(slug)}`,
-      contextFrom(h, preview || undefined),
+      contextFrom(h, preview || undefined, validAbId(h.get(AB_HEADER))),
     );
   } catch (err) {
     if (err instanceof ApiError && (err.problem.status === 404 || err.problem.status === 422))
