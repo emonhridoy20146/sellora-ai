@@ -19,6 +19,10 @@
 # Ad tracking without ad accounts: the tracking stand-in (NOT Meta, TikTok or Google; nothing
 # reaches an ad account). Put the three TRACKING_*_BASE_URL lines from TRY-LOCALLY.md in .env,
 #   docker compose --profile ads-demo up -d
+#
+# Keyword search volumes without a DataForSEO account: the keyword stand-in (NOT DataForSEO;
+# made-up numbers). Put the three KEYWORDS_DATAFORSEO_* lines from TRY-LOCALLY.md in .env,
+#   docker compose --profile seo-demo up -d
 
 name: sellora
 
@@ -57,6 +61,11 @@ x-api-env: &api-env
     TRACKING_META_BASE_URL: ${TRACKING_META_BASE_URL:-}
     TRACKING_TIKTOK_BASE_URL: ${TRACKING_TIKTOK_BASE_URL:-}
     TRACKING_GA4_BASE_URL: ${TRACKING_GA4_BASE_URL:-}
+    # Keyword search volumes for the SEO studio. Empty: keyword ideas without numbers; see the
+    # keyword-stand-in service below.
+    KEYWORDS_DATAFORSEO_LOGIN: ${KEYWORDS_DATAFORSEO_LOGIN:-}
+    KEYWORDS_DATAFORSEO_PASSWORD: ${KEYWORDS_DATAFORSEO_PASSWORD:-}
+    KEYWORDS_DATAFORSEO_URL: ${KEYWORDS_DATAFORSEO_URL:-}
 
 services:
   mongo:
@@ -181,6 +190,23 @@ services:
       PORT: "4120"
     ports:
       - "4120:4120"
+    restart: unless-stopped
+
+  # A stand-in for DataForSEO's keyword search volume API (sellora-api/scripts/keyword-stand-in.mjs).
+  # It is NOT DataForSEO: every number is made up from the keyword. Only with
+  # --profile seo-demo.
+  keyword-stand-in:
+    build:
+      context: ./sellora-api
+      target: build
+    image: sellora-local/api-tools
+    profiles: ["seo-demo"]
+    command: ["node", "scripts/keyword-stand-in.mjs"]
+    environment:
+      HOST: 0.0.0.0
+      PORT: "4130"
+    ports:
+      - "4130:4130"
     restart: unless-stopped
 
   # docker compose run --rm keys > local-secrets.env

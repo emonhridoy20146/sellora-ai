@@ -176,6 +176,41 @@ approve each one under **Landing pages**.
 7. In the page's **⋯** menu, **Save as template**, then find it under **My templates** when you
    make a new page.
 
+### Try the SEO studio
+
+The SEO studio writes search titles, descriptions, keywords and questions with AI, finds
+keywords with how often people search them, and shows Google Search Console numbers. It is in
+the Growth and All-in-one plans.
+
+1. The AI writing needs the Anthropic key from **Turn on the AI sales agent** below; each
+   suggestion is charged in the business's AI credits and costs you real tokens.
+2. For keyword numbers without a DataForSEO account, add these lines to `.env` and run
+   `docker compose --profile seo-demo up -d`. The keyword stand-in is **not** DataForSEO:
+   every number is made up, and about a quarter of keywords get "No data" on purpose.
+
+   ```
+   KEYWORDS_DATAFORSEO_LOGIN=stand-in@example.test
+   KEYWORDS_DATAFORSEO_PASSWORD=stand-in-keyword-password
+   KEYWORDS_DATAFORSEO_URL=http://keyword-stand-in:4130
+   ```
+
+3. In the super-admin panel, **AI pricing**, set **Credits per keyword lookup** (for example
+   150). Without a price, keyword ideas come without numbers.
+4. Sign in as `shop@demo.sellora.test` and open **SEO studio › Keywords**. Research a Bangla
+   phrase such as `জামদানি শাড়ি` with **Monthly searches** on, choose a few ideas and add them
+   to a new list. The list shows which keywords no product targets yet.
+5. Open a product (or **Products › New**). In **Search engines (SEO)**, type a focus keyword,
+   press **Write with AI**, then **Use all**. The score, the Google preview, photo alt text and
+   questions fill in. Save, then open the product on the store and look at the page source:
+   the title, `rel="canonical"` and the `application/ld+json` blocks. `/sitemap.xml` on the
+   store lists the product. Change the product's address, save, and the old address sends you
+   to the new one.
+6. **SEO studio › Overview** shows every product's score; choose a few and press **Write for
+   … chosen**, then save the suggestions you like. **Content studio** writes Facebook ads,
+   captions, descriptions and translations.
+
+Search Console needs the deployed version: Google must reach the store at a public address.
+
 ### Turn on the AI sales agent
 
 Create a file named `.env` next to `compose.yaml` (never commit it) with your key:
@@ -213,6 +248,8 @@ Anthropic tokens.
 - Coupons, scheduled publishing, offer ends and A/B tests on landing pages.
 - Ad tracking with the tracking stand-in, or with your own Meta, TikTok and Google ids and
   keys (server events go out from your computer to the real platforms).
+- The SEO studio's AI writing, keyword research (with the keyword stand-in or a DataForSEO
+  login), the bulk optimiser and the content studio.
 
 **Needs the deployed version:**
 
@@ -220,6 +257,8 @@ Anthropic tokens.
   reach Sellora's webhook at a public `https://` address.
 - Telegram commands. Sending reports works locally, but commands need Telegram to reach the
   webhook.
+- Google Search Console in the SEO studio. Google must reach the store to check the meta tag
+  and read the sitemap.
 
 ## Stop, update, start over
 

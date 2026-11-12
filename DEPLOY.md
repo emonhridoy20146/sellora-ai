@@ -169,7 +169,7 @@ Notes on this block:
 ### 4c. The `worker` service
 
 The worker runs the background jobs: sending messages to Meta, AI replies, voice notes,
-couriers, SMS, backups and reports. It uses the same image as the API with another command.
+couriers, SMS, backups, reports and the SEO studio's runs. It uses the same image as the API with another command.
 
 1. **+ New › GitHub Repo › sellora-ai**.
 2. In **Settings**, set these:
@@ -328,6 +328,55 @@ in Meta's or TikTok's **Events Manager › Test events** or Google Analytics' **
 place one test order and look for the purchase. Sellora's tracking was written from the
 platforms' public documents and tested only against a stand-in, so this first test is the real
 one. If a business sells to shoppers in Europe or the UK, choose **Ask first**.
+
+## 6d. SEO studio: keyword numbers and Google Search Console
+
+The SEO studio's AI writing needs only the Anthropic key. Two parts need more, and both are
+optional: without them the studio still works and says what is missing.
+
+**Keyword search volumes (DataForSEO).** Sign up at [dataforseo.com](https://dataforseo.com),
+add funds, and copy the API login and password from its dashboard (not your account
+password). Add to the **api** and **worker** variables:
+
+```
+KEYWORDS_DATAFORSEO_LOGIN=<API login>
+KEYWORDS_DATAFORSEO_PASSWORD=<API password>
+```
+
+DataForSEO bills you per request; check its pricing page for the current price of Google Ads
+search volume. In the super-admin panel, **AI pricing › Credits per keyword lookup** sets what
+a business pays for one lookup (up to 100 keywords); set it above your cost. Numbers are kept
+for 30 days and shared between businesses, so a phrase is bought once a month at most. Leave
+`KEYWORDS_DATAFORSEO_URL` unset: its default is DataForSEO's real address.
+
+**Google Search Console.** In [Google Cloud console](https://console.cloud.google.com), in one
+project:
+
+1. **APIs & Services › Library**: turn on the **Google Search Console API** and the **Site
+   Verification API**.
+2. **OAuth consent screen**: an External app with your app name, support email and the
+   `https://<web domain>` domain. Add the scopes `.../auth/webmasters` and
+   `.../auth/siteverification`. While the app is in Testing, add the Google accounts of the
+   test businesses as test users (Google may ask for verification before you publish it).
+3. **Credentials › Create credentials › OAuth client ID**, type **Web application**, with the
+   redirect URI `https://<web domain>/v1/seo/google/callback` (add
+   `https://<web domain>/v1/backups/google/callback` too if you use Google Drive backups).
+4. Add to the **api** and **worker** variables:
+
+   ```
+   GOOGLE_OAUTH_CLIENT_ID=<client id>
+   GOOGLE_OAUTH_CLIENT_SECRET=<client secret>
+   ```
+
+A business then opens **SEO studio › Search Console**, picks its store and presses **Connect
+with Google**. Sellora puts Google's meta tag on the store's home page, verifies it, adds the
+site and sends the sitemap; the first numbers show within a few minutes, and Google's own data
+is two to three days behind. The store must be open at its public address (step 4e).
+
+Sellora's DataForSEO and Search Console code was written from their published API documents
+and tested only against stand-ins, so the first connection and the first lookup are the real
+test. Never set the `GOOGLE_OAUTH_*_URL`, `GOOGLE_API_URL` or `KEYWORDS_DATAFORSEO_URL` lines
+here; the stand-ins are for your computer only.
 
 ## 7. Meta: Messenger, Instagram and WhatsApp
 

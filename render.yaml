@@ -88,6 +88,15 @@ services:
       # Optional (voice notes to text). Leave empty to keep voice notes audio only.
       - key: AI_OPENAI_API_KEY
         sync: false
+      # Optional (SEO studio, DEPLOY.md step 6d): keyword volumes and Google Search Console.
+      - key: KEYWORDS_DATAFORSEO_LOGIN
+        sync: false
+      - key: KEYWORDS_DATAFORSEO_PASSWORD
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
       # First deploy only: your email. Then remove it (see DEPLOY.md).
       - key: PLATFORM_BOOTSTRAP_EMAIL
         sync: false
@@ -157,6 +166,14 @@ services:
         fromService: { type: web, name: sellora-api, envVarKey: AI_ANTHROPIC_API_KEY }
       - key: AI_OPENAI_API_KEY
         fromService: { type: web, name: sellora-api, envVarKey: AI_OPENAI_API_KEY }
+      - key: KEYWORDS_DATAFORSEO_LOGIN
+        fromService: { type: web, name: sellora-api, envVarKey: KEYWORDS_DATAFORSEO_LOGIN }
+      - key: KEYWORDS_DATAFORSEO_PASSWORD
+        fromService: { type: web, name: sellora-api, envVarKey: KEYWORDS_DATAFORSEO_PASSWORD }
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        fromService: { type: web, name: sellora-api, envVarKey: GOOGLE_OAUTH_CLIENT_ID }
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        fromService: { type: web, name: sellora-api, envVarKey: GOOGLE_OAUTH_CLIENT_SECRET }
       - key: JWT_KEY_ID
         fromService: { type: web, name: sellora-api, envVarKey: JWT_KEY_ID }
       - key: JWT_PRIVATE_KEY
