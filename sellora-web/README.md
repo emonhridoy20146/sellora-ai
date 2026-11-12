@@ -136,8 +136,11 @@ src/
     stores/               store status, web address field, theme picker, section editor,
                           picture picker, preview button, custom domain card with its DNS
                           records, the super-admin's domain decision buttons
-    landing/              landing page editor: section list and fields, offer editor
-                          (packages, add-on), picture field, address field, preview button
+    landing/              landing page editor: section list (grouped add menu) and fields,
+                          offer editor (packages, add-on), picture field, address field,
+                          preview button, publish dialog (now, at a time, A/B test),
+                          schedule and offer-end notes, offer end card, save as template
+    coupons/              coupon list hooks and the coupon dialog (Coupons in the menu)
     sms/                  SMS route choice, provider account dialog (shared with the
                           admin), sender name, order texts with preview, message log,
                           opt-outs, and the Admin › SMS cards
@@ -153,7 +156,9 @@ src/
     stores.ts             store statuses and actions, readiness steps, sections, colour
                           contrast, store pages, custom domain statuses and next steps
     landing.ts            landing page statuses, sections and their checks before
-                          publishing, package prices, the reviewer's "words on the page"
+                          publishing, package prices, the reviewer's "words on the page",
+                          block groups, publish and offer-end times, A/B verdicts
+    coupons.ts            coupon states, value and "where" text, the form and what changed
     sms.ts                SMS part counting (GSM-7 and Unicode, as operators count),
                           template preview, placeholders, status and failure labels
   config/
@@ -371,6 +376,27 @@ credentials as above:
 
 ```bash
 node scripts/landing-flow.mjs
+```
+
+### Landing page extras browser flow
+
+`scripts/landing-extras-flow.mjs` (ADR 0031 in sellora-api) needs the API, the worker, this
+app and the storefront, and the open store from `stores-flow.mjs`. It makes a page from the
+Fashion template "Eid and festive wear" (the template words hold publishing back), checks the
+grouped add menu, makes a 10% coupon with a ৳300 cap on the Coupons page, writes 17 sections
+and publishes. A phone shopper then taps "Use this code" and "Choose" on a package card and
+orders with the coupon; the order and the Coupons page show it, and the same code works at
+the store checkout. It schedules a version, changes the time and waits for the worker to
+publish it; starts an A/B test, opens fresh browsers until both versions were seen, orders
+from version B and makes B live; sets an offer end and waits for the page to pause, then
+resumes it; saves the page as a template and finds it under "My templates"; and previews a
+Bangla library template. The two waits for the worker take about three minutes each. If the
+demo shop's trial has ended, the super-admin gives it the all-in-one plan first. Automatic
+approval is turned on for the run and put back after. Screenshots go to
+`smoke-output/landing-extras/`.
+
+```bash
+node scripts/landing-extras-flow.mjs
 ```
 
 ### SMS browser flow

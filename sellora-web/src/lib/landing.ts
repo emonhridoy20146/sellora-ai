@@ -1,6 +1,9 @@
 import type {
+  AbTest,
+  AbTestSettings,
   LandingContent,
   LandingLanguage,
+  LandingPageSummary,
   LandingPackage,
   LandingSection,
   LandingSectionType,
@@ -36,6 +39,11 @@ export const LANDING_STATUS: Record<
     label: 'Changes needed',
     tone: 'danger',
     text: 'The review asked for changes. Fix them and publish again.',
+  },
+  scheduled: {
+    label: 'Scheduled',
+    tone: 'info',
+    text: 'Approved, and goes live by itself at the time you chose.',
   },
   live: { label: 'Live', tone: 'success', text: 'Shoppers can see the page and order.' },
   paused: {
@@ -127,6 +135,28 @@ export const LANDING_SECTION_LABEL: Record<LandingSectionType, string> = {
   contact: 'Call and WhatsApp',
   text: 'Text',
   order_form: 'Order form',
+  announcement: 'Announcement bar',
+  video_hero: 'Top video',
+  features: 'Features with icons',
+  checklist: 'Checklist',
+  comparison: 'Comparison table',
+  ingredients: 'Ingredients',
+  timeline: 'Timeline',
+  who_for: 'Who it is for',
+  stats: 'Numbers',
+  orders_today: 'Orders today',
+  video_reviews: 'Video reviews',
+  quote: 'Quote',
+  certificates: 'Certificates',
+  image_text: 'Picture and text',
+  about: 'About us',
+  size_chart: 'Size chart',
+  packages: 'Package cards',
+  payment_methods: 'Payment methods',
+  coupon_banner: 'Coupon code',
+  call_to_action: 'Order button band',
+  location: 'Shop address',
+  spacer: 'Space',
 };
 
 export const LANDING_SECTION_HINT: Record<LandingSectionType, string> = {
@@ -149,7 +179,87 @@ export const LANDING_SECTION_HINT: Record<LandingSectionType, string> = {
   contact: 'Buttons to call or message you.',
   text: 'A heading and paragraphs.',
   order_form: 'Where shoppers order. A page has exactly one.',
+  announcement: 'A short coloured line, like today’s offer.',
+  video_hero: 'Your product video with the headline and order button.',
+  features: 'Features with small icons.',
+  checklist: 'Ticked points: reasons to buy or what is in the set.',
+  comparison: 'Yours against others, row by row.',
+  ingredients: 'What it is made of, with pictures.',
+  timeline: 'What happens week by week, or a schedule.',
+  who_for: 'Who should buy it, and who should not.',
+  stats: 'A few real numbers, like customers served.',
+  orders_today: 'The real number of orders this page took today.',
+  video_reviews: 'Buyers’ videos from YouTube or Facebook.',
+  quote: 'Words from an expert or the founder.',
+  certificates: 'Pictures of approvals and certificates.',
+  image_text: 'A picture beside a paragraph.',
+  about: 'Your story.',
+  size_chart: 'Sizes and measurements in a table.',
+  packages: 'The offer’s packages as cards; a tap fills in the order form.',
+  payment_methods: 'How shoppers can pay, from your payment settings.',
+  coupon_banner: 'A coupon code shoppers can use on this page.',
+  call_to_action: 'A heading with a button to the order form.',
+  location: 'Your shop’s address, hours and a map link.',
+  spacer: 'Empty space between sections.',
 };
+
+/** How the "Add section" menu groups the section kinds. */
+export const LANDING_SECTION_GROUPS: { label: string; types: LandingSectionType[] }[] = [
+  {
+    label: 'Top of the page',
+    types: ['hero', 'video_hero', 'announcement', 'countdown', 'call_to_action'],
+  },
+  {
+    label: 'Pictures and video',
+    types: ['image', 'gallery', 'video', 'before_after', 'image_text'],
+  },
+  {
+    label: 'About the product',
+    types: [
+      'benefits',
+      'features',
+      'checklist',
+      'problem_solution',
+      'ingredients',
+      'specs',
+      'size_chart',
+      'steps',
+      'timeline',
+      'comparison',
+      'who_for',
+      'text',
+    ],
+  },
+  {
+    label: 'Trust',
+    types: [
+      'reviews',
+      'video_reviews',
+      'quote',
+      'stats',
+      'certificates',
+      'guarantee',
+      'about',
+      'orders_today',
+      'stock_left',
+    ],
+  },
+  {
+    label: 'Buying',
+    types: [
+      'order_form',
+      'price',
+      'packages',
+      'coupon_banner',
+      'payment_methods',
+      'delivery',
+      'faq',
+      'contact',
+      'location',
+      'spacer',
+    ],
+  },
+];
 
 /** The order the "Add section" menu lists them in. */
 export const LANDING_SECTION_TYPES = Object.keys(LANDING_SECTION_LABEL) as LandingSectionType[];
@@ -240,6 +350,71 @@ const NEW_TEXT: Record<
   },
 };
 
+const MORE_TEXT: Record<
+  LandingLanguage,
+  {
+    features: string;
+    checklist: string;
+    comparison: string;
+    ours: string;
+    others: string;
+    ingredients: string;
+    timeline: string;
+    whoFor: string;
+    forTitle: string;
+    notForTitle: string;
+    ordersToday: string;
+    about: string;
+    sizes: string;
+    size: string;
+    packages: string;
+    payments: string;
+    coupon: string;
+    location: string;
+  }
+> = {
+  en: {
+    features: 'Features',
+    checklist: 'Why buy it',
+    comparison: 'Compared',
+    ours: 'Ours',
+    others: 'Others',
+    ingredients: 'What is inside',
+    timeline: 'What to expect',
+    whoFor: 'Is it right for you?',
+    forTitle: 'Made for',
+    notForTitle: 'Not for',
+    ordersToday: '{count} people ordered from this page today',
+    about: 'About us',
+    sizes: 'Size chart',
+    size: 'Size',
+    packages: 'Choose your package',
+    payments: 'Pay the way you like',
+    coupon: 'Use this code for a discount',
+    location: 'Where to find us',
+  },
+  bn: {
+    features: 'ফিচারসমূহ',
+    checklist: 'কেন কিনবেন',
+    comparison: 'তুলনা',
+    ours: 'আমাদের',
+    others: 'অন্যদের',
+    ingredients: 'ভেতরে যা আছে',
+    timeline: 'কী আশা করবেন',
+    whoFor: 'এটি কি আপনার জন্য?',
+    forTitle: 'যাদের জন্য',
+    notForTitle: 'যাদের জন্য নয়',
+    ordersToday: 'আজ এই পেজ থেকে {count} জন অর্ডার করেছেন',
+    about: 'আমাদের কথা',
+    sizes: 'সাইজ চার্ট',
+    size: 'সাইজ',
+    packages: 'আপনার প্যাকেজ বেছে নিন',
+    payments: 'যেভাবে খুশি টাকা দিন',
+    coupon: 'ছাড় পেতে এই কোডটি ব্যবহার করুন',
+    location: 'আমাদের ঠিকানা',
+  },
+};
+
 /** Three days from now at the next full hour, as a starting end time for a countdown. */
 function inThreeDays(now = Date.now()): string {
   const d = new Date(now + 3 * 86_400_000);
@@ -255,6 +430,7 @@ export function newLandingSection(
   now = Date.now(),
 ): LandingSection {
   const t = NEW_TEXT[language];
+  const m = MORE_TEXT[language];
   const base = { id, enabled: true, hideOn: 'none' as const };
   switch (type) {
     case 'hero':
@@ -325,6 +501,72 @@ export function newLandingSection(
         subheading: t.formSub,
         buttonLabel: t.confirm,
       };
+    case 'announcement':
+      return { ...base, type, text: '', tone: 'offer' };
+    case 'video_hero':
+      return { ...base, type, heading: '', subheading: '', url: '', buttonLabel: t.order };
+    case 'features':
+      return { ...base, type, title: m.features, items: [{ icon: 'shield', title: '', text: '' }] };
+    case 'checklist':
+      return { ...base, type, title: m.checklist, items: [''] };
+    case 'comparison':
+      return {
+        ...base,
+        type,
+        title: m.comparison,
+        ourLabel: m.ours,
+        otherLabel: m.others,
+        rows: [{ label: '', ours: '✓', others: '✗' }],
+      };
+    case 'ingredients':
+      return { ...base, type, title: m.ingredients, items: [{ name: '', text: '', image: null }] };
+    case 'timeline':
+      return { ...base, type, title: m.timeline, items: [{ label: '', text: '' }] };
+    case 'who_for':
+      return {
+        ...base,
+        type,
+        title: m.whoFor,
+        forTitle: m.forTitle,
+        forItems: [''],
+        notForTitle: m.notForTitle,
+        notForItems: [],
+      };
+    case 'stats':
+      return { ...base, type, title: '', items: [{ value: '', label: '' }] };
+    case 'orders_today':
+      return { ...base, type, text: m.ordersToday, minCount: 5 };
+    case 'video_reviews':
+      return { ...base, type, title: t.reviews, items: [{ url: '', name: '' }] };
+    case 'quote':
+      return { ...base, type, text: '', name: '', role: '', image: null };
+    case 'certificates':
+      return { ...base, type, title: '', items: [] };
+    case 'image_text':
+      return { ...base, type, heading: '', body: '', image: null, imageSide: 'left' };
+    case 'about':
+      return { ...base, type, heading: m.about, body: '', image: null };
+    case 'size_chart':
+      return {
+        ...base,
+        type,
+        title: m.sizes,
+        columns: [m.size, ''],
+        rows: [{ cells: ['', ''] }],
+        note: '',
+      };
+    case 'packages':
+      return { ...base, type, heading: m.packages, text: '' };
+    case 'payment_methods':
+      return { ...base, type, heading: m.payments, text: '' };
+    case 'coupon_banner':
+      return { ...base, type, heading: m.coupon, code: '', text: '' };
+    case 'call_to_action':
+      return { ...base, type, heading: t.formHeading, text: '', buttonLabel: t.order };
+    case 'location':
+      return { ...base, type, heading: m.location, address: '', hours: '', mapUrl: '' };
+    case 'spacer':
+      return { ...base, type, size: 'medium', line: false };
   }
 }
 
@@ -355,8 +597,62 @@ export function landingSectionSummary(s: LandingSection): string {
     case 'problem_solution':
       return s.problemTitle || label;
     case 'stock_left':
+    case 'announcement':
       return s.text || label;
+    case 'video_hero':
+    case 'image_text':
+    case 'about':
+    case 'packages':
+    case 'payment_methods':
+    case 'call_to_action':
+    case 'location':
+      return s.heading || label;
+    case 'coupon_banner':
+      return s.code ? `${label}: ${s.code}` : label;
+    case 'features':
+    case 'checklist':
+    case 'comparison':
+    case 'ingredients':
+    case 'timeline':
+    case 'who_for':
+    case 'stats':
+    case 'video_reviews':
+    case 'certificates':
+    case 'size_chart':
+      return s.title || label;
+    case 'quote':
+      return s.name ? `${label}: ${s.name}` : label;
+    case 'orders_today':
+    case 'spacer':
+      return label;
   }
+}
+
+/** A Google Maps link (the only map a page links to; never embedded). */
+export function isMapLink(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase();
+  if (host === 'maps.app.goo.gl' || host === 'maps.google.com') return true;
+  if (host === 'goo.gl') return url.pathname.startsWith('/maps');
+  return (host === 'www.google.com' || host === 'google.com') && url.pathname.startsWith('/maps');
+}
+
+/** A coupon code as the API keeps it: capitals, no spaces. */
+export function normalizeCouponCode(raw: string): string {
+  return raw.trim().toUpperCase().replace(/\s+/g, '');
+}
+
+/** Why a coupon code cannot be used, or null. */
+export function couponCodeProblem(code: string): string | null {
+  return /^[A-Z0-9][A-Z0-9-]{2,19}$/.test(code) && !code.includes('--') && !code.endsWith('-')
+    ? null
+    : 'Use 3 to 20 letters, numbers and single hyphens.';
 }
 
 /** A YouTube or Facebook video link (the only players a page embeds). */
@@ -422,22 +718,67 @@ export function landingSectionProblem(
       return s.items.some((r) => isStarter(r.name) || isStarter(r.text))
         ? 'Replace the sample reviews with real ones from your buyers, or hide this section.'
         : null;
-    case 'benefits':
-    case 'problem_solution':
-    case 'steps': {
-      const words =
-        s.type === 'benefits'
-          ? s.items.map((x) => x.text)
-          : s.type === 'steps'
-            ? s.steps.map((x) => x.text)
-            : [s.problem, s.solution];
-      return words.some(isStarter)
-        ? 'Replace the template’s sample words with your own, or hide this section.'
-        : null;
-    }
+    case 'video_hero':
+      if (!s.url.trim()) return 'Add the video link.';
+      if (!isVideoLink(s.url)) return 'Use a YouTube or Facebook video link.';
+      if (!s.heading.trim()) return 'Write the headline.';
+      break;
+    case 'video_reviews':
+      if (s.items.length === 0) return 'Add at least one video.';
+      if (s.items.some((x) => !x.url.trim() || !isVideoLink(x.url)))
+        return 'Every video needs a YouTube or Facebook link.';
+      break;
+    case 'announcement':
+      if (!s.text.trim()) return 'Write the announcement.';
+      break;
+    case 'features':
+    case 'ingredients':
+    case 'timeline':
+    case 'stats':
+      if (s.items.length === 0) return 'Add at least one item.';
+      break;
+    case 'checklist':
+      if (!s.items.some((x) => x.trim())) return 'Add at least one item.';
+      break;
+    case 'certificates':
+      if (s.items.length === 0) return 'Add at least one picture.';
+      break;
+    case 'comparison':
+      if (s.rows.length === 0) return 'Add at least one row.';
+      break;
+    case 'who_for':
+      if (!s.forItems.some((x) => x.trim())) return 'Say who the product is for.';
+      break;
+    case 'orders_today':
+      if (!s.text.includes('{count}')) return 'Put {count} where the number goes.';
+      break;
+    case 'quote':
+      if (!s.text.trim()) return 'Write the quote.';
+      break;
+    case 'image_text':
+      if (!s.image) return 'Add the picture.';
+      break;
+    case 'size_chart':
+      if (s.columns.length < 2) return 'Add at least two columns.';
+      if (s.rows.length === 0) return 'Add at least one row.';
+      if (s.rows.some((r) => r.cells.length !== s.columns.length))
+        return 'Fill every row for every column.';
+      break;
+    case 'coupon_banner':
+      if (!s.code.trim()) return 'Write the coupon code.';
+      if (couponCodeProblem(normalizeCouponCode(s.code))) return couponCodeProblem(s.code);
+      break;
+    case 'location':
+      if (!s.address.trim()) return 'Write the address.';
+      if (s.mapUrl.trim() && !isMapLink(s.mapUrl)) return 'Use a Google Maps link.';
+      break;
     default:
-      return null;
+      break;
   }
+  // Any shown section that still has a template's instruction cannot go live.
+  return sectionWords(s).some((w) => isStarter(w.text))
+    ? 'Replace the template’s sample words with your own, or hide this section.'
+    : null;
 }
 
 /** Everything that stops the draft from being published, as sentences. */
@@ -451,6 +792,11 @@ export function publishBlockers(
   if (!content.offer.productId) out.push('Choose the product this page sells.');
   if (content.offer.addOn && content.offer.addOn.productId === content.offer.productId)
     out.push('Choose a different product for the add-on.');
+  if (
+    content.offer.packages.length === 0 &&
+    content.sections.some((s) => s.type === 'packages' && s.enabled)
+  )
+    out.push(`${LANDING_SECTION_LABEL.packages}: Add packages to the offer, or hide this section.`);
   for (const s of content.sections) {
     const p = landingSectionProblem(s, starter);
     if (p) out.push(`${LANDING_SECTION_LABEL[s.type]}: ${p}`);
@@ -541,4 +887,103 @@ export function sectionWords(section: LandingSection): { key: string; text: stri
   };
   walk(section, '', '');
   return out;
+}
+
+// ---------------------------------------------------------------- publishing (ADR 0031)
+
+/** The API's A/B test settings when none are chosen. */
+export const AB_DEFAULTS: AbTestSettings = {
+  splitB: 50,
+  autoWinner: true,
+  minVisitors: 300,
+  maxDays: 14,
+};
+
+/** How far ahead a version may be scheduled. */
+export const SCHEDULE_MAX_DAYS = 90;
+
+/** Why the page cannot start an A/B test now, or null (the API checks the same). */
+export function abTestBlocker(
+  page: Pick<LandingPageSummary, 'published' | 'paused' | 'takedown' | 'abTest' | 'scheduled'>,
+): string | null {
+  if (!page.published || page.paused || page.takedown)
+    return 'A test compares a new version with the live one, so the page must be live first.';
+  if (page.abTest) return 'A test is already running on this page.';
+  if (page.scheduled) return 'A version is scheduled. Publish it now or cancel it before testing.';
+  return null;
+}
+
+/** Why a publishing time cannot be used, or null. */
+export function publishAtProblem(iso: string | null, now = Date.now()): string | null {
+  if (!iso) return 'Choose a date and time.';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return 'Choose a date and time.';
+  if (t <= now + 60_000) return 'Choose a time at least a minute from now.';
+  if (t > now + SCHEDULE_MAX_DAYS * 86_400_000)
+    return `Choose a time within ${SCHEDULE_MAX_DAYS} days.`;
+  return null;
+}
+
+/** Why an offer end time cannot be used, or null. */
+export function offerEndProblem(iso: string | null, now = Date.now()): string | null {
+  if (!iso) return 'Choose a date and time.';
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return 'Choose a date and time.';
+  if (t <= now + 60_000) return 'Choose a time at least a minute from now.';
+  if (t > now + 366 * 86_400_000) return 'Choose a time within a year.';
+  return null;
+}
+
+/** Why an A/B test ended, for the dashboard. */
+export const AB_END_REASON: Record<NonNullable<AbTest['endReason']>, string> = {
+  chosen: 'You chose',
+  auto_winner: 'Clear winner, chosen by itself',
+  no_clear_winner: 'Time was up without a clear winner',
+  taken_down: 'Sellora took the page down',
+};
+
+/** "12.5%" for a buying rate (0..1), or a dash. */
+export function formatRate(rate: number | null): string {
+  if (rate === null) return '–';
+  return `${(rate * 100).toFixed(rate < 0.1 ? 1 : 0)}%`;
+}
+
+/** "+18%" or "−7%" for B against A, or a dash. */
+export function formatLift(lift: number | null): string {
+  if (lift === null || !Number.isFinite(lift)) return '–';
+  const pct = Math.round(lift * 100);
+  return pct > 0 ? `+${pct}%` : pct < 0 ? `−${Math.abs(pct)}%` : '0%';
+}
+
+/** What a running test's numbers say so far, in plain words. */
+export function abVerdict(test: Pick<AbTest, 'counts' | 'result' | 'settings'>): {
+  tone: 'success' | 'info' | 'warning';
+  title: string;
+  text: string;
+} {
+  const { result: r, counts, settings } = test;
+  const sure = r.confidence === null ? null : Math.floor(r.confidence * 100);
+  if (r.leader)
+    return {
+      tone: 'success',
+      title:
+        r.leader === 'b' ? 'The new version (B) sells better' : 'The live version (A) sells better',
+      text: `Buying rate ${formatRate(r.rateA)} for A and ${formatRate(r.rateB)} for B (B against A: ${formatLift(r.lift)}), ${sure}% sure.`,
+    };
+  if (!r.enoughVisitors) {
+    const need = settings.minVisitors;
+    return {
+      tone: 'info',
+      title: 'Too early to tell',
+      text: `Each version needs ${need.toLocaleString('en-US')} visitors before a winner is called. So far A had ${counts.a.visitors.toLocaleString('en-US')} and B ${counts.b.visitors.toLocaleString('en-US')}.`,
+    };
+  }
+  return {
+    tone: 'warning',
+    title: 'No clear winner yet',
+    text:
+      sure === null
+        ? 'Neither version has buyers yet.'
+        : `B against A: ${formatLift(r.lift)}, but only ${sure}% sure; a winner needs 95%.`,
+  };
 }

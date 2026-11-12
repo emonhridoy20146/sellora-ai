@@ -42,6 +42,7 @@ const REVIEWER_TEXT: Record<LandingStatus, string> = {
   draft: 'Never sent for review. Shoppers cannot see it.',
   in_review: 'Waiting for a decision. Open the preview, read the words and the offer, then decide.',
   changes_requested: 'Sent back for changes. It returns here when the business publishes again.',
+  scheduled: 'Approved and waiting for the time the business chose; it then goes live by itself.',
   live: 'Shoppers can see it and order.',
   paused:
     'Paused by the business (or its store is paused). Shoppers see that the offer is not available.',
@@ -341,7 +342,20 @@ export default function PlatformLandingPage() {
                   verdict.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="grid gap-3">
+                {pending && p.submission.purpose === 'ab_test' && (
+                  <Alert tone="info" title="Sent as an A/B test">
+                    Approving starts a test: {p.submission.abTest?.splitB ?? 50}% of visitors see
+                    this version, the rest the live one. The business chooses the winner, or the
+                    better one goes live by itself.
+                  </Alert>
+                )}
+                {pending && p.submission.publishAt && (
+                  <Alert tone="info" title="Sent to go live later">
+                    Approving keeps this version until {formatDateTime(p.submission.publishAt)}, then
+                    it goes live by itself.
+                  </Alert>
+                )}
                 {p.submission.flags.length ? (
                   <FlagList flags={p.submission.flags} />
                 ) : (

@@ -16,6 +16,7 @@ import {
   Settings,
   ShoppingBag,
   Store,
+  Ticket,
   Truck,
   Users,
   UserRound,
@@ -72,7 +73,10 @@ function nav(orgId: string, can: (p: string) => boolean): NavSection[] {
           ]
         : []),
       ...(can('marketing.view') || can('marketing.manage')
-        ? [{ href: `${base}/marketing`, label: 'Marketing', icon: Megaphone }]
+        ? [
+            { href: `${base}/coupons`, label: 'Coupons', icon: Ticket },
+            { href: `${base}/marketing`, label: 'Marketing', icon: Megaphone },
+          ]
         : []),
       ...(can('analytics.view')
         ? [{ href: `${base}/analytics`, label: 'Analytics', icon: BarChart3 }]

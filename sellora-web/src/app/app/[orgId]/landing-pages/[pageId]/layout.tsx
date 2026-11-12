@@ -3,6 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
+  BookmarkPlus,
   Copy,
   Ellipsis,
   ExternalLink,
@@ -18,6 +19,8 @@ import { toast } from 'sonner';
 import { PageError } from '@/components/commerce/page-error';
 import { landingKeys, useLandingPage } from '@/components/landing/hooks';
 import { LandingPreviewButton } from '@/components/landing/preview-button';
+import { SaveTemplateDialog } from '@/components/landing/save-template-dialog';
+import { ScheduleNote } from '@/components/landing/schedule-note';
 import { LandingStatusBadge } from '@/components/landing/status';
 import { useOrg } from '@/components/org-context';
 import { Alert } from '@/components/ui/alert';
@@ -35,11 +38,11 @@ import { TabNav } from '@/components/ui/tab-nav';
 import { api } from '@/lib/api/client';
 import { errorMessage } from '@/lib/api/errors';
 import type { LandingPage } from '@/lib/api/types';
-import { formatRelative } from '@/lib/format';
+import { formatDateTime, formatRelative } from '@/lib/format';
 import { LANDING_STATUS } from '@/lib/landing';
 
 /** What the business should know about where the page stands, beyond the badge. */
-function StatusNote({ page }: { page: LandingPage }) {
+function ReviewNote({ page }: { page: LandingPage }) {
   const sub = page.submission;
   if (page.takedown)
     return (
@@ -66,9 +69,13 @@ function StatusNote({ page }: { page: LandingPage }) {
       <Alert tone="warning" title="Waiting for review">
         <p>
           Sent {formatRelative(sub.submittedAt)}.{' '}
-          {page.published
-            ? 'Shoppers keep seeing the live version until this one is approved.'
-            : 'You get an email when it goes live.'}
+          {sub.purpose === 'ab_test'
+            ? 'The A/B test starts once it is approved.'
+            : sub.publishAt
+              ? `Once approved it goes live on ${formatDateTime(sub.publishAt)}.`
+              : page.published
+                ? 'Shoppers keep seeing the live version until this one is approved.'
+                : 'You get an email when it goes live.'}
           {sub.revision !== page.revision &&
             ' You have changed the page since sending it; publish again to send the newer version.'}
         </p>
@@ -85,6 +92,16 @@ function StatusNote({ page }: { page: LandingPage }) {
   return null;
 }
 
+/** Where the page stands: review, a scheduled version, a running A/B test, the offer end. */
+function StatusNote({ page, orgId }: { page: LandingPage; orgId: string }) {
+  return (
+    <>
+      <ReviewNote page={page} />
+      <ScheduleNote page={page} orgId={orgId} />
+    </>
+  );
+}
+
 export default function LandingPageLayout({ children }: { children: React.ReactNode }) {
   const { org, can } = useOrg();
   const router = useRouter();
@@ -92,6 +109,7 @@ export default function LandingPageLayout({ children }: { children: React.ReactN
   const { pageId } = useParams<{ pageId: string }>();
   const page = useLandingPage(org.id, pageId);
   const [busy, setBusy] = useState<string | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const base = `/app/${org.id}/landing-pages/${pageId}`;
 
   if (page.isPending) return <Skeleton className="h-96" />;
@@ -196,6 +214,9 @@ export default function LandingPageLayout({ children }: { children: React.ReactN
                     <DropdownMenuItem onSelect={duplicate}>
                       <Copy /> Duplicate
                     </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => setSavingTemplate(true)}>
+                      <BookmarkPlus /> Save as template
+                    </DropdownMenuItem>
                   </>
                 )}
               </DropdownMenuContent>
@@ -203,13 +224,20 @@ export default function LandingPageLayout({ children }: { children: React.ReactN
           </>
         }
       />
-      <div className="mb-6 empty:hidden">
-        <StatusNote page={p} />
+      <div className="mb-6 grid gap-3 empty:hidden">
+        <StatusNote page={p} orgId={org.id} />
       </div>
+      <SaveTemplateDialog
+        orgId={org.id}
+        page={p}
+        open={savingTemplate}
+        onOpenChange={setSavingTemplate}
+      />
       <TabNav
         tabs={[
           { href: base, label: 'Editor', exact: true },
           { href: `${base}/stats`, label: 'Numbers' },
+          { href: `${base}/ab-tests`, label: 'A/B tests' },
           { href: `${base}/versions`, label: 'Versions' },
           { href: `${base}/settings`, label: 'Settings' },
         ]}

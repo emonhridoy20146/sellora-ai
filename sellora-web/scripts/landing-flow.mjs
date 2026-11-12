@@ -285,7 +285,7 @@ try {
       await page.fill('#addon-price', '199');
 
       await page.getByRole('button', { name: 'Add section' }).click();
-      await page.getByRole('menuitem', { name: /^Video/ }).click();
+      await page.getByRole('menuitem', { name: /^Video(?! reviews)/ }).click();
       await page.locator('[id^="ls-"][id$="-title"]').fill('See the embroidery');
       await page
         .locator('[id^="ls-"][id$="-url"]')
@@ -361,6 +361,8 @@ try {
 
   await step('publish sends it for review; shoppers still find nothing', async () => {
     await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    // The dialog asks when (ADR 0031); "Now" is chosen already.
+    await page.getByRole('dialog').getByRole('button', { name: 'Publish', exact: true }).click();
     await page.getByText('Sent for review.').waitFor({ timeout: 10_000 });
     await page.getByText('In review').first().waitFor();
     await shot(page, '07-in-review');

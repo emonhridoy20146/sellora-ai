@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { LandingContent, LandingSectionType } from './api/types';
 import {
+  AB_DEFAULTS,
+  LANDING_SECTION_GROUPS,
   LANDING_SECTION_TYPES,
+  abTestBlocker,
+  abVerdict,
   conversionText,
+  couponCodeProblem,
+  formatLift,
+  formatRate,
+  isMapLink,
+  normalizeCouponCode,
+  offerEndProblem,
+  publishAtProblem,
   isVideoLink,
   landingSectionProblem,
   landingSectionSummary,
@@ -217,5 +228,123 @@ describe('sectionWords', () => {
         image: { fileId: 'f', url: 'https://cdn.test/a.webp', alt: 'Bottle on a table' },
       }),
     ).toEqual([{ key: 'Image', text: 'Picture: Bottle on a table' }]);
+  });
+});
+
+describe('new sections (ADR 0031)', () => {
+  it('lists every kind once in the add menu groups', () => {
+    const grouped = LANDING_SECTION_GROUPS.flatMap((g) => g.types);
+    expect(new Set(grouped).size).toBe(grouped.length);
+    expect([...grouped].sort()).toEqual([...LANDING_SECTION_TYPES].sort());
+    expect(LANDING_SECTION_TYPES).toHaveLength(41);
+  });
+
+  it('checks the coupon banner code and the map link', () => {
+    const need = (type: LandingSectionType, patch: Record<string, unknown> = {}) =>
+      landingSectionProblem({ ...newLandingSection(type, 'en'), ...patch } as never);
+    expect(normalizeCouponCode(' eid 20 ')).toBe('EID20');
+    expect(couponCodeProblem('EID20')).toBeNull();
+    expect(couponCodeProblem('E-')).toMatch(/3 to 20/);
+    expect(need('coupon_banner', { code: 'x' })).toMatch(/3 to 20/);
+    expect(isMapLink('https://maps.app.goo.gl/abc123')).toBe(true);
+    expect(isMapLink('https://www.google.com/maps/place/Dhaka')).toBe(true);
+    expect(isMapLink('http://maps.google.com/?q=Dhaka')).toBe(false);
+    expect(isMapLink('https://example.com/maps')).toBe(false);
+    expect(need('location', { address: 'House 1, Road 2', mapUrl: 'https://example.com' })).toBe(
+      'Use a Google Maps link.',
+    );
+  });
+});
+
+describe('scheduling and A/B tests', () => {
+  const live = {
+    published: { version: 3, revision: 9, publishedAt: '2026-11-01T00:00:00Z', autoApproved: true },
+    paused: false,
+    takedown: null,
+    abTest: null,
+    scheduled: null,
+  };
+  const now = Date.UTC(2026, 10, 12, 6, 0);
+
+  it('allows a test only on a live page with nothing else waiting', () => {
+    expect(abTestBlocker(live)).toBeNull();
+    expect(abTestBlocker({ ...live, published: null })).toMatch(/must be live/);
+    expect(abTestBlocker({ ...live, paused: true })).toMatch(/must be live/);
+    expect(abTestBlocker({ ...live, abTest: { id: 'x', splitB: 50 } })).toMatch(/already running/);
+    expect(
+      abTestBlocker({
+        ...live,
+        scheduled: {
+          revision: 10,
+          publishAt: '2026-11-20T00:00:00Z',
+          approvedAt: '2026-11-12T00:00:00Z',
+          autoApproved: true,
+        },
+      }),
+    ).toMatch(/scheduled/);
+  });
+
+  it('takes publishing times from a minute to 90 days ahead, offer ends up to a year', () => {
+    const at = (minutes: number) => new Date(now + minutes * 60_000).toISOString();
+    expect(publishAtProblem(null, now)).toMatch(/Choose a date/);
+    expect(publishAtProblem(at(0.5), now)).toMatch(/a minute/);
+    expect(publishAtProblem(at(60), now)).toBeNull();
+    expect(publishAtProblem(at(91 * 1440), now)).toMatch(/90 days/);
+    expect(offerEndProblem(at(91 * 1440), now)).toBeNull();
+    expect(offerEndProblem(at(367 * 1440), now)).toMatch(/a year/);
+  });
+
+  it('describes the numbers in plain words', () => {
+    const counts = (va: number, ba: number, vb: number, bb: number) => ({
+      a: { visitors: va, buyers: ba, orders: ba, revenueMinor: 0 },
+      b: { visitors: vb, buyers: bb, orders: bb, revenueMinor: 0 },
+    });
+    expect(formatRate(0.125)).toBe('13%');
+    expect(formatRate(0.034)).toBe('3.4%');
+    expect(formatRate(null)).toBe('–');
+    expect(formatLift(0.184)).toBe('+18%');
+    expect(formatLift(-0.07)).toBe('−7%');
+    expect(
+      abVerdict({
+        counts: counts(400, 20, 410, 41),
+        settings: AB_DEFAULTS,
+        result: {
+          rateA: 0.05,
+          rateB: 0.1,
+          lift: 1,
+          confidence: 0.99,
+          leader: 'b',
+          enoughVisitors: true,
+        },
+      }),
+    ).toMatchObject({ tone: 'success', title: 'The new version (B) sells better' });
+    expect(
+      abVerdict({
+        counts: counts(40, 2, 41, 3),
+        settings: AB_DEFAULTS,
+        result: {
+          rateA: 0.05,
+          rateB: 0.07,
+          lift: 0.4,
+          confidence: 0.3,
+          leader: null,
+          enoughVisitors: false,
+        },
+      }).text,
+    ).toMatch(/needs 300 visitors.*A had 40 and B 41/);
+    expect(
+      abVerdict({
+        counts: counts(400, 20, 400, 22),
+        settings: AB_DEFAULTS,
+        result: {
+          rateA: 0.05,
+          rateB: 0.055,
+          lift: 0.1,
+          confidence: 0.24,
+          leader: null,
+          enoughVisitors: true,
+        },
+      }),
+    ).toMatchObject({ tone: 'warning', title: 'No clear winner yet' });
   });
 });

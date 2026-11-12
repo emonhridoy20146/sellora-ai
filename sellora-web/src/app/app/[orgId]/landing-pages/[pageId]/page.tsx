@@ -9,6 +9,7 @@ import { LandingImageField } from '@/components/landing/image-field';
 import { landingKeys, useLandingPage, useStarterTexts } from '@/components/landing/hooks';
 import { OfferEditor } from '@/components/landing/offer-editor';
 import { LandingPreviewButton } from '@/components/landing/preview-button';
+import { PublishDialog, type PublishRequest } from '@/components/landing/publish-dialog';
 import { LandingSectionList } from '@/components/landing/section-list';
 import { useOrg } from '@/components/org-context';
 import { Alert } from '@/components/ui/alert';
@@ -20,6 +21,7 @@ import { Switch } from '@/components/ui/switch';
 import { api } from '@/lib/api/client';
 import { ApiError, errorMessage } from '@/lib/api/errors';
 import type { LandingContent, LandingPage, LandingSection } from '@/lib/api/types';
+import { formatDateTime } from '@/lib/format';
 import { packageProblems, publishBlockers } from '@/lib/landing';
 import { canonicalJson } from '@/lib/stores';
 
@@ -35,6 +37,20 @@ function describeErrors(err: unknown, sections: LandingSection[]): string {
     .join(' ');
 }
 
+/** What happened after "Publish", in the words of the choice made. */
+function publishedText(next: LandingPage, req: PublishRequest): string {
+  if (next.submission?.status === 'pending')
+    return req.purpose === 'ab_test'
+      ? 'Sent for review. The A/B test starts once approved.'
+      : req.publishAt
+        ? `Sent for review. Once approved it goes live on ${formatDateTime(req.publishAt)}.`
+        : 'Sent for review. You get an email when it goes live.';
+  if (next.scheduled)
+    return `Scheduled. It goes live on ${formatDateTime(next.scheduled.publishAt)}.`;
+  if (next.abTest) return 'A/B test started. Follow it under A/B tests.';
+  return 'Published. Shoppers see it now.';
+}
+
 function Editor({ page }: { page: LandingPage }) {
   const { org, can } = useOrg();
   const queryClient = useQueryClient();
@@ -47,6 +63,7 @@ function Editor({ page }: { page: LandingPage }) {
   const [busy, setBusy] = useState<'save' | 'publish' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const starter = useStarterTexts(org.id);
   const draft: LandingContent = { sections, offer, seo, settings };
@@ -88,24 +105,30 @@ function Editor({ page }: { page: LandingPage }) {
       );
   };
 
-  const onPublish = async () => {
-    if (blockers.length) return setError(blockers[0]!);
+  const onPublish = async (req: PublishRequest) => {
     setBusy('publish');
     const saved = dirty ? await save() : page;
-    if (!saved) return setBusy(null);
+    if (!saved) {
+      setPublishing(false);
+      return setBusy(null);
+    }
     try {
       const next = await api<LandingPage>(`/orgs/${org.id}/landing-pages/${page.id}/submit`, {
-        method: 'POST',
+        body:
+          req.purpose === 'ab_test'
+            ? { purpose: 'ab_test', abTest: req.abTest }
+            : req.publishAt
+              ? { publishAt: req.publishAt }
+              : {},
       });
       queryClient.setQueryData(key, next);
       void queryClient.invalidateQueries({ queryKey: landingKeys.all(org.id), exact: true });
       void queryClient.invalidateQueries({ queryKey: landingKeys.versions(org.id, page.id) });
-      toast.success(
-        next.submission?.status === 'pending'
-          ? 'Sent for review. You get an email when it goes live.'
-          : 'Published. Shoppers see it now.',
-      );
+      void queryClient.invalidateQueries({ queryKey: landingKeys.abTests(org.id, page.id) });
+      setPublishing(false);
+      toast.success(publishedText(next, req));
     } catch (err) {
+      setPublishing(false);
       setError(describeErrors(err, sections));
     } finally {
       setBusy(null);
@@ -328,11 +351,23 @@ function Editor({ page }: { page: LandingPage }) {
               <Button
                 loading={busy === 'publish'}
                 disabled={busy !== null || nothingNew || (pending && !dirty)}
-                onClick={() => void onPublish()}
+                onClick={() => {
+                  if (blockers.length) return setError(blockers[0]!);
+                  setError(null);
+                  setPublishing(true);
+                }}
               >
                 {page.published ? 'Publish changes' : 'Publish'}
               </Button>
             )}
+            <PublishDialog
+              page={page}
+              orgId={org.id}
+              open={publishing}
+              onOpenChange={setPublishing}
+              busy={busy === 'publish'}
+              onPublish={(req) => void onPublish(req)}
+            />
           </div>
         </div>
       )}

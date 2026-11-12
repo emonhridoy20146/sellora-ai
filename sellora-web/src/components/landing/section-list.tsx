@@ -17,6 +17,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { NativeSelect } from '@/components/ui/input';
@@ -25,8 +27,8 @@ import type { HideOn, LandingLanguage, LandingSection, LandingSectionType } from
 import {
   HIDE_ON_LABEL,
   LANDING_SECTION_HINT,
+  LANDING_SECTION_GROUPS,
   LANDING_SECTION_LABEL,
-  LANDING_SECTION_TYPES,
   MAX_LANDING_SECTIONS,
   landingSectionProblem,
   landingSectionSummary,
@@ -71,7 +73,7 @@ export function LandingSectionList({
     setOpen(s.id);
   };
   const hasForm = sections.some((s) => s.type === 'order_form');
-  const addable = LANDING_SECTION_TYPES.filter((t) => t !== 'order_form' || !hasForm);
+  const addable = (t: LandingSectionType) => t !== 'order_form' || !hasForm;
 
   return (
     <div className="grid gap-2">
@@ -238,15 +240,21 @@ export function LandingSectionList({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="max-h-96 w-80 overflow-y-auto">
-            {addable.map((type) => (
-              <DropdownMenuItem key={type} onSelect={() => add(type)}>
-                <span className="grid">
-                  <span className="font-medium">{LANDING_SECTION_LABEL[type]}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {LANDING_SECTION_HINT[type]}
-                  </span>
-                </span>
-              </DropdownMenuItem>
+            {LANDING_SECTION_GROUPS.map((g, gi) => (
+              <div key={g.label} role="group" aria-label={g.label}>
+                {gi > 0 && <DropdownMenuSeparator />}
+                <DropdownMenuLabel>{g.label}</DropdownMenuLabel>
+                {g.types.filter(addable).map((type) => (
+                  <DropdownMenuItem key={type} onSelect={() => add(type)}>
+                    <span className="grid">
+                      <span className="font-medium">{LANDING_SECTION_LABEL[type]}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {LANDING_SECTION_HINT[type]}
+                      </span>
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </div>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>

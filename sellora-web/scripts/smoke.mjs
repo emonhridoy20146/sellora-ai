@@ -153,6 +153,7 @@ try {
       ['/store/new', 'store-new'],
       ['/landing-pages', 'landing-pages'],
       ['/landing-pages/new', 'landing-pages-new'],
+      ['/coupons', 'coupons'],
       ['/marketing/campaigns', 'marketing-campaigns'],
       ['/marketing/campaigns/new', 'marketing-campaign-new'],
       ['/marketing/automations', 'marketing-automations'],
