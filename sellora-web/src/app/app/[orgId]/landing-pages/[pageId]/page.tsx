@@ -11,6 +11,7 @@ import { OfferEditor } from '@/components/landing/offer-editor';
 import { LandingPreviewButton } from '@/components/landing/preview-button';
 import { PublishDialog, type PublishRequest } from '@/components/landing/publish-dialog';
 import { LandingSectionList } from '@/components/landing/section-list';
+import { PageSeoWriter } from '@/components/seo/page-seo-writer';
 import { useOrg } from '@/components/org-context';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,7 @@ import { api } from '@/lib/api/client';
 import { ApiError, errorMessage } from '@/lib/api/errors';
 import type { LandingContent, LandingPage, LandingSection } from '@/lib/api/types';
 import { formatDateTime } from '@/lib/format';
+import { pageText } from '@/lib/seo';
 import { packageProblems, publishBlockers } from '@/lib/landing';
 import { canonicalJson } from '@/lib/stores';
 
@@ -232,6 +234,14 @@ function Editor({ page }: { page: LandingPage }) {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
+            <PageSeoWriter
+              kind="landing"
+              name={page.name}
+              about={pageText({ sections, offer })}
+              language={page.language}
+              disabled={!editable || busy !== null}
+              onUse={(s) => setSeo((x) => ({ ...x, ...s }))}
+            />
             <Field label="Title" htmlFor="lp-seo-title" optional>
               <Input
                 id="lp-seo-title"

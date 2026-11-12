@@ -4,6 +4,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useOrg } from '@/components/org-context';
+import { ProductSeoCard } from '@/components/seo/product-seo-card';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +16,7 @@ import { ApiError, errorMessage } from '@/lib/api/errors';
 import type { Product, ProductStatus, Variant } from '@/lib/api/types';
 import { combinations, comboKey, splitValues } from '@/lib/commerce';
 import { minorToInput, parseMoney } from '@/lib/format';
+import { seoDraftFrom, seoPayload, type SeoDraft } from '@/lib/seo';
 import { useCategories } from './hooks';
 import { MoneyInput } from './money-input';
 import {
@@ -93,6 +95,7 @@ export function ProductForm({
       (product?.variants ?? []).map((v) => [comboKey(v.optionValues), rowFromVariant(v, currency)]),
     ),
   );
+  const [seo, setSeo] = useState<SeoDraft>(() => seoDraftFrom(product));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -177,6 +180,7 @@ export function ProductForm({
       tags: splitValues(tags),
       status,
       images: photosPayload(photos),
+      ...seoPayload(seo, product),
       options: parsedOptions,
       variants: combos.map((c) => {
         const r = rowFor(c);
@@ -202,6 +206,7 @@ export function ProductForm({
           saved.variants.map((v) => [comboKey(v.optionValues), rowFromVariant(v, currency)]),
         ),
       );
+      setSeo(seoDraftFrom(saved));
       onSaved(saved);
     } catch (err) {
       if (err instanceof ApiError && err.errors.length) {
@@ -554,6 +559,25 @@ export function ProductForm({
             )}
           </CardContent>
         </Card>
+
+        <ProductSeoCard
+          product={product}
+          draft={seo}
+          setDraft={setSeo}
+          material={{
+            name,
+            description,
+            tags: splitValues(tags),
+            categoryId: categoryId || null,
+            priceMinor: combos.length ? parseMoney(rowFor(combos[0]!).price, currency) : null,
+          }}
+          photos={photos}
+          setPhotos={setPhotos}
+          onUseDescription={setDescription}
+          onUseTags={(t) => setTags(t.join(', '))}
+          errors={errors}
+          editable={editable}
+        />
 
         {editable && (
           <div className="flex justify-end">

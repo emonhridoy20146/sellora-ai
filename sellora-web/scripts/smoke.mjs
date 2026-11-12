@@ -158,6 +158,10 @@ try {
       ['/marketing/campaigns/new', 'marketing-campaign-new'],
       ['/marketing/automations', 'marketing-automations'],
       ['/marketing/carts', 'marketing-carts'],
+      ['/seo', 'seo'],
+      ['/seo/keywords', 'seo-keywords'],
+      ['/seo/search-console', 'seo-search-console'],
+      ['/seo/content', 'seo-content'],
       ['/analytics', 'analytics'],
       ['/activity', 'activity'],
     ])

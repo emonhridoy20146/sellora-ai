@@ -13,6 +13,7 @@ import {
   Package,
   PanelsTopLeft,
   Plus,
+  Search,
   Settings,
   ShoppingBag,
   Store,
@@ -76,6 +77,7 @@ function nav(orgId: string, can: (p: string) => boolean): NavSection[] {
         ? [
             { href: `${base}/coupons`, label: 'Coupons', icon: Ticket },
             { href: `${base}/marketing`, label: 'Marketing', icon: Megaphone },
+            { href: `${base}/seo`, label: 'SEO studio', icon: Search },
           ]
         : []),
       ...(can('analytics.view')

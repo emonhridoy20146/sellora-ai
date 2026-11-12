@@ -131,7 +131,11 @@ export default function AiPricingPage() {
             <Stat
               label="Exchange rate used"
               value={`${formatNumber(current.usdRate, { digits: 4 })} ${current.currency}`}
-              sub="per 1 USD"
+              sub={
+                current.keywordLookupCredits === null
+                  ? 'per 1 USD. No keyword price: ideas show without volumes'
+                  : `per 1 USD. Keyword volumes: ${formatCredits(current.keywordLookupCredits)} per lookup`
+              }
             />
             <Stat
               label="In effect since"
@@ -164,6 +168,7 @@ export default function AiPricingPage() {
                       </TH>
                     ))}
                     <TH className="text-right">Voice / min</TH>
+                    <TH className="text-right">Keyword lookup</TH>
                     <TH className="text-right">USD rate</TH>
                     <TH>Note</TH>
                   </TR>
@@ -200,6 +205,11 @@ export default function AiPricingPage() {
                           {r.transcriptionCreditsPerMinute === null
                             ? '–'
                             : formatNumber(r.transcriptionCreditsPerMinute)}
+                        </TD>
+                        <TD className="tabular text-right">
+                          {r.keywordLookupCredits === null
+                            ? '–'
+                            : formatNumber(r.keywordLookupCredits)}
                         </TD>
                         <TD className="tabular text-right">
                           {formatNumber(r.usdRate, { digits: 4 })}
@@ -512,6 +522,11 @@ function PublishRateDialog({
       ? ''
       : String(base.transcriptionCreditsPerMinute),
   );
+  const [keywords, setKeywords] = useState(
+    base?.keywordLookupCredits === null || base?.keywordLookupCredits === undefined
+      ? ''
+      : String(base.keywordLookupCredits),
+  );
   const [tiers, setTiers] = useState<Record<ModelTier, { input: string; output: string }>>(
     () =>
       Object.fromEntries(
@@ -551,6 +566,8 @@ function PublishRateDialog({
   const minNum = dec(minimum);
   const voiceNum = voice.trim() === '' ? null : dec(voice);
   const voiceBad = voice.trim() !== '' && voiceNum === null;
+  const keywordsNum = keywords.trim() === '' ? null : dec(keywords);
+  const keywordsBad = keywords.trim() !== '' && keywordsNum === null;
   const valid =
     curValid &&
     priceMinor !== null &&
@@ -559,7 +576,8 @@ function PublishRateDialog({
     minNum !== null &&
     draftTiers.length > 0 &&
     !partial &&
-    !voiceBad;
+    !voiceBad &&
+    !keywordsBad;
   const draft: RateDraft | null = valid
     ? {
         currency: cur,
@@ -582,6 +600,7 @@ function PublishRateDialog({
           minimumCreditsPerRequest: minNum,
           tiers: draftTiers,
           ...(voiceNum !== null ? { transcriptionCreditsPerMinute: voiceNum } : {}),
+          ...(keywordsNum !== null ? { keywordLookupCredits: keywordsNum } : {}),
           ...(effectiveFrom ? { effectiveFrom: new Date(effectiveFrom).toISOString() } : {}),
           ...(note.trim() ? { note: note.trim() } : {}),
         },
@@ -718,6 +737,25 @@ function PublishRateDialog({
               className="sm:max-w-48"
               value={voice}
               onChange={(e) => setVoice(e.target.value)}
+            />
+          </Field>
+
+          <Field
+            label="Credits per keyword lookup"
+            htmlFor="r-keywords"
+            optional
+            error={
+              errs.keywordLookupCredits ??
+              (keywordsBad ? 'A number with up to 2 decimals.' : undefined)
+            }
+            hint="One look-up of monthly searches for up to 100 keywords in the SEO studio. Empty: keyword ideas show without search volumes."
+          >
+            <Input
+              id="r-keywords"
+              inputMode="decimal"
+              className="sm:max-w-48"
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
             />
           </Field>
 

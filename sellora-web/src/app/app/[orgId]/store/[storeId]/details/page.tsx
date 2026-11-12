@@ -4,8 +4,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useCategories } from '@/components/commerce/hooks';
 import { MoneyInput } from '@/components/commerce/money-input';
 import { useOrg } from '@/components/org-context';
+import { PageSeoWriter } from '@/components/seo/page-seo-writer';
 import { HandleField } from '@/components/stores/handle-field';
 import { storeKeys, useStore } from '@/components/stores/hooks';
 import { Alert } from '@/components/ui/alert';
@@ -44,6 +46,7 @@ function DetailsForm({ store }: { store: Store }) {
   const [contact, setContact] = useState(store.contact);
   const [social, setSocial] = useState(store.social);
   const [seo, setSeo] = useState(store.seo);
+  const categories = useCategories(org.id);
   const [note, setNote] = useState(store.checkout.note);
   const [minOrder, setMinOrder] = useState(
     store.checkout.minOrderMinor ? minorToInput(store.checkout.minOrderMinor, org.currency) : '',
@@ -236,6 +239,23 @@ function DetailsForm({ store }: { store: Store }) {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid gap-5">
+            <PageSeoWriter
+              kind="store"
+              name={name}
+              about={[
+                seo.title,
+                seo.description,
+                categories.data?.length
+                  ? `Sells: ${categories.data.map((c) => c.name).join(', ')}`
+                  : '',
+                contact.address,
+              ]
+                .filter(Boolean)
+                .join('\n')}
+              language={language}
+              disabled={!editable || busy}
+              onUse={(s) => setSeo(s)}
+            />
             <Field
               label="Title"
               htmlFor="d-seo-title"
