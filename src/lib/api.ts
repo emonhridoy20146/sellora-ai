@@ -1,6 +1,7 @@
 import 'server-only';
 import { cookies, headers } from 'next/headers';
 import { cache } from 'react';
+import { AB_HEADER } from './ab';
 import { internalApiUrl } from './internal-url';
 import { clientIp } from './request';
 import type { Problem, Store } from './types';
@@ -25,6 +26,8 @@ export interface ShopContext {
   preview?: string;
   ip?: string;
   userAgent?: string;
+  /** The browser's landing page A/B test id (ADR 0031). */
+  abVisitor?: string;
 }
 
 /** The shopper's address, from the proxy's X-Forwarded-For (never trusted beyond PROXY_HOPS). */
@@ -32,11 +35,16 @@ export function shopperIp(h: Headers): string | undefined {
   return clientIp(h.get('x-forwarded-for'), h.get('x-real-ip'), PROXY_HOPS);
 }
 
-export function contextFrom(h: Headers, preview: string | undefined): ShopContext {
+export function contextFrom(
+  h: Headers,
+  preview: string | undefined,
+  abVisitor?: string | undefined,
+): ShopContext {
   const ip = shopperIp(h);
   return {
     host: h.get('host') ?? '',
     ...(preview ? { preview } : {}),
+    ...(abVisitor ? { abVisitor } : {}),
     ...(ip ? { ip } : {}),
     ...(h.get('user-agent') ? { userAgent: h.get('user-agent')!.slice(0, 300) } : {}),
   };
@@ -71,6 +79,7 @@ export async function callApi(
       ...(ctx.preview ? { 'x-store-preview': ctx.preview } : {}),
       ...(ctx.ip ? { 'x-shopper-ip': ctx.ip } : {}),
       ...(ctx.userAgent ? { 'x-shopper-agent': ctx.userAgent } : {}),
+      ...(ctx.abVisitor ? { [AB_HEADER]: ctx.abVisitor } : {}),
       ...(opts.idempotencyKey ? { 'idempotency-key': opts.idempotencyKey } : {}),
       ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
       accept: 'application/json',

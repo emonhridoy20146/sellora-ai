@@ -2,9 +2,10 @@
 
 import { Minus, Plus } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { cartToken, landingCartTokenKey, setCartToken, useCartCapture } from '@/lib/cart-capture';
 import { cn } from '@/lib/cn';
+import { checkRefusal, couponProblemText } from '@/lib/coupon';
 import { dictionary } from '@/lib/i18n';
 import {
   attributionKey,
@@ -31,13 +32,16 @@ import type {
   DeliveryZone,
   Language,
   LandingAddOnOffer,
+  LandingCouponQuote,
   LandingPackage,
   LandingPayments,
   LandingPlaced,
   LandingProduct,
 } from '@/lib/types';
 import { useAdTags } from '../ad-tags';
+import { CouponBox, type CouponBoxState } from '../coupon-box';
 import { PaymentChoice } from '../payment-choice';
+import { PICK_PACKAGE_EVENT, USE_COUPON_EVENT } from './offer-actions';
 
 const inputClass =
   'h-12 w-full rounded-store border border-line bg-surface px-3 text-base text-ink placeholder:text-muted aria-invalid:border-red-600';
@@ -90,6 +94,15 @@ export interface LandingOrderFormProps {
   cartReminders: boolean;
   /** How shoppers may pay; without it, cash on delivery only. */
   payments?: LandingPayments | undefined;
+  /** Show a coupon code box (a coupon works on the page, or a banner offers one). */
+  couponBox?: boolean;
+}
+
+/** A code the API accepted for the choice as it was when checked. */
+interface AppliedCoupon {
+  code: string;
+  discountMinor: number;
+  freeDelivery: boolean;
 }
 
 /**
@@ -134,16 +147,29 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
   const [placing, setPlacing] = useState(false);
   const ads = useAdTags();
   const checkoutReported = useRef(false);
+  const [coupon, setCoupon] = useState<CouponBoxState>({ status: 'idle' });
+  const [applied, setApplied] = useState<AppliedCoupon | null>(null);
+  const [couponOpen, setCouponOpen] = useState(false);
 
   const variant = variantFor(product, chosen);
   const pkg = packages.find((p) => p.id === packageId);
-  const totals = offerTotals(props, {
+  const plain = offerTotals(props, {
     packageId,
     variantId: variant?.id ?? null,
     quantity,
     addOn: withAddOn,
     zoneId,
   });
+  // The coupon's saving, as the API worked it out for this choice (checked again on change).
+  const couponOff = applied ? applied.discountMinor : 0;
+  const freeDelivery = Boolean(applied?.freeDelivery && plain?.deliveryMinor);
+  const totals = plain
+    ? {
+        ...plain,
+        deliveryMinor: freeDelivery ? 0 : plain.deliveryMinor,
+        totalMinor: plain.totalMinor - couponOff - (freeDelivery ? (plain.deliveryMinor ?? 0) : 0),
+      }
+    : null;
   const options = landingOptions(props.payments, {
     totalMinor: totals?.totalMinor ?? 0,
     deliveryChargeMinor: totals?.deliveryMinor ?? 0,
@@ -193,7 +219,82 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
     zoneId: zones.length ? zoneId : null,
     ...(props.noteField && note.trim() ? { note: note.trim() } : {}),
     ...(paymentBody(pick, options) ? { payment: paymentBody(pick, options) } : {}),
+    ...(applied ? { couponCode: applied.code } : {}),
   });
+
+  /** Asks the API what `code` takes off the current choice. */
+  const checkCoupon = async (code: string, quiet = false) => {
+    if (!variant) return;
+    if (!quiet) setCoupon({ status: 'checking', code });
+    try {
+      const res = await fetch(`/api/landing/${encodeURIComponent(slug)}/coupon`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          code,
+          packageId: packages.length ? packageId : null,
+          variantId: variant.id,
+          ...(packages.length ? {} : { quantity }),
+          addOn: Boolean(addOn && withAddOn),
+          zoneId: zones.length ? zoneId : null,
+          ...(isBdMobile(details.phone)
+            ? { phone: asciiDigits(details.phone).replace(/[\s-]/g, '') }
+            : {}),
+        }),
+      });
+      const r = await readJson<LandingCouponQuote>(res, t);
+      if (!r.ok) {
+        setApplied(null);
+        setCoupon({ status: 'refused', code, message: couponProblemText(r.problem, t, money) });
+        return;
+      }
+      const c = r.data.coupon;
+      if (c.valid) {
+        setApplied({ code: c.code, discountMinor: c.discountMinor, freeDelivery: c.freeDelivery });
+        setCoupon({ status: 'applied', code: c.code });
+      } else {
+        setApplied(null);
+        setCoupon({ status: 'refused', code, message: checkRefusal(c, t, money) });
+      }
+    } catch {
+      setCoupon({ status: 'refused', code, message: t.tryAgain });
+    }
+  };
+
+  // An applied code is checked again when the choice changes (a percentage follows it).
+  const choiceKey = JSON.stringify([packageId, variant?.id, quantity, withAddOn, zoneId]);
+  const lastChoice = useRef(choiceKey);
+  useEffect(() => {
+    if (lastChoice.current === choiceKey) return;
+    lastChoice.current = choiceKey;
+    if (!applied) return;
+    const timer = setTimeout(() => void checkCoupon(applied.code, true), 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the choice changes
+  }, [choiceKey]);
+
+  // Package cards and coupon banners elsewhere on the page talk to the form.
+  const latest = useRef({ checkCoupon, packages });
+  useEffect(() => {
+    latest.current = { checkCoupon, packages };
+  });
+  useEffect(() => {
+    const onPackage = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (latest.current.packages.some((p) => p.id === id)) setPackageId(id);
+    };
+    const onCoupon = (e: Event) => {
+      const code = (e as CustomEvent<string>).detail;
+      setCouponOpen(true);
+      void latest.current.checkCoupon(code);
+    };
+    window.addEventListener(PICK_PACKAGE_EVENT, onPackage);
+    window.addEventListener(USE_COUPON_EVENT, onCoupon);
+    return () => {
+      window.removeEventListener(PICK_PACKAGE_EVENT, onPackage);
+      window.removeEventListener(USE_COUPON_EVENT, onCoupon);
+    };
+  }, []);
 
   /** One key per order as filled in: a retry after a lost answer cannot order twice. */
   const idempotencyKey = (hash: string) => {
@@ -279,6 +380,17 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
         return;
       }
       const p = r.problem;
+      if (p.code === 'coupon_invalid' && applied) {
+        // The code stopped working since it was applied: say why next to it.
+        setApplied(null);
+        setCoupon({
+          status: 'refused',
+          code: applied.code,
+          message: couponProblemText(p, t, money),
+        });
+        setPlacing(false);
+        return;
+      }
       setErrors(fieldErrors(p));
       setFormError(
         p.code === 'not_enough_stock' && typeof p.left === 'number'
@@ -592,6 +704,20 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
 
       <div className="space-y-3 rounded-store-lg border border-line bg-surface p-5">
         <h3 className="font-semibold">{t.yourOrder}</h3>
+        {props.couponBox ? (
+          <CouponBox
+            id={fid('couponCode')}
+            t={t}
+            state={coupon}
+            open={couponOpen}
+            onApply={(code) => void checkCoupon(code)}
+            onRemove={() => {
+              setApplied(null);
+              setCoupon({ status: 'idle' });
+              setCouponOpen(false);
+            }}
+          />
+        ) : null}
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between gap-3">
             <dt className="min-w-0">
@@ -629,6 +755,18 @@ export function LandingOrderForm(props: LandingOrderFormProps) {
               )}
             </dd>
           </div>
+          {applied && couponOff > 0 ? (
+            <div className="flex justify-between gap-3 text-primary">
+              <dt>{t.couponLine(applied.code)}</dt>
+              <dd>−{money(couponOff)}</dd>
+            </div>
+          ) : null}
+          {freeDelivery ? (
+            <div className="flex justify-between gap-3 text-primary">
+              <dt>{t.couponFreeDelivery}</dt>
+              <dd />
+            </div>
+          ) : null}
           {totals && totals.savingMinor > 0 ? (
             <div className="flex justify-between gap-3 text-primary">
               <dt>{t.youSave(money(totals.savingMinor))}</dt>

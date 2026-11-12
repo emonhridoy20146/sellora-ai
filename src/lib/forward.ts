@@ -1,5 +1,6 @@
 import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';
+import { AB_COOKIE, validAbId } from './ab';
 import { PREVIEW_COOKIE, callApi, contextFrom } from './api';
 import { sameOrigin } from './request';
 
@@ -38,6 +39,8 @@ export async function forward(
   const ctx = contextFrom(
     req.headers,
     opts.allowPreview ? req.cookies.get(PREVIEW_COOKIE)?.value : undefined,
+    // A landing page's visit, order and coupon count for the version this browser sees.
+    validAbId(req.cookies.get(AB_COOKIE)?.value),
   );
   const idempotencyKey = opts.idempotent ? req.headers.get('idempotency-key') : null;
   try {

@@ -157,6 +157,16 @@ suspended store shows "not available", and an address with no store shows a page
   prices it again. Where the shopper came from (UTM tags, ad click ids, the referring site)
   is kept for the visit in session storage and sent with the order; a small beacon counts the
   visit once the page has rendered.
+- **Landing page extras** (ADR 0031 in sellora-api). The 22 newer blocks are drawn by
+  `components/landing/more-sections.tsx`. A coupon box (`components/coupon-box.tsx`) shows on
+  the landing order form and the store checkout only when the API says a coupon could work
+  there (`couponBox`) or the page has a coupon banner; the code is checked with
+  `/api/landing/[slug]/coupon` or priced with the cart quote, and the API prices it again on
+  the order. "Use this code" and "Choose" on package cards talk to the order form through
+  window events (`components/landing/offer-actions.tsx`). For A/B tests `src/proxy.ts` gives a
+  browser on a landing page address a random id in the httpOnly cookie `sl_ab` (90 days) and
+  passes it on as `x-shopper-ab`, which the API uses to pick the version; nothing else about
+  the shopper is used.
 - **Cart reminders** (ADR 0018 in sellora-api). When the business has reminders on, the
   API's quote and landing page answers say so (`cartReminders`), the phone field says a
   reminder text may come, and `lib/cart-capture.ts` sends the cart 1.5 seconds after the

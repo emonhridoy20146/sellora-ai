@@ -191,6 +191,43 @@ export interface Quote {
   cartReminders?: boolean;
   /** How the shopper may pay for this cart (ADR 0029). */
   payments?: CheckoutPayments;
+  /** What the coupon code takes off (included in the totals), or why it does not work. */
+  coupon?: CouponCheck | null;
+  discountMinor?: number;
+  /** A coupon works in the store now, so the checkout shows a code box (ADR 0031). */
+  couponBox?: boolean;
+}
+
+export type CouponReason =
+  | 'invalid'
+  | 'not_started'
+  | 'ended'
+  | 'used_up'
+  | 'not_here'
+  | 'min_order'
+  | 'customer_limit'
+  | 'no_saving';
+
+/** The API's answer about a coupon code (ADR 0031). */
+export type CouponCheck =
+  | { valid: true; code: string; discountMinor: number; freeDelivery: boolean }
+  | {
+      valid: false;
+      code: string;
+      reason: CouponReason;
+      message: string;
+      minOrderMinor?: number;
+      startsAt?: string;
+    };
+
+/** "Apply" in a landing page's order form: the choice priced with the code. */
+export interface LandingCouponQuote {
+  coupon: CouponCheck;
+  goodsMinor: number;
+  discountMinor: number;
+  deliveryChargeMinor: number;
+  totalMinor: number;
+  currency: string;
 }
 
 export type ShopGatewayKey = 'bkash' | 'nagad' | 'sslcommerz' | 'aamarpay' | 'shurjopay';
@@ -390,6 +427,79 @@ export type LandingSection = LandingBase &
     | { type: 'contact'; heading: string; text: string; call: boolean; whatsapp: boolean }
     | { type: 'text'; heading: string; body: string }
     | { type: 'order_form'; heading: string; subheading: string; buttonLabel: string }
+    // ---- added in ADR 0031
+    | { type: 'announcement'; text: string; tone: 'offer' | 'info' | 'urgent' }
+    | {
+        type: 'video_hero';
+        heading: string;
+        subheading: string;
+        url: string;
+        buttonLabel: string;
+        embed?: VideoEmbed | null;
+      }
+    | {
+        type: 'features';
+        title: string;
+        items: { icon: FeatureIcon; title: string; text: string }[];
+      }
+    | { type: 'checklist'; title: string; items: string[] }
+    | {
+        type: 'comparison';
+        title: string;
+        ourLabel: string;
+        otherLabel: string;
+        rows: { label: string; ours: string; others: string }[];
+      }
+    | {
+        type: 'ingredients';
+        title: string;
+        items: { name: string; text: string; image: LandingImage | null }[];
+      }
+    | { type: 'timeline'; title: string; items: { label: string; text: string }[] }
+    | {
+        type: 'who_for';
+        title: string;
+        forTitle: string;
+        forItems: string[];
+        notForTitle: string;
+        notForItems: string[];
+      }
+    | { type: 'stats'; title: string; items: { value: string; label: string }[] }
+    | {
+        type: 'orders_today';
+        /** "{count}" becomes `count`. The API leaves the section out below its minimum. */
+        text: string;
+        minCount: number;
+        count?: number;
+      }
+    | {
+        type: 'video_reviews';
+        title: string;
+        items: { url: string; name: string; embed?: VideoEmbed | null }[];
+      }
+    | { type: 'quote'; text: string; name: string; role: string; image: LandingImage | null }
+    | { type: 'certificates'; title: string; items: { image: LandingImage; caption: string }[] }
+    | {
+        type: 'image_text';
+        heading: string;
+        body: string;
+        image: LandingImage | null;
+        imageSide: 'left' | 'right';
+      }
+    | { type: 'about'; heading: string; body: string; image: LandingImage | null }
+    | {
+        type: 'size_chart';
+        title: string;
+        columns: string[];
+        rows: { cells: string[] }[];
+        note: string;
+      }
+    | { type: 'packages'; heading: string; text: string }
+    | { type: 'payment_methods'; heading: string; text: string }
+    | { type: 'coupon_banner'; heading: string; code: string; text: string }
+    | { type: 'call_to_action'; heading: string; text: string; buttonLabel: string }
+    | { type: 'location'; heading: string; address: string; hours: string; mapUrl: string }
+    | { type: 'spacer'; size: 'small' | 'medium' | 'large'; line: boolean }
   );
 
 export type LandingSectionOf<T extends LandingSection['type']> = Extract<
@@ -486,6 +596,8 @@ export interface LandingView extends LandingHead {
   payments?: LandingPayments;
   /** The business's own ad tags for this page; null in a preview (ADR 0030). */
   tracking?: AdTags | null;
+  /** A coupon works on this page now, so the order form shows a code box (ADR 0031). */
+  couponBox?: boolean;
 }
 
 export type Landing = LandingHead | LandingView;
