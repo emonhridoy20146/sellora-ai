@@ -4,10 +4,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { api } from '@/lib/api/client';
 import type {
+  AbTestList,
   LandingPage,
   LandingPageList,
   LandingStats,
-  LandingTemplate,
+  LandingTemplateList,
   LandingVersion,
 } from '@/lib/api/types';
 
@@ -18,6 +19,7 @@ export const landingKeys = {
   stats: (orgId: string, id: string, days: number) =>
     ['org', orgId, 'landing-pages', id, 'stats', days] as const,
   templates: (orgId: string) => ['org', orgId, 'landing-pages', 'templates'] as const,
+  abTests: (orgId: string, id: string) => ['org', orgId, 'landing-pages', id, 'ab-tests'] as const,
 };
 
 export function useLandingPages(orgId: string) {
@@ -52,11 +54,17 @@ export function useLandingStats(orgId: string, id: string, days: number) {
 export function useLandingTemplates(orgId: string) {
   return useQuery({
     queryKey: landingKeys.templates(orgId),
-    queryFn: () =>
-      api<{ items: LandingTemplate[]; starterTexts: string[] }>(
-        `/orgs/${orgId}/landing-pages/templates`,
-      ),
-    staleTime: 30 * 60_000,
+    queryFn: () => api<LandingTemplateList>(`/orgs/${orgId}/landing-pages/templates`),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** The page's A/B tests (ADR 0031); refreshed every half minute while one runs. */
+export function useAbTests(orgId: string, id: string) {
+  return useQuery({
+    queryKey: landingKeys.abTests(orgId, id),
+    queryFn: () => api<AbTestList>(`/orgs/${orgId}/landing-pages/${id}/ab-tests`),
+    refetchInterval: (q) => (q.state.data?.running ? 30_000 : false),
   });
 }
 

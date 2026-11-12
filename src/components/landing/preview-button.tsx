@@ -18,9 +18,12 @@ export function LandingPreviewButton({
   label = 'Preview',
   variant = 'outline',
   size,
+  kind = 'draft',
 }: {
   orgId: string;
   pageId: string;
+  /** Which version: the saved draft, the one in review, the scheduled one, or test version B. */
+  kind?: 'draft' | 'submission' | 'scheduled' | 'ab_test';
   label?: string;
   variant?: 'outline' | 'default' | 'ghost';
   size?: 'sm';
@@ -37,7 +40,7 @@ export function LandingPreviewButton({
         setBusy(true);
         api<PreviewLink>(`/orgs/${orgId}/landing-pages/${pageId}/preview`, {
           method: 'POST',
-          body: { kind: 'draft' },
+          body: { kind },
         })
           .then((link) => {
             if (tab) {

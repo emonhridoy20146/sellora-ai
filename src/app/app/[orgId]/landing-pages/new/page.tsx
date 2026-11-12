@@ -1,7 +1,7 @@
 'use client';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -10,6 +10,8 @@ import { ProductThumb } from '@/components/commerce/product-thumb';
 import { landingKeys, useLandingTemplates } from '@/components/landing/hooks';
 import { ProductChooser } from '@/components/landing/offer-editor';
 import { SlugField } from '@/components/landing/slug-field';
+import { TemplatePicker, type TemplateChoice } from '@/components/landing/template-picker';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useOrg } from '@/components/org-context';
 import { useStores } from '@/components/stores/hooks';
 import { Alert } from '@/components/ui/alert';
@@ -21,10 +23,9 @@ import { Segmented } from '@/components/ui/segmented';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api/client';
 import { ApiError, errorMessage } from '@/lib/api/errors';
-import type { LandingLanguage, LandingPage, LandingTemplateKey, Product } from '@/lib/api/types';
+import type { LandingLanguage, LandingPage, Product } from '@/lib/api/types';
 import { formatMoney } from '@/lib/format';
 import { slugProblem, toSlug } from '@/lib/landing';
-import { cn } from '@/lib/utils';
 
 export default function NewLandingPage() {
   const { org, can } = useOrg();
@@ -34,7 +35,8 @@ export default function NewLandingPage() {
   const templates = useLandingTemplates(org.id);
   const [storeId, setStoreId] = useState<string | null>(null);
   const [product, setProduct] = useState<Product | null>(null);
-  const [template, setTemplate] = useState<LandingTemplateKey>('full_offer');
+  const [template, setTemplate] = useState<TemplateChoice>({ kind: 'builtin', key: 'full_offer' });
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [language, setLanguage] = useState<LandingLanguage | null>(null);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -46,7 +48,10 @@ export default function NewLandingPage() {
   const usable = (stores.data?.items ?? []).filter((s) => s.status !== 'suspended');
   // One store is the usual case: it is chosen without asking.
   const store = usable.find((s) => s.id === storeId) ?? (usable.length === 1 ? usable[0]! : null);
-  const lang = language ?? store?.language ?? 'en';
+  const mine =
+    template.kind === 'mine' ? templates.data?.mine.items.find((t) => t.id === template.id) : null;
+  // A saved template keeps the language it was written in unless another is chosen.
+  const lang = language ?? mine?.language ?? store?.language ?? 'en';
 
   const pickProduct = (p: Product) => {
     setProduct(p);
@@ -70,7 +75,7 @@ export default function NewLandingPage() {
           name: name.trim(),
           ...(s ? { slug: s } : {}),
           productId: product.id,
-          template,
+          ...(template.kind === 'mine' ? { templateId: template.id } : { template: template.key }),
           language: lang,
         },
       });
@@ -181,29 +186,12 @@ export default function NewLandingPage() {
             </CardHeader>
             <CardContent className="grid gap-4">
               {templates.data ? (
-                <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Template">
-                  {templates.data.items.map((t) => (
-                    <button
-                      key={t.key}
-                      type="button"
-                      role="radio"
-                      aria-checked={template === t.key}
-                      onClick={() => setTemplate(t.key)}
-                      className={cn(
-                        'relative grid content-start gap-1 rounded-lg border p-4 text-left transition-colors',
-                        template === t.key
-                          ? 'border-primary bg-info-soft'
-                          : 'hover:border-foreground/30',
-                      )}
-                    >
-                      {template === t.key && (
-                        <Check className="absolute top-3 right-3 size-4 text-primary" aria-hidden />
-                      )}
-                      <span className="font-medium">{t.name}</span>
-                      <span className="text-[13px] text-muted-foreground">{t.description}</span>
-                    </button>
-                  ))}
-                </div>
+                <TemplatePicker
+                  data={templates.data}
+                  value={template}
+                  onChange={setTemplate}
+                  onDelete={setDeleting}
+                />
               ) : (
                 <Skeleton className="h-28" />
               )}
@@ -255,6 +243,23 @@ export default function NewLandingPage() {
               />
             </CardContent>
           </Card>
+
+          <ConfirmDialog
+            open={deleting !== null}
+            onOpenChange={(o) => !o && setDeleting(null)}
+            title="Delete this template?"
+            description="Pages made from it stay as they are."
+            confirmLabel="Delete template"
+            destructive
+            onConfirm={async () => {
+              await api(`/orgs/${org.id}/landing-pages/templates/${deleting}`, { method: 'DELETE' });
+              if (template.kind === 'mine' && template.id === deleting)
+                setTemplate({ kind: 'builtin', key: 'full_offer' });
+              setDeleting(null);
+              await queryClient.invalidateQueries({ queryKey: landingKeys.templates(org.id) });
+              toast.success('Template deleted');
+            }}
+          />
 
           {error && <Alert tone="danger">{error}</Alert>}
           <div className="flex justify-end gap-2">

@@ -147,3 +147,19 @@ export function formatStorage(bytes: number): string {
   const gb = mb / 1000;
   return `${formatNumber(gb, { digits: gb < 10 ? 2 : gb < 100 ? 1 : 0 })} GB`;
 }
+
+/** A datetime-local input value in the browser's time zone for an ISO time ('' for none). */
+export function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** A datetime-local input value back to an ISO time, or null when empty or not a time. */
+export function fromLocalInput(v: string): string | null {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}

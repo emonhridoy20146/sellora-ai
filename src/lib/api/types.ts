@@ -812,8 +812,22 @@ export interface Order {
   editable: boolean;
   /** The inbox conversation the order was placed in (by the AI sales agent or staff). */
   conversationId: string | null;
-  /** The landing page the order was placed on. */
-  landingPage?: { id: string; name: string; slug: string } | null;
+  /** The landing page the order was placed on, and the A/B test version shown (ADR 0031). */
+  landingPage?: {
+    id: string;
+    name: string;
+    slug: string;
+    abTestId?: string | null;
+    variant?: 'a' | 'b' | null;
+  } | null;
+  /** The coupon the shopper used (ADR 0031); `released` once a cancel gave the use back. */
+  coupon?: {
+    id: string;
+    code: string;
+    discountMinor: number;
+    freeDelivery: boolean;
+    released: boolean;
+  } | null;
   /** Where the shopper came from (ad links), for landing page orders. */
   attribution?: OrderAttribution | null;
   /** The latest courier booking, kept in step with the parcel (null before any booking). */
@@ -1741,9 +1755,12 @@ export type OrderAttribution = Partial<
 
 export type LandingLanguage = 'en' | 'bn';
 export type LandingStatus =
-  'draft' | 'in_review' | 'changes_requested' | 'live' | 'paused' | 'taken_down';
+  'draft' | 'in_review' | 'changes_requested' | 'scheduled' | 'live' | 'paused' | 'taken_down';
 export type HideOn = 'none' | 'mobile' | 'desktop';
-export type LandingTemplateKey = 'full_offer' | 'problem_solution' | 'quick_order';
+/** A built-in template's key (30 of them, ADR 0031). */
+export type LandingTemplateKey = string;
+export type LandingTemplateCategory =
+  'general' | 'health' | 'beauty' | 'fashion' | 'gadgets' | 'food' | 'courses' | 'home' | 'kids';
 
 export interface LandingImage {
   fileId: string;
@@ -1807,6 +1824,62 @@ export type LandingSection = LandingBase &
     | { type: 'contact'; heading: string; text: string; call: boolean; whatsapp: boolean }
     | { type: 'text'; heading: string; body: string }
     | { type: 'order_form'; heading: string; subheading: string; buttonLabel: string }
+    // ---- added in ADR 0031
+    | { type: 'announcement'; text: string; tone: 'offer' | 'info' | 'urgent' }
+    | { type: 'video_hero'; heading: string; subheading: string; url: string; buttonLabel: string }
+    | {
+        type: 'features';
+        title: string;
+        items: { icon: FeatureIcon; title: string; text: string }[];
+      }
+    | { type: 'checklist'; title: string; items: string[] }
+    | {
+        type: 'comparison';
+        title: string;
+        ourLabel: string;
+        otherLabel: string;
+        rows: { label: string; ours: string; others: string }[];
+      }
+    | {
+        type: 'ingredients';
+        title: string;
+        items: { name: string; text: string; image: LandingImage | null }[];
+      }
+    | { type: 'timeline'; title: string; items: { label: string; text: string }[] }
+    | {
+        type: 'who_for';
+        title: string;
+        forTitle: string;
+        forItems: string[];
+        notForTitle: string;
+        notForItems: string[];
+      }
+    | { type: 'stats'; title: string; items: { value: string; label: string }[] }
+    | { type: 'orders_today'; text: string; minCount: number }
+    | { type: 'video_reviews'; title: string; items: { url: string; name: string }[] }
+    | { type: 'quote'; text: string; name: string; role: string; image: LandingImage | null }
+    | { type: 'certificates'; title: string; items: { image: LandingImage; caption: string }[] }
+    | {
+        type: 'image_text';
+        heading: string;
+        body: string;
+        image: LandingImage | null;
+        imageSide: 'left' | 'right';
+      }
+    | { type: 'about'; heading: string; body: string; image: LandingImage | null }
+    | {
+        type: 'size_chart';
+        title: string;
+        columns: string[];
+        rows: { cells: string[] }[];
+        note: string;
+      }
+    | { type: 'packages'; heading: string; text: string }
+    | { type: 'payment_methods'; heading: string; text: string }
+    | { type: 'coupon_banner'; heading: string; code: string; text: string }
+    | { type: 'call_to_action'; heading: string; text: string; buttonLabel: string }
+    | { type: 'location'; heading: string; address: string; hours: string; mapUrl: string }
+    | { type: 'spacer'; size: 'small' | 'medium' | 'large'; line: boolean }
   );
 export type LandingSectionType = LandingSection['type'];
 
@@ -1860,11 +1933,25 @@ export interface LandingPageSummary {
   submission: {
     status: 'pending' | 'rejected';
     revision: number;
+    /** Publish (now or at `publishAt`) or start an A/B test once approved (ADR 0031). */
+    purpose: 'publish' | 'ab_test';
+    publishAt: IsoDate | null;
+    abTest: Partial<AbTestSettings> | null;
     submittedAt: IsoDate;
     decidedAt: IsoDate | null;
     reason: string | null;
     flags: StoreReviewFlag[];
   } | null;
+  /** An approved version waiting for its time (ADR 0031). */
+  scheduled: {
+    revision: number;
+    publishAt: IsoDate;
+    approvedAt: IsoDate;
+    autoApproved: boolean;
+  } | null;
+  /** When the offer ends the page pauses itself. */
+  pauseAt: IsoDate | null;
+  abTest: { id: string; splitB: number } | null;
   published: {
     version: number;
     revision: number;
@@ -1890,8 +1977,111 @@ export interface LandingPageList {
 
 export interface LandingTemplate {
   key: LandingTemplateKey;
+  category: LandingTemplateCategory;
   name: string;
   description: string;
+}
+
+/** One of the business's own templates (ADR 0031). */
+export interface MyLandingTemplate {
+  id: string;
+  name: string;
+  description: string;
+  language: LandingLanguage;
+  sections: number;
+  packages: number;
+  pictures: number;
+  cover: string | null;
+  createdAt: IsoDate;
+}
+
+export interface LandingTemplateList {
+  items: LandingTemplate[];
+  categories: { key: LandingTemplateCategory; label: string }[];
+  starterTexts: string[];
+  mine: { items: MyLandingTemplate[]; limit: number };
+}
+
+// ---------------------------------------------------------------- A/B tests (ADR 0031)
+
+export interface AbTestSettings {
+  /** Percent of visitors who see version B. */
+  splitB: number;
+  autoWinner: boolean;
+  minVisitors: number;
+  maxDays: number;
+}
+
+export interface AbCounts {
+  visitors: number;
+  buyers: number;
+  orders: number;
+  revenueMinor: number;
+}
+
+export interface AbTest {
+  id: string;
+  status: 'running' | 'ended';
+  settings: AbTestSettings;
+  a: { version: number };
+  b: { revision: number };
+  counts: { a: AbCounts; b: AbCounts };
+  result: {
+    rateA: number | null;
+    rateB: number | null;
+    lift: number | null;
+    confidence: number | null;
+    leader: 'a' | 'b' | null;
+    enoughVisitors: boolean;
+  };
+  startedAt: IsoDate;
+  endsBy: IsoDate | null;
+  days: number;
+  endedAt: IsoDate | null;
+  endReason: 'chosen' | 'auto_winner' | 'no_clear_winner' | 'taken_down' | null;
+  winner: 'a' | 'b' | null;
+  publishedVersion: number | null;
+}
+
+export interface AbTestList {
+  items: AbTest[];
+  running: string | null;
+}
+
+// ---------------------------------------------------------------- coupons (ADR 0031)
+
+export type CouponKind = 'percent' | 'amount' | 'free_delivery';
+export type CouponLandingScope = 'all' | 'chosen' | 'none';
+export type CouponState = 'active' | 'scheduled' | 'ended' | 'used_up' | 'off';
+
+export interface Coupon {
+  id: string;
+  code: string;
+  note: string;
+  kind: CouponKind;
+  percent: number | null;
+  amountMinor: number | null;
+  maxDiscountMinor: number | null;
+  minOrderMinor: number;
+  startsAt: IsoDate | null;
+  endsAt: IsoDate | null;
+  usageLimit: number | null;
+  perCustomerLimit: number | null;
+  store: boolean;
+  landing: CouponLandingScope;
+  landingPageIds: string[];
+  active: boolean;
+  used: number;
+  discountGivenMinor: number;
+  state: CouponState;
+  createdAt: IsoDate;
+}
+
+export interface CouponList {
+  items: Coupon[];
+  limit: number;
+  /** The business's landing pages, to choose where a coupon works. */
+  landingPages: { id: string; name: string; slug: string }[];
 }
 
 export interface LandingSlugCheck {
@@ -2523,7 +2713,7 @@ export interface AutomationSend {
 export type BackupStatus = 'running' | 'verifying' | 'verified' | 'failed' | 'deleted';
 export type BackupTier = 'daily' | 'weekly' | 'monthly';
 export type RestorePart =
-  'products' | 'customers' | 'orders' | 'conversations' | 'landing_pages' | 'settings';
+  'products' | 'customers' | 'orders' | 'conversations' | 'landing_pages' | 'coupons' | 'settings';
 
 export interface BackupActor {
   type: 'platform' | 'user' | 'system';

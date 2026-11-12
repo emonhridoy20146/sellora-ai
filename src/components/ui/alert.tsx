@@ -23,15 +23,18 @@ export function Alert({
   children,
   action,
   className,
+  icon,
 }: {
   tone?: keyof typeof tones;
+  /** Another icon in the tone's colour, when it says more than the tone's own. */
+  icon?: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>;
   title?: React.ReactNode;
   children?: React.ReactNode;
   action?: React.ReactNode;
   className?: string;
 }) {
   const t = tones[tone];
-  const Icon = t.icon;
+  const Icon = icon ?? t.icon;
   return (
     <div
       role={tone === 'danger' ? 'alert' : 'status'}

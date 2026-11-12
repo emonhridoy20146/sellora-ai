@@ -261,11 +261,23 @@ function ItemsCard({ order, onSaved }: { order: Order; onSaved: (o: Order) => vo
               </div>
               {order.discountMinor > 0 && (
                 <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Discount</dt>
+                  <dt className="text-muted-foreground">
+                    Discount
+                    {order.coupon && order.coupon.discountMinor > 0 && (
+                      <span className="ml-1 font-mono text-xs">({order.coupon.code})</span>
+                    )}
+                  </dt>
                   <dd>
                     −<Money minor={order.discountMinor} currency={c} />
                   </dd>
                 </div>
+              )}
+              {order.coupon && (order.coupon.freeDelivery || order.coupon.released) && (
+                <p className="text-xs text-muted-foreground">
+                  Coupon <span className="font-mono">{order.coupon.code}</span>
+                  {order.coupon.freeDelivery ? ' gave free delivery.' : '.'}
+                  {order.coupon.released && ' The order was cancelled, so the use was given back.'}
+                </p>
               )}
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">
@@ -539,6 +551,12 @@ function SourceCard({ order: o }: { order: Order }) {
               <span className="font-medium">{o.landingPage.name}</span>
             )}{' '}
             <span className="text-muted-foreground">/{o.landingPage.slug}</span>
+            {o.landingPage.variant && (
+              <span className="block text-[13px] text-muted-foreground">
+                A/B test: the shopper saw{' '}
+                {o.landingPage.variant === 'b' ? 'the new version (B)' : 'the live version (A)'}.
+              </span>
+            )}
           </p>
         )}
         {entries.length > 0 ? (

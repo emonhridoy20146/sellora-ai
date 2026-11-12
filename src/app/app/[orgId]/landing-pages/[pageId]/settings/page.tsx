@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { landingKeys, useLandingPage } from '@/components/landing/hooks';
+import { OfferEndCard } from '@/components/landing/offer-end-card';
 import { SlugField } from '@/components/landing/slug-field';
 import { useOrg } from '@/components/org-context';
 import { Alert } from '@/components/ui/alert';
@@ -127,6 +128,8 @@ function SettingsForm({ page }: { page: LandingPage }) {
           </fieldset>
         </CardContent>
       </Card>
+
+      {can('stores.publish') && <OfferEndCard page={page} orgId={org.id} />}
 
       {can('stores.publish') && (
         <Card>
