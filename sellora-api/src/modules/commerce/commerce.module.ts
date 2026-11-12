@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BillingModule } from '../billing/billing.module.js';
+import { CouponsCoreModule } from '../coupons/coupons.module.js';
 import { FilesCoreModule } from '../files/files.module.js';
 import { OrgsModule } from '../orgs/orgs.module.js';
 import {
@@ -54,6 +55,7 @@ const services = [
     OrgsModule,
     BillingModule,
     FilesCoreModule,
+    CouponsCoreModule,
     MongooseModule.forFeature([
       { name: 'Category', schema: categorySchema },
       { name: 'Product', schema: productSchema },

@@ -28,11 +28,13 @@ import {
   packageCharge,
   parseVideoUrl,
   type LandingContent,
-  type LandingSection,
 } from './blocks.js';
+import { LandingAbTestsService, type AbAssignment } from './landing-ab-tests.service.js';
 import type { LandingPageDoc } from './landing-pages.service.js';
 import { LandingPageRepository, LandingPageStatRepository } from './repositories.js';
 import { AdDestinationsService } from '../ad-tracking/ad-destinations.service.js';
+import { guardCouponTry } from '../coupons/coupon-guard.js';
+import { CouponsService, type AppliedCoupon } from '../coupons/coupons.service.js';
 import {
   AdEventsService,
   type BrowserEventInput,
@@ -52,8 +54,13 @@ export interface ResolvedLanding {
   store: ResolvedStore;
   page: LandingPageDoc;
   state: LandingState;
-  /** What is shown: the published version, or the draft or snapshot in a preview. */
+  /**
+   * What is shown: the published version (or version B of a running A/B test), or the
+   * draft or a snapshot in a preview.
+   */
   content: LandingContent | null;
+  /** The A/B test version this browser sees on a live page with a test (ADR 0031). */
+  ab: AbAssignment | null;
 }
 
 export interface LandingOrderInput {
@@ -75,6 +82,23 @@ export interface LandingOrderInput {
   payment?: PaymentChoice;
   /** The browser's ad ids and the shopper's tracking choice (ADR 0030). */
   tracking?: BrowserIds;
+  /** A discount code the shopper typed (ADR 0031). */
+  couponCode?: string;
+}
+
+/** What the shopper chose in the order form, as the server prices it. */
+export interface LandingSelection {
+  packageId: string | null;
+  variantId: string;
+  quantity: number;
+  addOn: boolean;
+}
+
+export interface LandingCouponInput extends LandingSelection {
+  code: string;
+  zoneId: string | null;
+  /** The number typed so far, for the per-customer limit. */
+  phone?: string;
 }
 
 export interface LandingCartInput {
@@ -119,6 +143,8 @@ export class LandingStorefrontService {
     private readonly shopPayments: ShopPaymentsService,
     private readonly adEvents: AdEventsService,
     private readonly adDestinations: AdDestinationsService,
+    private readonly coupons: CouponsService,
+    private readonly abTests: LandingAbTestsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -133,11 +159,15 @@ export class LandingStorefrontService {
     return this.entitlements.hasModule(org._id.toHexString(), 'landing_pages');
   }
 
-  /** The page at `slug` on the store at `host`; null when there is no such page. */
+  /**
+   * The page at `slug` on the store at `host`; null when there is no such page. `abVisitor`
+   * is the browser's A/B id: on a page with a running test it picks the version shown.
+   */
   async resolve(
     host: string,
     slug: string,
     previewToken?: string,
+    abVisitor?: string,
   ): Promise<ResolvedLanding | null> {
     const store = await this.storefront.resolve(host);
     if (!store) return null;
@@ -145,23 +175,43 @@ export class LandingStorefrontService {
       this.pages.findOne({ storeId: store.store._id, slug: slug.toLowerCase() }),
     );
     if (!page) return null;
-    if (!(await this.available(store))) return { store, page, state: 'unavailable', content: null };
+    const closed = (state: 'unavailable' | 'paused'): ResolvedLanding => ({
+      store,
+      page,
+      state,
+      content: null,
+      ab: null,
+    });
+    if (!(await this.available(store))) return closed('unavailable');
     const preview = this.links.verifyLandingPreview(previewToken);
     if (preview && preview.pageId === page._id.toHexString()) {
-      const content =
-        preview.kind === 'submission' && page.submission ? page.submission.content : page.draft;
-      return { store, page, state: 'preview', content };
+      const snapshot =
+        preview.kind === 'submission'
+          ? page.submission?.content
+          : preview.kind === 'scheduled'
+            ? page.scheduled?.content
+            : preview.kind === 'ab_test'
+              ? page.abTest?.content
+              : undefined;
+      return { store, page, state: 'preview', content: snapshot ?? page.draft, ab: null };
     }
-    if (page.takedown) return { store, page, state: 'unavailable', content: null };
+    if (page.takedown) return closed('unavailable');
     // A page that was never published does not exist for shoppers.
     if (!page.published) return null;
-    if (page.paused || store.store.status === 'paused')
-      return { store, page, state: 'paused', content: null };
-    return { store, page, state: 'live', content: page.published.content };
+    if (page.paused || store.store.status === 'paused') return closed('paused');
+    const ab = this.abTests.assign(page, abVisitor);
+    const content =
+      ab?.variant === 'b' && page.abTest ? page.abTest.content : page.published.content;
+    return { store, page, state: 'live', content, ab };
   }
 
-  async require(host: string, slug: string, previewToken?: string): Promise<ResolvedLanding> {
-    const found = await this.resolve(host, slug, previewToken);
+  async require(
+    host: string,
+    slug: string,
+    previewToken?: string,
+    abVisitor?: string,
+  ): Promise<ResolvedLanding> {
+    const found = await this.resolve(host, slug, previewToken, abVisitor);
     if (!found) throw AppError.notFound('landing_page');
     return found;
   }
@@ -224,12 +274,29 @@ export class LandingStorefrontService {
   }
 
   /** Enabled sections only, with video links reduced to what the player needs. */
-  private sections(content: LandingContent) {
+  /**
+   * The sections a shopper sees, with what the browser cannot work out: video players and
+   * the real number of orders today ("orders today" shows only from its minimum).
+   */
+  private sections(content: LandingContent, ordersToday: number) {
     return content.sections
-      .filter((s) => s.enabled)
-      .map((s): LandingSection & { embed?: ReturnType<typeof parseVideoUrl> } =>
-        s.type === 'video' ? { ...s, embed: parseVideoUrl(s.url) } : s,
-      );
+      .filter((s) => s.enabled && (s.type !== 'orders_today' || ordersToday >= s.minCount))
+      .map((s) => {
+        if (s.type === 'video' || s.type === 'video_hero')
+          return { ...s, embed: parseVideoUrl(s.url) };
+        if (s.type === 'video_reviews')
+          return { ...s, items: s.items.map((x) => ({ ...x, embed: parseVideoUrl(x.url) })) };
+        if (s.type === 'orders_today') return { ...s, count: ordersToday };
+        return s;
+      });
+  }
+
+  /** Orders the page took today in the business's time zone (0 without the section). */
+  private async ordersToday(l: ResolvedLanding, content: LandingContent): Promise<number> {
+    if (!content.sections.some((s) => s.enabled && s.type === 'orders_today')) return 0;
+    const day = dayKey(new Date(), l.store.org.timezone);
+    const stat = await this.stats.findOne({ pageId: l.page._id, day });
+    return stat?.orders ?? 0;
   }
 
   /** Everything the storefront needs to render the page (or its "not available" page). */
@@ -270,7 +337,7 @@ export class LandingStorefrontService {
       const left = product ? this.stockLeft(product) : null;
       return {
         ...head,
-        sections: this.sections(content),
+        sections: this.sections(content, await this.ordersToday(l, content)),
         settings: content.settings,
         seo: {
           title: content.seo.title || page.name,
@@ -316,6 +383,11 @@ export class LandingStorefrontService {
         cartReminders: state === 'live' && (await this.carts.capturing()),
         // How the shopper may pay (ADR 0029); the form shows the advance as they choose.
         payments: await this.shopPayments.rules(currency),
+        // The order form shows a code box only when a coupon works on this page now.
+        couponBox: await this.coupons.offeredAt({
+          type: 'landing',
+          pageId: page._id.toHexString(),
+        }),
         // The business's pixels and tags (ADR 0030); previews load none.
         tracking:
           state === 'live'
@@ -370,6 +442,8 @@ export class LandingStorefrontService {
     if (!who) return { counted: false };
     const day = dayKey(new Date(), l.store.org.timezone);
     const key = `lp:visit:${l.page._id.toHexString()}:${day}:${sha256(who).slice(0, 32)}`;
+    // An A/B test counts each browser once for the whole test, apart from the daily count.
+    if (l.ab) await this.inPage(l, () => this.abTests.countVisit(l.ab!));
     const first = await this.redis.set(key, '1', 'EX', VISIT_TTL_S, 'NX');
     if (first !== 'OK') return { counted: false };
     await this.inPage(l, () => this.bump(l.page._id, day, { visitors: 1 }));
@@ -432,8 +506,6 @@ export class LandingStorefrontService {
   private async placeOrder(l: ResolvedLanding, input: LandingOrderInput) {
     const { store, org } = l.store;
     const page = l.page;
-    const content = l.content!;
-    const { offer } = content;
     const { phone } = await this.customers.normalizePhones(
       { phone: input.customer.phone },
       'customer.',
@@ -453,6 +525,158 @@ export class LandingStorefrontService {
     );
     if (previous) return this.placed(l, previous, true, null);
 
+    const { items, discountMinor, goodsMinor, packageLabel } = await this.priceSelection(l, input);
+
+    const settings = await this.shopSettings.get();
+    const zone = settings.deliveryZones.length
+      ? settings.deliveryZones.find((z) => z.id === input.zoneId)
+      : undefined;
+    if (settings.deliveryZones.length && (!input.zoneId || !zone))
+      throw AppError.validation([{ path: 'zoneId', message: 'Choose a delivery area' }]);
+    const zoneChargeMinor = zone?.chargeMinor ?? 0;
+    // A coupon is checked again here (it may have ended or been used up since Apply).
+    let coupon: AppliedCoupon | undefined;
+    if (input.couponCode?.trim()) {
+      await guardCouponTry(this.redis, this.limits, org._id.toHexString(), input.couponCode);
+      coupon = await this.coupons.prepare(
+        input.couponCode,
+        { type: 'landing', pageId: page._id.toHexString() },
+        { goodsMinor, deliveryChargeMinor: zoneChargeMinor },
+        phone,
+      );
+    }
+    const deliveryChargeMinor = coupon?.freeDelivery ? 0 : zoneChargeMinor;
+    const plan = this.shopPayments.plan(
+      input.payment,
+      await this.shopPayments.options({
+        totalMinor: goodsMinor - (coupon?.discountMinor ?? 0) + deliveryChargeMinor,
+        deliveryChargeMinor,
+        zoneId: zone?.id ?? null,
+        currency: org.currency,
+      }),
+    );
+
+    const note = [packageLabel ? `Package: ${packageLabel}` : '', input.note?.trim() ?? '']
+      .filter(Boolean)
+      .join('\n');
+    let order: OrderDoc;
+    try {
+      order = await this.orders.create({
+        customer: { name: input.customer.name, phone },
+        shippingAddress: {
+          name: input.customer.name,
+          phone,
+          line1: input.address.line1,
+          ...(input.address.area ? { area: input.address.area } : {}),
+          ...(input.address.city ? { city: input.address.city } : {}),
+          ...(input.address.district ? { district: input.address.district } : {}),
+        },
+        items,
+        discountMinor,
+        deliveryZoneId: settings.deliveryZones.length ? input.zoneId : null,
+        payment: { method: plan.method, ...(plan.online ? { online: plan.online } : {}) },
+        ...(note ? { customerNote: note } : {}),
+        status: 'pending',
+        source: 'landing_page',
+        customerSource: 'store',
+        storeId: store._id.toHexString(),
+        landingPage: {
+          id: page._id.toHexString(),
+          name: page.name,
+          slug: page.slug,
+          ...(l.ab ? { abTest: { id: l.ab.testId, variant: l.ab.variant } } : {}),
+        },
+        ...(input.attribution && Object.keys(input.attribution).length
+          ? { attribution: input.attribution }
+          : {}),
+        ...(coupon ? { coupon } : {}),
+      });
+    } catch (err) {
+      // A blocked customer gets the same answer as anyone the shop cannot serve online.
+      if (err instanceof AppError && err.code === 'customer_blocked')
+        throw AppError.unprocessable('order_not_accepted', NOT_ACCEPTED);
+      if (err instanceof AppError && err.code === 'plan_limit_reached') {
+        this.logger.warn(
+          { orgId: org._id.toHexString(), pageId: page._id.toHexString() },
+          'Landing page order refused: monthly order limit',
+        );
+        throw AppError.unprocessable('order_not_accepted', NOT_ACCEPTED);
+      }
+      throw err;
+    }
+    await this.bump(page._id, dayKey(order.placedAt, org.timezone), {
+      orders: 1,
+      revenueMinor: order.totalMinor,
+    });
+    if (l.ab) await this.abTests.countOrder(l.ab, order.totalMinor);
+    await this.storefront.closeCart(input.cartToken, order);
+    await this.adEvents.orderPlaced(
+      order,
+      { type: 'landing', id: page._id.toHexString() },
+      { ...input.tracking, fbclid: input.attribution?.fbclid, ttclid: input.attribution?.ttclid },
+    );
+    let payment: PaymentStart | null = null;
+    if (plan.online) {
+      const receipt = this.links.receiptToken(store._id.toHexString(), order._id.toHexString());
+      payment = await this.storefront.startPayment(
+        l.store,
+        order,
+        plan.online.gateway,
+        this.thanksUrl(l, receipt),
+      );
+    }
+    return this.placed(l, order, false, payment);
+  }
+
+  /**
+   * What a coupon code takes off the shopper's current choice (ADR 0031), with the totals
+   * the form shows. Only on live pages; never changes anything.
+   */
+  async couponCheck(l: ResolvedLanding, input: LandingCouponInput) {
+    if (l.state !== 'live')
+      throw AppError.conflict('offer_not_available', 'This offer is not available right now.');
+    return this.inPage(l, async () => {
+      const { org } = l.store;
+      await guardCouponTry(this.redis, this.limits, org._id.toHexString(), input.code);
+      const { goodsMinor } = await this.priceSelection(l, input);
+      const settings = await this.shopSettings.get();
+      const zone = settings.deliveryZones.find((z) => z.id === input.zoneId);
+      const zoneChargeMinor = zone?.chargeMinor ?? 0;
+      let phone: string | undefined;
+      if (input.phone?.trim()) {
+        try {
+          phone = (await this.customers.normalizePhones({ phone: input.phone }, 'phone.')).phone;
+        } catch {
+          // A half-typed number: the per-customer limit is checked when the order is placed.
+        }
+      }
+      const result = await this.coupons.check(
+        input.code,
+        { type: 'landing', pageId: l.page._id.toHexString() },
+        { goodsMinor, deliveryChargeMinor: zoneChargeMinor },
+        phone,
+      );
+      const off = result.valid ? result.discountMinor : 0;
+      const delivery = result.valid && result.freeDelivery ? 0 : zoneChargeMinor;
+      return {
+        coupon: result,
+        goodsMinor,
+        discountMinor: off,
+        deliveryChargeMinor: delivery,
+        totalMinor: goodsMinor - off + delivery,
+        currency: org.currency,
+      };
+    });
+  }
+
+  /**
+   * Prices the shopper's choice from the published offer and the catalog as they are now:
+   * the order lines, the package saving as a discount, and the goods total. Throws what the
+   * shopper should be told when the choice cannot be bought.
+   */
+  private async priceSelection(l: ResolvedLanding, input: LandingSelection) {
+    const { org } = l.store;
+    const { offer } = l.content!;
     const unavailable = () =>
       AppError.conflict('offer_not_available', 'This offer is not available right now.');
     const product = offer.productId ? await this.products.findById(offer.productId) : null;
@@ -525,87 +749,7 @@ export class LandingStorefrontService {
       discountMinor += charge.discountMinor;
       goodsMinor += charge.totalMinor;
     }
-
-    const settings = await this.shopSettings.get();
-    const zone = settings.deliveryZones.length
-      ? settings.deliveryZones.find((z) => z.id === input.zoneId)
-      : undefined;
-    if (settings.deliveryZones.length && (!input.zoneId || !zone))
-      throw AppError.validation([{ path: 'zoneId', message: 'Choose a delivery area' }]);
-    const deliveryChargeMinor = zone?.chargeMinor ?? 0;
-    const plan = this.shopPayments.plan(
-      input.payment,
-      await this.shopPayments.options({
-        totalMinor: goodsMinor + deliveryChargeMinor,
-        deliveryChargeMinor,
-        zoneId: zone?.id ?? null,
-        currency: org.currency,
-      }),
-    );
-
-    const note = [packageLabel ? `Package: ${packageLabel}` : '', input.note?.trim() ?? '']
-      .filter(Boolean)
-      .join('\n');
-    let order: OrderDoc;
-    try {
-      order = await this.orders.create({
-        customer: { name: input.customer.name, phone },
-        shippingAddress: {
-          name: input.customer.name,
-          phone,
-          line1: input.address.line1,
-          ...(input.address.area ? { area: input.address.area } : {}),
-          ...(input.address.city ? { city: input.address.city } : {}),
-          ...(input.address.district ? { district: input.address.district } : {}),
-        },
-        items,
-        discountMinor,
-        deliveryZoneId: settings.deliveryZones.length ? input.zoneId : null,
-        payment: { method: plan.method, ...(plan.online ? { online: plan.online } : {}) },
-        ...(note ? { customerNote: note } : {}),
-        status: 'pending',
-        source: 'landing_page',
-        customerSource: 'store',
-        storeId: store._id.toHexString(),
-        landingPage: { id: page._id.toHexString(), name: page.name, slug: page.slug },
-        ...(input.attribution && Object.keys(input.attribution).length
-          ? { attribution: input.attribution }
-          : {}),
-      });
-    } catch (err) {
-      // A blocked customer gets the same answer as anyone the shop cannot serve online.
-      if (err instanceof AppError && err.code === 'customer_blocked')
-        throw AppError.unprocessable('order_not_accepted', NOT_ACCEPTED);
-      if (err instanceof AppError && err.code === 'plan_limit_reached') {
-        this.logger.warn(
-          { orgId: org._id.toHexString(), pageId: page._id.toHexString() },
-          'Landing page order refused: monthly order limit',
-        );
-        throw AppError.unprocessable('order_not_accepted', NOT_ACCEPTED);
-      }
-      throw err;
-    }
-    await this.bump(page._id, dayKey(order.placedAt, org.timezone), {
-      orders: 1,
-      revenueMinor: order.totalMinor,
-    });
-    await this.storefront.closeCart(input.cartToken, order);
-    await this.adEvents.orderPlaced(
-      order,
-      { type: 'landing', id: page._id.toHexString() },
-      { ...input.tracking, fbclid: input.attribution?.fbclid, ttclid: input.attribution?.ttclid },
-    );
-    let payment: PaymentStart | null = null;
-    if (plan.online) {
-      const receipt = this.links.receiptToken(store._id.toHexString(), order._id.toHexString());
-      payment = await this.storefront.startPayment(
-        l.store,
-        order,
-        plan.online.gateway,
-        this.thanksUrl(l, receipt),
-      );
-    }
-    return this.placed(l, order, false, payment);
+    return { items, discountMinor, goodsMinor, packageLabel };
   }
 
   /** The page's thank-you address for an order (where gateways send the shopper back). */

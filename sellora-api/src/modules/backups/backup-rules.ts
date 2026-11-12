@@ -39,8 +39,14 @@ export const RESTORE_PARTS = {
   },
   landing_pages: {
     label: 'Landing pages',
-    collections: ['landing_pages', 'landing_page_versions'],
+    collections: [
+      'landing_pages',
+      'landing_page_versions',
+      'landing_ab_tests',
+      'landing_templates',
+    ],
   },
+  coupons: { label: 'Coupons', collections: ['coupons', 'coupon_uses'] },
   settings: {
     label: 'Settings',
     collections: [

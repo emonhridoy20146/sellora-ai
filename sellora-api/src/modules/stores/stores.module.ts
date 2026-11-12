@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { BillingModule } from '../billing/billing.module.js';
 import { CartsCoreModule } from '../carts/carts.module.js';
 import { CommerceCoreModule } from '../commerce/commerce.module.js';
+import { CouponsCoreModule } from '../coupons/coupons.module.js';
 import { CouriersCoreModule } from '../couriers/couriers.module.js';
 import { FilesCoreModule } from '../files/files.module.js';
 import { OrgsModule } from '../orgs/orgs.module.js';
@@ -50,6 +51,7 @@ import { StoresService } from './stores.service.js';
     BillingModule,
     CartsCoreModule,
     CommerceCoreModule,
+    CouponsCoreModule,
     CouriersCoreModule,
     FilesCoreModule,
     OrgsModule,

@@ -467,7 +467,14 @@ export class StorefrontController {
     @Headers(PREVIEW_HEADER) preview: string | undefined,
     @ZodBody(dto.cartBody) body: z.infer<typeof dto.cartBody>,
   ) {
-    return this.open(host, preview, (r) => this.storefront.cartQuote(r, body.items, body.zoneId));
+    return this.open(host, preview, (r) =>
+      this.storefront.cartQuote(
+        r,
+        body.items,
+        body.zoneId,
+        body.couponCode ? { code: body.couponCode, phone: body.phone } : undefined,
+      ),
+    );
   }
 
   @Post('carts')

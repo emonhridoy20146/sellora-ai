@@ -4,6 +4,7 @@ import type { Job, Queue } from 'bullmq';
 import { QUEUES } from '../infra/queue/queue.constants.js';
 import { BillingJobsService } from '../modules/billing/billing-jobs.service.js';
 import { FilesService } from '../modules/files/files.service.js';
+import { LandingPagesService } from '../modules/landing-pages/landing-pages.service.js';
 import { OrgsService } from '../modules/orgs/orgs.service.js';
 import { ShopPaymentsService } from '../modules/shop-payments/shop-payments.service.js';
 import { StoreDomainsService } from '../modules/stores/store-domains.service.js';
@@ -23,6 +24,7 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
     private readonly files: FilesService,
     private readonly domains: StoreDomainsService,
     private readonly shopPayments: ShopPaymentsService,
+    private readonly landingPages: LandingPagesService,
   ) {
     super();
   }
@@ -37,6 +39,8 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
       ['store-domains', 5 * 60_000],
       // Shoppers who paid online and never came back to the shop (ADR 0029).
       ['shop-payments', 5 * 60_000],
+      // Scheduled landing page versions, offer ends and automatic A/B winners (ADR 0031).
+      ['landing-pages', 60_000],
     ];
     for (const [name, every] of schedules) {
       await this.queue.upsertJobScheduler(name, { every }, { name });
@@ -59,6 +63,8 @@ export class MaintenanceProcessor extends WorkerHost implements OnApplicationBoo
         return this.domains.runDueChecks();
       case 'shop-payments':
         return this.shopPayments.sweep();
+      case 'landing-pages':
+        return this.landingPages.sweep();
       default:
         this.logger.warn({ name: job.name }, 'Unknown maintenance job');
         return null;

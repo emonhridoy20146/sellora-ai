@@ -346,6 +346,48 @@ export const mailTemplates = {
         );
   },
 
+  /** Approved, but it goes live later or as an A/B test (ADR 0031). */
+  landingApprovedLater(
+    locale: Locale,
+    p: { pageName: string; kind: 'scheduled' | 'ab_test'; when: string; dashboardUrl: string },
+  ): RenderedMail {
+    if (locale === 'bn')
+      return p.kind === 'scheduled'
+        ? render(
+            `${p.pageName} অনুমোদিত, ${p.when}-এ চালু হবে`,
+            [
+              `আপনার ল্যান্ডিং পেজ "${p.pageName}"-এর নতুন সংস্করণ অনুমোদিত হয়েছে।`,
+              `এটি ${p.when}-এ নিজে থেকেই চালু হবে। চাইলে ড্যাশবোর্ড থেকে এখনই চালু করতে বা সময় বদলাতে পারেন।`,
+            ],
+            { label: 'পেজটি খুলুন', url: p.dashboardUrl },
+          )
+        : render(
+            `${p.pageName}: A/B টেস্ট শুরু হয়েছে`,
+            [
+              `আপনার ল্যান্ডিং পেজ "${p.pageName}"-এর নতুন সংস্করণ অনুমোদিত হয়েছে।`,
+              'এখন থেকে কিছু ভিজিটর নতুন সংস্করণ দেখবেন। কোনটি বেশি অর্ডার আনে তা ড্যাশবোর্ডে দেখুন।',
+            ],
+            { label: 'ফলাফল দেখুন', url: p.dashboardUrl },
+          );
+    return p.kind === 'scheduled'
+      ? render(
+          `${p.pageName} is approved and goes live on ${p.when}`,
+          [
+            `The new version of your landing page "${p.pageName}" was approved.`,
+            `It goes live by itself on ${p.when}. You can make it live now or change the time in your dashboard.`,
+          ],
+          { label: 'Open the page', url: p.dashboardUrl },
+        )
+      : render(
+          `${p.pageName}: your A/B test has started`,
+          [
+            `The new version of your landing page "${p.pageName}" was approved.`,
+            'Some visitors now see the new version. Watch which one brings more orders in your dashboard.',
+          ],
+          { label: 'See the results', url: p.dashboardUrl },
+        );
+  },
+
   landingRejected(
     locale: Locale,
     p: { pageName: string; reason: string; live: boolean; dashboardUrl: string },

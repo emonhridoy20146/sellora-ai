@@ -421,6 +421,14 @@ export interface OrderItem {
   trackStock: boolean;
 }
 
+export interface OrderCoupon {
+  id: Types.ObjectId;
+  code: string;
+  discountMinor: number;
+  freeDelivery: boolean;
+  released?: boolean;
+}
+
 export interface Order {
   orgId: Types.ObjectId;
   number: string;
@@ -460,8 +468,19 @@ export interface Order {
   conversationId?: Types.ObjectId;
   /** The online store the order was placed in (also set for its landing pages). */
   storeId?: Types.ObjectId;
-  /** The landing page the order was placed on, as it was named then (ADR 0016). */
-  landingPage?: { id: Types.ObjectId; name: string; slug: string };
+  /**
+   * The landing page the order was placed on, as it was named then (ADR 0016), and the
+   * version of an A/B test the shopper saw (ADR 0031).
+   */
+  landingPage?: {
+    id: Types.ObjectId;
+    name: string;
+    slug: string;
+    abTestId?: Types.ObjectId;
+    variant?: 'a' | 'b';
+  };
+  /** The coupon the shopper used (ADR 0031); `released` once a cancel or return gave it back. */
+  coupon?: OrderCoupon;
   /** Where the shopper came from, as the page saw it (ads, links). */
   attribution?: OrderAttribution;
   /** The latest parcel booked with a courier for this order. */
@@ -567,6 +586,18 @@ export const orderSchema = tenantSchema<Order>({
       id: { type: Schema.Types.ObjectId, required: true },
       name: { type: String, required: true },
       slug: { type: String, required: true },
+      abTestId: Schema.Types.ObjectId,
+      variant: { type: String, enum: ['a', 'b'] },
+    },
+    { _id: false, strict: 'throw' },
+  ),
+  coupon: new Schema(
+    {
+      id: { type: Schema.Types.ObjectId, required: true },
+      code: { type: String, required: true },
+      discountMinor: { type: Number, required: true, min: 0 },
+      freeDelivery: { type: Boolean, default: false },
+      released: Boolean,
     },
     { _id: false, strict: 'throw' },
   ),
@@ -595,6 +626,10 @@ orderSchema.index({ orgId: 1, status: 1, placedAt: -1 });
 orderSchema.index({ orgId: 1, customerId: 1, placedAt: -1 });
 orderSchema.index({ orgId: 1, 'customer.phone': 1 });
 orderSchema.index({ orgId: 1, 'items.productId': 1 });
+orderSchema.index(
+  { orgId: 1, 'coupon.id': 1, placedAt: -1 },
+  { partialFilterExpression: { coupon: { $type: 'object' } } },
+);
 orderSchema.index(
   { orgId: 1, 'shipment.status': 1, placedAt: -1 },
   { partialFilterExpression: { shipment: { $type: 'object' } } },

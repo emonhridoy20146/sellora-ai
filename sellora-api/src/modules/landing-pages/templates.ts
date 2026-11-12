@@ -1,33 +1,68 @@
 import type { FieldError } from '../../common/errors/app-error.js';
 import {
   blockId,
+  sectionTexts,
   type LandingContent,
   type LandingLanguage,
   type LandingSection,
 } from './blocks.js';
+import {
+  LIBRARY_STARTERS,
+  LIBRARY_TEMPLATE_KEYS,
+  LIBRARY_TEMPLATES,
+  libraryContent,
+  TEMPLATE_CATEGORIES,
+  TEMPLATE_CATEGORY_LABEL,
+  type TemplateCategory,
+} from './template-library.js';
 
-export const TEMPLATE_KEYS = ['full_offer', 'problem_solution', 'quick_order'] as const;
-export type TemplateKey = (typeof TEMPLATE_KEYS)[number];
+export { TEMPLATE_CATEGORIES, TEMPLATE_CATEGORY_LABEL, type TemplateCategory };
 
-export const TEMPLATES: readonly { key: TemplateKey; name: string; description: string }[] = [
+const BASE_KEYS = ['full_offer', 'problem_solution', 'quick_order'] as const;
+type BaseKey = (typeof BASE_KEYS)[number];
+
+/** Every built-in template: the first three (ADR 0016) and the library (ADR 0031). */
+export type TemplateKey = BaseKey | (typeof LIBRARY_TEMPLATE_KEYS)[number];
+export const TEMPLATE_KEYS = [...BASE_KEYS, ...LIBRARY_TEMPLATE_KEYS] as [
+  TemplateKey,
+  ...TemplateKey[],
+];
+
+export interface TemplateInfo {
+  key: TemplateKey;
+  category: TemplateCategory;
+  name: string;
+  description: string;
+}
+
+export const TEMPLATES: readonly TemplateInfo[] = [
   {
     key: 'full_offer',
+    category: 'general',
     name: 'Full offer page',
     description:
       'Big offer, pictures, benefits, details, reviews, guarantees and questions, then the order form. Suits most products.',
   },
   {
     key: 'problem_solution',
+    category: 'general',
     name: 'Problem and solution',
     description:
       'Starts from the problem the product solves, then how to use it and what buyers say, with a countdown. Suits health, beauty and home products.',
   },
   {
     key: 'quick_order',
+    category: 'general',
     name: 'Quick order',
     description:
       'A short page: the offer, the order form straight away, delivery and questions. Suits low-priced and impulse products.',
   },
+  ...LIBRARY_TEMPLATES.map((t) => ({
+    key: t.key as TemplateKey,
+    category: t.category,
+    name: t.name,
+    description: t.description,
+  })),
 ];
 
 /** The product a new page is made for. */
@@ -198,15 +233,16 @@ const WORDS: Record<LandingLanguage, Words> = {
  * section still has one: shoppers would read the instruction, and a sample review on a live
  * page would be a made-up review.
  */
-export const STARTER_TEXTS: ReadonlySet<string> = new Set(
-  Object.values(WORDS).flatMap((w) => [
+export const STARTER_TEXTS: ReadonlySet<string> = new Set([
+  ...Object.values(WORDS).flatMap((w) => [
     ...w.benefits.map((b) => b.text),
     ...w.reviews.flatMap((r) => [r.name, r.text]),
     w.problem,
     w.solution,
     ...w.steps,
   ]),
-);
+  ...LIBRARY_STARTERS,
+]);
 
 const isStarter = (text: string) => STARTER_TEXTS.has(text.trim());
 
@@ -221,14 +257,8 @@ export function starterTextProblems(content: LandingContent): FieldError[] {
         path,
         message: 'Replace the sample reviews with real ones from your buyers, or hide this section',
       });
-    const words =
-      s.type === 'benefits'
-        ? s.items.map((x) => x.text)
-        : s.type === 'problem_solution'
-          ? [s.problem, s.solution]
-          : s.type === 'steps'
-            ? s.steps.map((x) => x.text)
-            : [];
+    if (s.type === 'reviews') return;
+    const words = sectionTexts(s);
     if (words.some(isStarter))
       errors.push({
         path,
@@ -252,6 +282,17 @@ export function templateContent(
   product: TemplateProduct,
 ): LandingContent {
   const w = WORDS[language];
+  const library = LIBRARY_TEMPLATES.find((t) => t.key === key);
+  if (library) {
+    const { sections, packages } = libraryContent(library, language, w, product);
+    return {
+      sections,
+      offer: { productId: product.id, packages, addOn: null, noteField: true },
+      seo: { title: product.name.slice(0, 70), description: '', image: null, index: true },
+      settings: { stickyButton: true, stickyLabel: w.orderNow },
+    };
+  }
+  const base = key as BaseKey;
   const hero: LandingSection = {
     id: blockId(),
     ...on,
@@ -349,7 +390,7 @@ export function templateContent(
   };
 
   let sections: LandingSection[];
-  if (key === 'full_offer')
+  if (base === 'full_offer')
     sections = [
       hero,
       gallery,
@@ -363,7 +404,7 @@ export function templateContent(
       form,
       contact,
     ];
-  else if (key === 'problem_solution')
+  else if (base === 'problem_solution')
     sections = [
       hero,
       {

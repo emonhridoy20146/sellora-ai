@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import type { FieldError } from '../../common/errors/app-error.js';
+import { codeProblem, normalizeCode } from '../coupons/coupon-rules.js';
 import type { CheckedText } from '../stores/store-precheck.js';
 import { FEATURE_ICONS } from '../stores/themes.js';
 
@@ -30,6 +31,29 @@ export const LANDING_SECTION_TYPES = [
   'contact',
   'text',
   'order_form',
+  // Added in ADR 0031.
+  'announcement',
+  'video_hero',
+  'features',
+  'checklist',
+  'comparison',
+  'ingredients',
+  'timeline',
+  'who_for',
+  'stats',
+  'orders_today',
+  'video_reviews',
+  'quote',
+  'certificates',
+  'image_text',
+  'about',
+  'size_chart',
+  'packages',
+  'payment_methods',
+  'coupon_banner',
+  'call_to_action',
+  'location',
+  'spacer',
 ] as const;
 export type LandingSectionType = (typeof LANDING_SECTION_TYPES)[number];
 
@@ -163,6 +187,38 @@ const videoUrl = z
   .trim()
   .max(500)
   .refine((v) => v === '' || parseVideoUrl(v) !== null, 'Use a YouTube or Facebook video link');
+
+/** A Google Maps link (a page may only link to a map, never embed another site). */
+export function isMapUrl(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return false;
+  }
+  if (url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase();
+  if (host === 'maps.app.goo.gl' || host === 'maps.google.com') return true;
+  if (host === 'goo.gl') return url.pathname.startsWith('/maps');
+  return (host === 'www.google.com' || host === 'google.com') && url.pathname.startsWith('/maps');
+}
+
+const mapUrl = z
+  .string()
+  .trim()
+  .max(500)
+  .refine((v) => v === '' || isMapUrl(v), 'Use a Google Maps link');
+
+/** A coupon code shown on the page; checked against the business's coupons when publishing. */
+const couponCode = z
+  .string()
+  .trim()
+  .max(40)
+  .transform(normalizeCode)
+  .refine(
+    (v) => v === '' || codeProblem(v) === null,
+    'Use 3 to 20 letters, numbers and single hyphens',
+  );
 
 const isoDate = z
   .string()
@@ -337,6 +393,203 @@ export const landingSectionSchema = z.discriminatedUnion('type', [
       buttonLabel: line(30),
     })
     .strict(),
+  // ---- added in ADR 0031
+  z
+    .object({
+      ...base,
+      type: z.literal('announcement'),
+      text: line(140),
+      tone: z.enum(['offer', 'info', 'urgent']),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('video_hero'),
+      heading: line(120),
+      subheading: line(300),
+      url: videoUrl,
+      buttonLabel: line(30),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('features'),
+      title: line(80),
+      items: z
+        .array(z.object({ icon: z.enum(FEATURE_ICONS), title: line(60), text: line(200) }).strict())
+        .max(8),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('checklist'),
+      title: line(80),
+      items: z.array(line(160)).max(12),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('comparison'),
+      title: line(80),
+      ourLabel: line(30),
+      otherLabel: line(30),
+      rows: z
+        .array(z.object({ label: line(80), ours: line(80), others: line(80) }).strict())
+        .max(10),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('ingredients'),
+      title: line(80),
+      items: z
+        .array(
+          z
+            .object({ name: line(60), text: line(240), image: landingImageSchema.nullable() })
+            .strict(),
+        )
+        .max(10),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('timeline'),
+      title: line(80),
+      items: z.array(z.object({ label: line(40), text: line(240) }).strict()).max(8),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('who_for'),
+      title: line(80),
+      forTitle: line(60),
+      forItems: z.array(line(160)).max(8),
+      notForTitle: line(60),
+      notForItems: z.array(line(160)).max(8),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('stats'),
+      title: line(80),
+      items: z.array(z.object({ value: line(20), label: line(60) }).strict()).max(4),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('orders_today'),
+      /** "{count}" becomes the number of orders this page took today. */
+      text: line(80),
+      /** Shown only from this many orders today. */
+      minCount: z.number().int().min(1).max(1000),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('video_reviews'),
+      title: line(80),
+      items: z.array(z.object({ url: videoUrl, name: line(40) }).strict()).max(4),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('quote'),
+      text: line(500),
+      name: line(60),
+      role: line(80),
+      image: landingImageSchema.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('certificates'),
+      title: line(80),
+      items: z.array(z.object({ image: landingImageSchema, caption: line(120) }).strict()).max(8),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('image_text'),
+      heading: line(80),
+      body: line(1500),
+      image: landingImageSchema.nullable(),
+      imageSide: z.enum(['left', 'right']),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('about'),
+      heading: line(80),
+      body: line(2000),
+      image: landingImageSchema.nullable(),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('size_chart'),
+      title: line(80),
+      columns: z.array(line(30)).max(6),
+      rows: z.array(z.object({ cells: z.array(line(30)).max(6) }).strict()).max(15),
+      note: line(200),
+    })
+    .strict(),
+  /** The offer's packages as cards; choosing one fills in the order form. */
+  z.object({ ...base, type: z.literal('packages'), heading: line(80), text: line(200) }).strict(),
+  /** How shoppers can pay, from the business's real payment settings. */
+  z
+    .object({ ...base, type: z.literal('payment_methods'), heading: line(80), text: line(200) })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('coupon_banner'),
+      heading: line(80),
+      code: couponCode,
+      text: line(200),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('call_to_action'),
+      heading: line(120),
+      text: line(300),
+      buttonLabel: line(30),
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('location'),
+      heading: line(80),
+      address: line(300),
+      hours: line(120),
+      mapUrl,
+    })
+    .strict(),
+  z
+    .object({
+      ...base,
+      type: z.literal('spacer'),
+      size: z.enum(['small', 'medium', 'large']),
+      line: z.boolean(),
+    })
+    .strict(),
 ]);
 export type LandingSection = z.infer<typeof landingSectionSchema>;
 
@@ -438,6 +691,34 @@ export function contentImages(content: LandingContent): { fileId: string; path: 
       case 'reviews':
         s.items.forEach((r, j) => add(r.image, `${at}.items.${j}.image`));
         break;
+      case 'quote':
+      case 'image_text':
+      case 'about':
+        add(s.image, `${at}.image`);
+        break;
+      case 'ingredients':
+        s.items.forEach((x, j) => add(x.image, `${at}.items.${j}.image`));
+        break;
+      case 'certificates':
+        s.items.forEach((x, j) => add(x.image, `${at}.items.${j}.image`));
+        break;
+      case 'announcement':
+      case 'video_hero':
+      case 'features':
+      case 'checklist':
+      case 'comparison':
+      case 'timeline':
+      case 'who_for':
+      case 'stats':
+      case 'orders_today':
+      case 'video_reviews':
+      case 'size_chart':
+      case 'packages':
+      case 'payment_methods':
+      case 'coupon_banner':
+      case 'call_to_action':
+      case 'location':
+      case 'spacer':
       case 'video':
       case 'benefits':
       case 'specs':
@@ -479,6 +760,31 @@ export function withImageUrls(
           return { ...s, before: fix(s.before), after: fix(s.after) };
         case 'reviews':
           return { ...s, items: s.items.map((r) => ({ ...r, image: fix(r.image) })) };
+        case 'quote':
+        case 'image_text':
+        case 'about':
+          return { ...s, image: fix(s.image) };
+        case 'ingredients':
+          return { ...s, items: s.items.map((x) => ({ ...x, image: fix(x.image) })) };
+        case 'certificates':
+          return { ...s, items: s.items.map((x) => ({ ...x, image: fix(x.image)! })) };
+        case 'announcement':
+        case 'video_hero':
+        case 'features':
+        case 'checklist':
+        case 'comparison':
+        case 'timeline':
+        case 'who_for':
+        case 'stats':
+        case 'orders_today':
+        case 'video_reviews':
+        case 'size_chart':
+        case 'packages':
+        case 'payment_methods':
+        case 'coupon_banner':
+        case 'call_to_action':
+        case 'location':
+        case 'spacer':
         case 'video':
         case 'benefits':
         case 'specs':
@@ -501,6 +807,134 @@ export function withImageUrls(
 
 // ---------------------------------------------------------------- checks
 
+/** The words a shopper reads in one section (for the word check and starter words). */
+export function sectionTexts(s: LandingSection): string[] {
+  let parts: string[];
+  switch (s.type) {
+    case 'hero':
+      parts = [s.heading, s.subheading, s.badge, s.buttonLabel];
+      break;
+    case 'image':
+      parts = [s.caption, s.image?.alt ?? ''];
+      break;
+    case 'gallery':
+    case 'video':
+      parts = [s.title];
+      break;
+    case 'benefits':
+      parts = [s.title, ...s.items.flatMap((x) => [x.title, x.text])];
+      break;
+    case 'problem_solution':
+      parts = [s.problemTitle, s.problem, s.solutionTitle, s.solution];
+      break;
+    case 'specs':
+      parts = [s.title, ...s.rows.flatMap((r) => [r.label, r.value])];
+      break;
+    case 'steps':
+      parts = [s.title, ...s.steps.map((x) => x.text)];
+      break;
+    case 'before_after':
+      parts = [s.title, s.caption];
+      break;
+    case 'reviews':
+      parts = [s.title, ...s.items.flatMap((r) => [r.name, r.text])];
+      break;
+    case 'countdown':
+      parts = [s.heading, s.endedText];
+      break;
+    case 'stock_left':
+      parts = [s.text];
+      break;
+    case 'price':
+      parts = [s.heading, s.note];
+      break;
+    case 'faq':
+      parts = [s.title, ...s.items.flatMap((x) => [x.question, x.answer])];
+      break;
+    case 'guarantee':
+      parts = [s.title, ...s.items.flatMap((x) => [x.title, x.text])];
+      break;
+    case 'delivery':
+    case 'contact':
+      parts = [s.heading, s.text];
+      break;
+    case 'text':
+      parts = [s.heading, s.body];
+      break;
+    case 'order_form':
+      parts = [s.heading, s.subheading, s.buttonLabel];
+      break;
+    case 'announcement':
+      parts = [s.text];
+      break;
+    case 'video_hero':
+      parts = [s.heading, s.subheading, s.buttonLabel];
+      break;
+    case 'features':
+      parts = [s.title, ...s.items.flatMap((x) => [x.title, x.text])];
+      break;
+    case 'checklist':
+      parts = [s.title, ...s.items];
+      break;
+    case 'comparison':
+      parts = [
+        s.title,
+        s.ourLabel,
+        s.otherLabel,
+        ...s.rows.flatMap((r) => [r.label, r.ours, r.others]),
+      ];
+      break;
+    case 'ingredients':
+      parts = [s.title, ...s.items.flatMap((x) => [x.name, x.text])];
+      break;
+    case 'timeline':
+      parts = [s.title, ...s.items.flatMap((x) => [x.label, x.text])];
+      break;
+    case 'who_for':
+      parts = [s.title, s.forTitle, ...s.forItems, s.notForTitle, ...s.notForItems];
+      break;
+    case 'stats':
+      parts = [s.title, ...s.items.flatMap((x) => [x.value, x.label])];
+      break;
+    case 'orders_today':
+      parts = [s.text];
+      break;
+    case 'video_reviews':
+      parts = [s.title, ...s.items.map((x) => x.name)];
+      break;
+    case 'quote':
+      parts = [s.text, s.name, s.role];
+      break;
+    case 'certificates':
+      parts = [s.title, ...s.items.map((x) => x.caption)];
+      break;
+    case 'image_text':
+    case 'about':
+      parts = [s.heading, s.body];
+      break;
+    case 'size_chart':
+      parts = [s.title, ...s.columns, ...s.rows.flatMap((r) => r.cells), s.note];
+      break;
+    case 'packages':
+    case 'payment_methods':
+      parts = [s.heading, s.text];
+      break;
+    case 'coupon_banner':
+      parts = [s.heading, s.text];
+      break;
+    case 'call_to_action':
+      parts = [s.heading, s.text, s.buttonLabel];
+      break;
+    case 'location':
+      parts = [s.heading, s.address, s.hours];
+      break;
+    case 'spacer':
+      parts = [];
+      break;
+  }
+  return parts.filter(Boolean);
+}
+
 /** Every piece of text a shopper reads, for the automatic word check (ADR 0014). */
 export function contentTexts(name: string, content: LandingContent): CheckedText[] {
   const texts: CheckedText[] = [
@@ -512,62 +946,7 @@ export function contentTexts(name: string, content: LandingContent): CheckedText
     },
   ];
   content.sections.forEach((s, i) => {
-    let parts: string[];
-    switch (s.type) {
-      case 'hero':
-        parts = [s.heading, s.subheading, s.badge, s.buttonLabel];
-        break;
-      case 'image':
-        parts = [s.caption, s.image?.alt ?? ''];
-        break;
-      case 'gallery':
-      case 'video':
-        parts = [s.title];
-        break;
-      case 'benefits':
-        parts = [s.title, ...s.items.flatMap((x) => [x.title, x.text])];
-        break;
-      case 'problem_solution':
-        parts = [s.problemTitle, s.problem, s.solutionTitle, s.solution];
-        break;
-      case 'specs':
-        parts = [s.title, ...s.rows.flatMap((r) => [r.label, r.value])];
-        break;
-      case 'steps':
-        parts = [s.title, ...s.steps.map((x) => x.text)];
-        break;
-      case 'before_after':
-        parts = [s.title, s.caption];
-        break;
-      case 'reviews':
-        parts = [s.title, ...s.items.flatMap((r) => [r.name, r.text])];
-        break;
-      case 'countdown':
-        parts = [s.heading, s.endedText];
-        break;
-      case 'stock_left':
-        parts = [s.text];
-        break;
-      case 'price':
-        parts = [s.heading, s.note];
-        break;
-      case 'faq':
-        parts = [s.title, ...s.items.flatMap((x) => [x.question, x.answer])];
-        break;
-      case 'guarantee':
-        parts = [s.title, ...s.items.flatMap((x) => [x.title, x.text])];
-        break;
-      case 'delivery':
-      case 'contact':
-        parts = [s.heading, s.text];
-        break;
-      case 'text':
-        parts = [s.heading, s.body];
-        break;
-      case 'order_form':
-        parts = [s.heading, s.subheading, s.buttonLabel];
-        break;
-    }
+    const parts = sectionTexts(s);
     const text = parts.filter(Boolean).join(' ');
     if (text) texts.push({ where: `section:${s.id}`, label: `Section ${i + 1} (${s.type})`, text });
   });
@@ -586,6 +965,19 @@ export function contentTexts(name: string, content: LandingContent): CheckedText
 export interface OfferProducts {
   product: { active: boolean; currencyOk: boolean; variantIds: string[] } | null;
   addOn: { active: boolean; currencyOk: boolean; variantIds: string[] } | null;
+  /** Coupon codes shoppers can use on this page now (for coupon banners). */
+  usableCoupons?: ReadonlySet<string>;
+}
+
+/** Coupon codes the page's coupon banners show, to check before publishing. */
+export function bannerCoupons(content: LandingContent): string[] {
+  return [
+    ...new Set(
+      content.sections.flatMap((s) =>
+        s.type === 'coupon_banner' && s.enabled && s.code ? [s.code] : [],
+      ),
+    ),
+  ];
 }
 
 /** Why the content cannot be published yet (empty when it can). */
@@ -643,6 +1035,95 @@ export function publishProblems(content: LandingContent, products: OfferProducts
         path: `content.sections.${i}`,
         message: 'Add both the before and the after picture',
       });
+    const at = `content.sections.${i}`;
+    const need = (ok: boolean, path: string, message: string) => {
+      if (!ok) errors.push({ path: `${at}${path}`, message });
+    };
+    switch (s.type) {
+      case 'announcement':
+        need(Boolean(s.text), '.text', 'Write the announcement');
+        break;
+      case 'video_hero':
+        need(Boolean(s.url), '.url', 'Add the video link');
+        need(Boolean(s.heading), '.heading', 'Write the headline');
+        break;
+      case 'features':
+      case 'ingredients':
+      case 'timeline':
+      case 'stats':
+        need(s.items.length > 0, '.items', 'Add at least one item');
+        break;
+      case 'checklist':
+        need(s.items.some(Boolean), '.items', 'Add at least one item');
+        break;
+      case 'certificates':
+        need(s.items.length > 0, '.items', 'Add at least one picture');
+        break;
+      case 'video_reviews':
+        need(s.items.length > 0, '.items', 'Add at least one video');
+        s.items.forEach((x, j) => need(Boolean(x.url), `.items.${j}.url`, 'Add the video link'));
+        break;
+      case 'comparison':
+        need(s.rows.length > 0, '.rows', 'Add at least one row');
+        break;
+      case 'who_for':
+        need(s.forItems.some(Boolean), '.forItems', 'Say who the product is for');
+        break;
+      case 'orders_today':
+        need(s.text.includes('{count}'), '.text', 'Put {count} where the number goes');
+        break;
+      case 'quote':
+        need(Boolean(s.text), '.text', 'Write the quote');
+        break;
+      case 'image_text':
+        need(Boolean(s.image), '.image', 'Add the picture');
+        break;
+      case 'size_chart':
+        need(s.columns.length >= 2, '.columns', 'Add at least two columns');
+        need(s.rows.length > 0, '.rows', 'Add at least one row');
+        if (s.rows.some((r) => r.cells.length !== s.columns.length))
+          errors.push({ path: `${at}.rows`, message: 'Fill every row for every column' });
+        break;
+      case 'packages':
+        need(offer.packages.length > 0, '', 'Add packages to the offer, or hide this section');
+        break;
+      case 'coupon_banner':
+        need(Boolean(s.code), '.code', 'Write the coupon code');
+        if (s.code && products.usableCoupons && !products.usableCoupons.has(s.code))
+          errors.push({
+            path: `${at}.code`,
+            message: 'No coupon with this code can be used on this page now',
+          });
+        break;
+      case 'location':
+        need(Boolean(s.address), '.address', 'Write the address');
+        break;
+      // Checked above, or nothing more to check.
+      case 'about':
+      case 'before_after':
+      case 'benefits':
+      case 'call_to_action':
+      case 'contact':
+      case 'countdown':
+      case 'delivery':
+      case 'faq':
+      case 'gallery':
+      case 'guarantee':
+      case 'hero':
+      case 'image':
+      case 'order_form':
+      case 'payment_methods':
+      case 'price':
+      case 'problem_solution':
+      case 'reviews':
+      case 'spacer':
+      case 'specs':
+      case 'steps':
+      case 'stock_left':
+      case 'text':
+      case 'video':
+        break;
+    }
   });
   return errors;
 }

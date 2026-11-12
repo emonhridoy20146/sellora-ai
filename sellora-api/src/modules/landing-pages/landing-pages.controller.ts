@@ -28,7 +28,13 @@ import * as dto from './landing-pages.dto.js';
 import { LandingPagesService } from './landing-pages.service.js';
 import { LandingReviewService } from './landing-review.service.js';
 import { LandingStorefrontService, type ResolvedLanding } from './landing-storefront.service.js';
-import { STARTER_TEXTS, TEMPLATES } from './templates.js';
+import { LandingTemplatesService } from './landing-templates.service.js';
+import {
+  STARTER_TEXTS,
+  TEMPLATE_CATEGORIES,
+  TEMPLATE_CATEGORY_LABEL,
+  TEMPLATES,
+} from './templates.js';
 import * as payDto from '../shop-payments/shop-payments.dto.js';
 import * as adDto from '../ad-tracking/ad-tracking.dto.js';
 
@@ -39,13 +45,29 @@ import * as adDto from '../ad-tracking/ad-tracking.dto.js';
 @RequireModule('landing_pages')
 @Controller({ path: 'orgs/:orgId/landing-pages', version: '1' })
 export class LandingPagesController {
-  constructor(private readonly pages: LandingPagesService) {}
+  constructor(
+    private readonly pages: LandingPagesService,
+    private readonly myTemplates: LandingTemplatesService,
+  ) {}
 
   @Get('templates')
   @RequirePermissions('stores.view')
-  @ApiOperation({ summary: 'Templates a new page can start from' })
-  templates() {
-    return { items: TEMPLATES, starterTexts: [...STARTER_TEXTS] };
+  @ApiOperation({ summary: 'Templates a new page can start from, and the business’s own' })
+  async templates() {
+    return {
+      items: TEMPLATES,
+      categories: TEMPLATE_CATEGORIES.map((key) => ({ key, label: TEMPLATE_CATEGORY_LABEL[key] })),
+      starterTexts: [...STARTER_TEXTS],
+      mine: await this.myTemplates.list(),
+    };
+  }
+
+  @Delete('templates/:templateId')
+  @HttpCode(204)
+  @RequirePermissions('stores.manage')
+  @ApiOperation({ summary: 'Delete one of the business’s own templates (ADR 0031)' })
+  async removeTemplate(@ZodParam('templateId', dto.templateIdParam) id: string): Promise<void> {
+    await this.myTemplates.remove(id);
   }
 
   @Get('slug-check')
@@ -94,12 +116,81 @@ export class LandingPagesController {
     return this.pages.saveDraft(id, body.content, body.revision);
   }
 
+  @Post(':pageId/save-template')
+  @RequirePermissions('stores.manage')
+  @ApiOperation({ summary: 'Keep the draft’s sections as a template for new pages (ADR 0031)' })
+  saveTemplate(
+    @ZodParam('pageId', dto.pageIdParam) id: string,
+    @ZodBody(dto.saveTemplateBody) body: z.infer<typeof dto.saveTemplateBody>,
+  ) {
+    return this.myTemplates.saveFromPage(id, body);
+  }
+
   @Post(':pageId/submit')
   @HttpCode(200)
   @RequirePermissions('stores.publish')
-  @ApiOperation({ summary: 'Publish the draft: sends it for review, or publishes at once' })
-  submit(@ZodParam('pageId', dto.pageIdParam) id: string) {
-    return this.pages.submit(id);
+  @ApiOperation({
+    summary:
+      'Publish the draft: sends it for review, or applies it at once; at a time or as an A/B test',
+  })
+  submit(
+    @ZodParam('pageId', dto.pageIdParam) id: string,
+    @ZodBody(dto.submitBody) body: z.infer<typeof dto.submitBody>,
+  ) {
+    return this.pages.submit(id, body);
+  }
+
+  @Post(':pageId/scheduled/publish-now')
+  @HttpCode(200)
+  @RequirePermissions('stores.publish')
+  @ApiOperation({ summary: 'Make the scheduled version live now (ADR 0031)' })
+  publishNow(@ZodParam('pageId', dto.pageIdParam) id: string) {
+    return this.pages.publishScheduledNow(id);
+  }
+
+  @Patch(':pageId/scheduled')
+  @RequirePermissions('stores.publish')
+  @ApiOperation({ summary: 'Move the scheduled version to another time' })
+  reschedule(
+    @ZodParam('pageId', dto.pageIdParam) id: string,
+    @ZodBody(dto.rescheduleBody) body: z.infer<typeof dto.rescheduleBody>,
+  ) {
+    return this.pages.reschedule(id, body.publishAt);
+  }
+
+  @Delete(':pageId/scheduled')
+  @RequirePermissions('stores.publish')
+  @ApiOperation({ summary: 'Drop the scheduled version (the draft stays)' })
+  cancelSchedule(@ZodParam('pageId', dto.pageIdParam) id: string) {
+    return this.pages.cancelSchedule(id);
+  }
+
+  @Put(':pageId/offer-end')
+  @RequirePermissions('stores.publish')
+  @ApiOperation({ summary: 'When the offer ends the page pauses itself (null: it does not end)' })
+  offerEnd(
+    @ZodParam('pageId', dto.pageIdParam) id: string,
+    @ZodBody(dto.offerEndBody) body: z.infer<typeof dto.offerEndBody>,
+  ) {
+    return this.pages.setOfferEnd(id, body.pauseAt);
+  }
+
+  @Get(':pageId/ab-tests')
+  @RequirePermissions('stores.view')
+  @ApiOperation({ summary: 'The page’s A/B tests with visitors, buyers and the result' })
+  abTests(@ZodParam('pageId', dto.pageIdParam) id: string) {
+    return this.pages.listAbTests(id);
+  }
+
+  @Post(':pageId/ab-tests/end')
+  @HttpCode(200)
+  @RequirePermissions('stores.publish')
+  @ApiOperation({ summary: 'End the running A/B test, keeping A or making B live' })
+  endAbTest(
+    @ZodParam('pageId', dto.pageIdParam) id: string,
+    @ZodBody(dto.abWinnerBody) body: z.infer<typeof dto.abWinnerBody>,
+  ) {
+    return this.pages.chooseAbWinner(id, body.keep);
   }
 
   @Post(':pageId/withdraw')
@@ -247,6 +338,8 @@ export class PlatformLandingPagesController {
 
 const STORE_HOST_HEADER = 'x-store-host';
 const PREVIEW_HEADER = 'x-store-preview';
+/** The browser's A/B id (cookie `sl_ab`), which picks the version of a page with a test. */
+const AB_HEADER = 'x-shopper-ab';
 
 @ApiTags('storefront')
 @ApiHeader({ name: 'X-Storefront-Key', required: true, description: 'STOREFRONT_API_KEY' })
@@ -265,8 +358,13 @@ export class LandingStorefrontController {
     return host;
   }
 
-  private page(host: string | undefined, slug: string, preview?: string): Promise<ResolvedLanding> {
-    return this.landing.require(this.host(host), slug, preview);
+  private page(
+    host: string | undefined,
+    slug: string,
+    preview?: string,
+    ab?: string,
+  ): Promise<ResolvedLanding> {
+    return this.landing.require(this.host(host), slug, preview, ab);
   }
 
   @Get()
@@ -280,9 +378,10 @@ export class LandingStorefrontController {
   async view(
     @Headers(STORE_HOST_HEADER) host: string | undefined,
     @Headers(PREVIEW_HEADER) preview: string | undefined,
+    @Headers(AB_HEADER) ab: string | undefined,
     @ZodParam('slug', dto.slugParam) slug: string,
   ) {
-    return this.landing.view(await this.page(host, slug, preview));
+    return this.landing.view(await this.page(host, slug, preview, ab));
   }
 
   @Post(':slug/visit')
@@ -291,9 +390,10 @@ export class LandingStorefrontController {
   async visit(
     @Headers(STORE_HOST_HEADER) host: string | undefined,
     @ZodParam('slug', dto.slugParam) slug: string,
+    @Headers(AB_HEADER) ab: string | undefined,
     @ZodBody(dto.visitBody) body: z.infer<typeof dto.visitBody>,
   ) {
-    return this.landing.visit(await this.page(host, slug), body.visitorId);
+    return this.landing.visit(await this.page(host, slug, undefined, ab), body.visitorId);
   }
 
   @Post(':slug/ad-events')
@@ -317,13 +417,27 @@ export class LandingStorefrontController {
     @Headers(STORE_HOST_HEADER) host: string | undefined,
     @Headers('idempotency-key') rawKey: string | undefined,
     @ZodParam('slug', dto.slugParam) slug: string,
+    @Headers(AB_HEADER) ab: string | undefined,
     @ZodBody(dto.orderBody) body: z.infer<typeof dto.orderBody>,
   ) {
     const key = idempotencyKey.safeParse(rawKey ?? '');
     if (!key.success)
       throw AppError.badRequest('idempotency_key_required', key.error.issues[0]!.message);
     // Previews never take orders: `page` is resolved without the preview token.
-    return this.landing.order(await this.page(host, slug), body, key.data);
+    return this.landing.order(await this.page(host, slug, undefined, ab), body, key.data);
+  }
+
+  @Post(':slug/coupon')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'What a coupon code takes off the order form’s choice (ADR 0031)' })
+  async coupon(
+    @Headers(STORE_HOST_HEADER) host: string | undefined,
+    @ZodParam('slug', dto.slugParam) slug: string,
+    @Headers(AB_HEADER) ab: string | undefined,
+    @ZodBody(dto.couponBody) body: z.infer<typeof dto.couponBody>,
+  ) {
+    // Previews are refused by the service: `page` is resolved without the preview token.
+    return this.landing.couponCheck(await this.page(host, slug, undefined, ab), body);
   }
 
   @Post(':slug/carts')
@@ -334,10 +448,11 @@ export class LandingStorefrontController {
   async saveCart(
     @Headers(STORE_HOST_HEADER) host: string | undefined,
     @ZodParam('slug', dto.slugParam) slug: string,
+    @Headers(AB_HEADER) ab: string | undefined,
     @ZodBody(cartsDto.landingCartBody) body: z.infer<typeof cartsDto.landingCartBody>,
   ) {
     // Previews never save carts: `page` is resolved without the preview token.
-    return this.landing.saveCart(await this.page(host, slug), body);
+    return this.landing.saveCart(await this.page(host, slug, undefined, ab), body);
   }
 
   @Post(':slug/pay')
