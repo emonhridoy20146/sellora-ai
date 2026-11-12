@@ -19,7 +19,11 @@ export async function generateMetadata({
   params: Promise<{ key: string }>;
 }): Promise<Metadata> {
   const store = await openStore();
-  return { title: dictionary(store.language).pages[pageKey((await params).key)] };
+  const key = pageKey((await params).key);
+  return {
+    title: dictionary(store.language).pages[key],
+    alternates: { canonical: `/pages/${key}` },
+  };
 }
 
 export default async function InfoPage({ params }: { params: Promise<{ key: string }> }) {

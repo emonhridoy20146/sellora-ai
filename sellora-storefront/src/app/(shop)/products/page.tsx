@@ -24,8 +24,17 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const store = await openStore();
   const t = dictionary(store.language);
-  const q = one((await searchParams).q);
-  return { title: q ? `${t.search}: ${q}` : t.allProducts };
+  const raw = await searchParams;
+  const q = one(raw.q);
+  const category = one(raw.category)?.slice(0, 80);
+  // One address per list: sorting and page numbers point at the list itself, and search
+  // results are not listed (ADR 0032).
+  const canonical = category ? `/products?category=${encodeURIComponent(category)}` : '/products';
+  return {
+    title: q ? `${t.search}: ${q}` : t.allProducts,
+    alternates: { canonical },
+    ...(q ? { robots: { index: false, follow: true } } : {}),
+  };
 }
 
 export default async function ProductsPage({
