@@ -220,11 +220,13 @@ describe('landing pages', () => {
   describe('building a page', () => {
     it('lists templates and checks addresses', async () => {
       const templates = await O().get(lp('/templates')).expect(200);
-      expect(templates.body.items.map((x: { key: string }) => x.key)).toEqual([
+      // The first three of the 30 (the rest are tried in landing-library.e2e.ts).
+      expect(templates.body.items.map((x: { key: string }) => x.key).slice(0, 3)).toEqual([
         'full_offer',
         'problem_solution',
         'quick_order',
       ]);
+      expect(templates.body.items).toHaveLength(30);
       const check = async (slug: string) =>
         (
           await O()

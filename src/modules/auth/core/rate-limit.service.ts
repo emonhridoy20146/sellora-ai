@@ -57,6 +57,8 @@ export class RateLimitService {
       // Ad tracking (ADR 0030): server copies of shopper events, and test events from settings.
       'ad-event:ip': { points: 240, durationSec: 60 },
       'ad-test:org': { points: 30, durationSec: 3600 },
+      // Coupon codes typed by shoppers (ADR 0031): enough to fix a typo, too few to guess codes.
+      'coupon-check:ip': { points: 20, durationSec: 600 },
       // Test SMS from Settings › SMS (each one costs money) and the public opt-out page.
       'sms-test:org': { points: 10, durationSec: 3600 },
       'sms-optout:ip': { points: 30, durationSec: 600 },

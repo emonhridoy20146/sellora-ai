@@ -9,6 +9,7 @@ import type { WithId } from '../../infra/database/schema-helpers.js';
 import { TransactionService } from '../../infra/database/transaction.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { EntitlementsService } from '../billing/entitlements.service.js';
+import { CouponsService, type AppliedCoupon } from '../coupons/coupons.service.js';
 import { OrgsService } from '../orgs/orgs.service.js';
 import { CustomersService } from './customers.service.js';
 import { InventoryService, type StockLine } from './inventory.service.js';
@@ -134,9 +135,20 @@ export interface CreateOrderInput {
   conversationId?: string;
   /** The online store the order was placed in. */
   storeId?: string;
-  /** The landing page the order was placed on. */
-  landingPage?: { id: string; name: string; slug: string };
+  /** The landing page the order was placed on, and the A/B test version shown (ADR 0031). */
+  landingPage?: {
+    id: string;
+    name: string;
+    slug: string;
+    abTest?: { id: string; variant: 'a' | 'b' };
+  };
   attribution?: OrderAttribution;
+  /**
+   * A coupon the storefront checked (ADR 0031). Its discount is added to `discountMinor`, a
+   * free-delivery coupon waives the charge, and the use is taken inside the order's
+   * transaction (no order when it was used up a moment ago).
+   */
+  coupon?: AppliedCoupon;
 }
 
 /** Allowed moves between statuses. Cancelling and returning are terminal. */
@@ -225,7 +237,22 @@ export function toOrderDto(o: OrderDoc) {
     conversationId: o.conversationId?.toHexString() ?? null,
     storeId: o.storeId?.toHexString() ?? null,
     landingPage: o.landingPage
-      ? { id: o.landingPage.id.toHexString(), name: o.landingPage.name, slug: o.landingPage.slug }
+      ? {
+          id: o.landingPage.id.toHexString(),
+          name: o.landingPage.name,
+          slug: o.landingPage.slug,
+          abTestId: o.landingPage.abTestId?.toHexString() ?? null,
+          variant: o.landingPage.variant ?? null,
+        }
+      : null,
+    coupon: o.coupon
+      ? {
+          id: o.coupon.id.toHexString(),
+          code: o.coupon.code,
+          discountMinor: o.coupon.discountMinor,
+          freeDelivery: o.coupon.freeDelivery,
+          released: o.coupon.released ?? false,
+        }
       : null,
     attribution: o.attribution ?? null,
     shipment: o.shipment
@@ -313,6 +340,7 @@ export class OrdersService {
     private readonly tx: TransactionService,
     private readonly audit: AuditService,
     private readonly events: EventEmitter2,
+    private readonly coupons: CouponsService,
   ) {}
 
   private orgId(): string {
@@ -759,8 +787,8 @@ export class OrdersService {
     const zone = this.resolveZone(settings, input.deliveryZoneId);
     const totals = this.totals(
       items,
-      input.discountMinor ?? 0,
-      input.deliveryChargeMinor ?? zone?.chargeMinor ?? 0,
+      (input.discountMinor ?? 0) + (input.coupon?.discountMinor ?? 0),
+      input.coupon?.freeDelivery ? 0 : (input.deliveryChargeMinor ?? zone?.chargeMinor ?? 0),
     );
     const paidMinor = input.payment?.paidMinor ?? 0;
     if (paidMinor > totals.totalMinor)
@@ -795,6 +823,9 @@ export class OrdersService {
     const actor = this.actor();
 
     const order = await this.tx.run(async () => {
+      const coupon = input.coupon
+        ? await this.coupons.redeem(input.coupon, customer.phone)
+        : undefined;
       const created = await this.orders.create({
         number,
         seq,
@@ -852,9 +883,16 @@ export class OrdersService {
                 id: new Types.ObjectId(input.landingPage.id),
                 name: input.landingPage.name,
                 slug: input.landingPage.slug,
+                ...(input.landingPage.abTest
+                  ? {
+                      abTestId: new Types.ObjectId(input.landingPage.abTest.id),
+                      variant: input.landingPage.abTest.variant,
+                    }
+                  : {}),
               },
             }
           : {}),
+        ...(coupon ? { coupon } : {}),
         ...(input.attribution && Object.keys(input.attribution).length
           ? { attribution: input.attribution }
           : {}),
@@ -875,7 +913,13 @@ export class OrdersService {
       action: 'order.created',
       orgId,
       target: { type: 'order', id: order._id.toHexString(), label: order.number },
-      metadata: { status, source, totalMinor: order.totalMinor, items: order.items.length },
+      metadata: {
+        status,
+        source,
+        totalMinor: order.totalMinor,
+        items: order.items.length,
+        ...(order.coupon ? { coupon: order.coupon.code } : {}),
+      },
     });
     this.events.emit(ORDER_CREATED, {
       orgId,
@@ -930,6 +974,11 @@ export class OrdersService {
         set.stockCommitted = false;
       }
       if (to === 'cancelled' && opts.reason) set.cancelReason = opts.reason;
+      // A cancelled or returned order gives its coupon use back (ADR 0031).
+      if ((to === 'cancelled' || to === 'returned') && order.coupon && !order.coupon.released) {
+        await this.coupons.release(order.coupon, order.customer.phone);
+        set['coupon.released'] = true;
+      }
       const note =
         opts.note ??
         (to === 'cancelled' ? opts.reason : undefined) ??

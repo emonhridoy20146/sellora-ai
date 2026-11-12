@@ -199,6 +199,10 @@ STOREFRONT_DOMAIN_TARGET=edge.sellora.test`.
   `/tiktok` and `/ga4`, then add the demo ids and keys from the script's header. It is not
   Meta, TikTok or Google: nothing reaches an ad account; `http://localhost:4120/` shows what
   it received.
+- Landing page extras (ADR 0031): scheduled versions, offer ends and automatic A/B test
+  winners are handled by the worker's `landing-pages` sweep every minute, so run
+  `npm run dev:worker` for them. Coupons need no settings; the storefront sends the
+  shopper's A/B id as `x-shopper-ab`.
 - Fraud check: a business's own delivery history needs no settings. The shared delivery
   network between businesses also needs `FRAUD_NETWORK_SECRET` (32+ characters, e.g.
   `openssl rand -hex 32`; it keys the phone-number hashes, so keep it stable), the super-admin
@@ -286,7 +290,11 @@ src/
     stores/                  online stores, launch review, storefront API, custom domains
                              (ADR 0014, 0015)
     landing-pages/           landing pages: sections, offer, templates, review, versions,
-                             storefront view and orders, visit numbers (ADR 0016)
+                             storefront view and orders, visit numbers (ADR 0016); the
+                             template library and saved templates, scheduled publishing,
+                             offer end and A/B tests with the worker's minute sweep (ADR 0031)
+    coupons/                 discount codes for the store checkout and landing pages: rules,
+                             pricing, uses taken with the order and given back (ADR 0031)
     sms/                     SMS provider adapters, Sellora SMS and wallet charging, order
                              messages, sender names, opt-outs, delivery reports (ADR 0017)
     shop-payments/           payments at checkout with the business's own gateways: adapters

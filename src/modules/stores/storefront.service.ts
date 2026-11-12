@@ -37,6 +37,12 @@ import { parseStoreHost } from './store-hosts.js';
 import { StoreLinksService } from './store-links.service.js';
 import { StoreStatsService } from './store-stats.service.js';
 import { AdDestinationsService } from '../ad-tracking/ad-destinations.service.js';
+import { guardCouponTry } from '../coupons/coupon-guard.js';
+import {
+  CouponsService,
+  type AppliedCoupon,
+  type CouponCheck,
+} from '../coupons/coupons.service.js';
 import {
   AdEventsService,
   type BrowserEventInput,
@@ -82,6 +88,8 @@ export interface CheckoutInput {
   payment?: PaymentChoice;
   /** The browser's ad ids and the shopper's tracking choice (ADR 0030). */
   tracking?: BrowserIds;
+  /** A discount code (ADR 0031). */
+  couponCode?: string;
 }
 
 /** Products shown per home page section, at most. */
@@ -126,6 +134,7 @@ export class StorefrontService {
     private readonly shopPayments: ShopPaymentsService,
     private readonly adEvents: AdEventsService,
     private readonly adDestinations: AdDestinationsService,
+    private readonly coupons: CouponsService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -529,11 +538,23 @@ export class StorefrontService {
       throw AppError.unprocessable('below_minimum', 'The cart is below the minimum order.', {
         minOrderMinor: quote.minOrderMinor,
       });
+    // A coupon is checked again here (it may have ended or been used up since Apply).
+    let coupon: AppliedCoupon | undefined;
+    if (input.couponCode?.trim()) {
+      await guardCouponTry(this.redis, this.limits, r.org._id.toHexString(), input.couponCode);
+      coupon = await this.coupons.prepare(
+        input.couponCode,
+        { type: 'store' },
+        { goodsMinor: quote.subtotalMinor, deliveryChargeMinor: quote.deliveryChargeMinor },
+        phone,
+      );
+    }
+    const deliveryChargeMinor = coupon?.freeDelivery ? 0 : quote.deliveryChargeMinor;
     const plan = this.shopPayments.plan(
       input.payment,
       await this.shopPayments.options({
-        totalMinor: quote.totalMinor,
-        deliveryChargeMinor: quote.deliveryChargeMinor,
+        totalMinor: quote.subtotalMinor - (coupon?.discountMinor ?? 0) + deliveryChargeMinor,
+        deliveryChargeMinor,
         zoneId: quote.zoneId,
         currency: quote.currency,
       }),
@@ -570,6 +591,7 @@ export class StorefrontService {
         ...(input.attribution && Object.keys(input.attribution).length
           ? { attribution: input.attribution }
           : {}),
+        ...(coupon ? { coupon } : {}),
       });
     } catch (err) {
       // A blocked customer gets the same answer as anyone the shop cannot serve online.
@@ -655,19 +677,65 @@ export class StorefrontService {
 
   // ---------------------------------------------------------------- abandoned carts
 
-  /** A cart price for the checkout page, and whether the cart may be saved for reminders. */
-  async cartQuote(r: ResolvedStore, items: CartLineInput[], zoneId?: string | null) {
+  /**
+   * A cart price for the checkout page, and whether the cart may be saved for reminders.
+   * With a coupon code (ADR 0031) the totals include what it takes off, and `coupon` says
+   * whether it works or why not.
+   */
+  async cartQuote(
+    r: ResolvedStore,
+    items: CartLineInput[],
+    zoneId?: string | null,
+    coupon?: { code: string; phone?: string },
+  ) {
     const quote = await this.quote(r, items, zoneId);
-    const [cartReminders, payments] = await Promise.all([
+    let check: CouponCheck | null = null;
+    if (coupon?.code.trim() && quote.subtotalMinor > 0) {
+      // Previews never check codes: the reviewer is not a shopper.
+      if (r.state !== 'open')
+        throw AppError.conflict('shop_closed', 'Coupons work once the shop is open.');
+      await guardCouponTry(this.redis, this.limits, r.org._id.toHexString(), coupon.code);
+      let phone: string | undefined;
+      if (coupon.phone?.trim()) {
+        try {
+          phone = (await this.customers.normalizePhones({ phone: coupon.phone }, 'phone.')).phone;
+        } catch {
+          // A half-typed number: the per-customer limit is checked when the order is placed.
+        }
+      }
+      check = await this.coupons.check(
+        coupon.code,
+        { type: 'store' },
+        { goodsMinor: quote.subtotalMinor, deliveryChargeMinor: quote.deliveryChargeMinor },
+        phone,
+      );
+    }
+    const discountMinor = check?.valid ? check.discountMinor : 0;
+    const deliveryChargeMinor = check?.valid && check.freeDelivery ? 0 : quote.deliveryChargeMinor;
+    const totals = {
+      discountMinor,
+      deliveryChargeMinor,
+      totalMinor: quote.subtotalMinor - discountMinor + deliveryChargeMinor,
+    };
+    const [cartReminders, payments, couponBox] = await Promise.all([
       this.carts.capturing(),
       this.shopPayments.options({
-        totalMinor: quote.totalMinor,
-        deliveryChargeMinor: quote.deliveryChargeMinor,
+        totalMinor: totals.totalMinor,
+        deliveryChargeMinor,
         zoneId: quote.zoneId,
         currency: quote.currency,
       }),
+      this.coupons.offeredAt({ type: 'store' }),
     ]);
-    return { ...quote, cartReminders: r.state === 'open' && cartReminders, payments };
+    return {
+      ...quote,
+      ...totals,
+      coupon: check,
+      /** Whether a coupon works in the store now: the checkout shows a code box only then. */
+      couponBox,
+      cartReminders: r.state === 'open' && cartReminders,
+      payments,
+    };
   }
 
   /**

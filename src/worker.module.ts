@@ -10,6 +10,7 @@ import { CartsCoreModule } from './modules/carts/carts.module.js';
 import { CouriersCoreModule } from './modules/couriers/couriers.module.js';
 import { FraudCoreModule } from './modules/fraud/fraud.module.js';
 import { FilesCoreModule } from './modules/files/files.module.js';
+import { LandingPagesCoreModule } from './modules/landing-pages/landing-pages.module.js';
 import { MetaCoreModule } from './modules/meta/meta.module.js';
 import { OrgsModule } from './modules/orgs/orgs.module.js';
 import { ShopPaymentsCoreModule } from './modules/shop-payments/shop-payments.module.js';
@@ -58,6 +59,7 @@ export class WorkerModule {
         BackupsCoreModule,
         TelegramCoreModule,
         CatalogSyncCoreModule,
+        LandingPagesCoreModule,
       ],
       providers: [
         MailProcessor,

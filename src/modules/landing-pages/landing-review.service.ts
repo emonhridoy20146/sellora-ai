@@ -232,21 +232,47 @@ export class LandingReviewService {
           'The business sent a newer version since you opened this page. Look at it again.',
           { revision: sub.revision },
         );
-      const after = await this.merchant.publish(page, sub.content, sub.revision, by, false);
+      const { page: after, outcome } = await this.merchant.applyApproval(page, by, false);
       await this.audit.record({
         action: 'platform.landing_page.approved',
         orgId: page.orgId,
         target: { type: 'landing_page', id: page._id.toHexString(), label: page.name },
-        metadata: { version: after.published!.version, revision, ...(note ? { note } : {}) },
+        metadata: {
+          outcome,
+          revision,
+          ...(outcome === 'published' ? { version: after.published!.version } : {}),
+          ...(outcome === 'scheduled'
+            ? { publishAt: after.scheduled!.publishAt.toISOString() }
+            : {}),
+          ...(note ? { note } : {}),
+        },
       });
       const store = await this.stores.findById(page.storeId);
-      if (store)
+      if (store && outcome === 'published')
         await this.notify(after, 'landing_page.approved', (locale) =>
           mailTemplates.landingApproved(locale, {
             pageName: after.name,
             pageUrl: this.merchant.pageUrl(store, after.slug),
           }),
         );
+      else if (outcome !== 'published') {
+        const org = await this.orgs.get(page.orgId.toHexString());
+        await this.notify(after, 'landing_page.approved', (locale) =>
+          mailTemplates.landingApprovedLater(locale, {
+            pageName: after.name,
+            kind: outcome,
+            when:
+              outcome === 'scheduled'
+                ? new Intl.DateTimeFormat(locale === 'bn' ? 'bn-BD' : 'en-GB', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                    timeZone: org.timezone,
+                  }).format(after.scheduled!.publishAt)
+                : '',
+            dashboardUrl: this.dashboardUrl(after),
+          }),
+        );
+      }
       return this.merchant.toDto(after, store);
     });
   }
@@ -304,7 +330,7 @@ export class LandingReviewService {
     return RequestContext.withTenant(loaded.orgId.toHexString(), async () => {
       const now = new Date();
       const pending = loaded.submission?.status === 'pending';
-      const after = await this.pages.findOneAndUpdate(
+      const taken = await this.pages.findOneAndUpdate(
         { _id: loaded._id, takedown: { $exists: false } },
         {
           $set: {
@@ -320,7 +346,9 @@ export class LandingReviewService {
           },
         },
       );
-      if (!after) throw AppError.conflict('already_taken_down', 'This page is already taken down.');
+      if (!taken) throw AppError.conflict('already_taken_down', 'This page is already taken down.');
+      // A running A/B test ends without a winner and a scheduled version is dropped (ADR 0031).
+      const after = await this.merchant.afterTakedown(taken);
       await this.audit.record({
         action: 'platform.landing_page.taken_down',
         orgId: after.orgId,

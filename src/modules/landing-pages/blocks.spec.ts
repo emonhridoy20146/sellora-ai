@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bannerCoupons,
   contentImages,
   contentTexts,
   dayKey,
+  isMapUrl,
+  LANDING_SECTION_TYPES,
   landingContentSchema,
   packageCharge,
   parseVideoUrl,
@@ -12,7 +15,14 @@ import {
   type LandingContent,
   type OfferProducts,
 } from './blocks.js';
-import { STARTER_TEXTS, TEMPLATE_KEYS, starterTextProblems, templateContent } from './templates.js';
+import {
+  STARTER_TEXTS,
+  TEMPLATE_CATEGORIES,
+  TEMPLATE_KEYS,
+  TEMPLATES,
+  starterTextProblems,
+  templateContent,
+} from './templates.js';
 
 const PRODUCT = { id: 'a'.repeat(24), name: 'Aloe Vera Gel', description: 'Cools the skin.' };
 const ADDON = 'b'.repeat(24);
@@ -99,7 +109,54 @@ describe('page content', () => {
         expect(content.sections.filter((s) => s.type === 'order_form')).toHaveLength(1);
         expect(content.offer.productId).toBe(PRODUCT.id);
         expect(new Set(content.sections.map((s) => s.id)).size).toBe(content.sections.length);
-        expect(publishProblems(content, ready)).toEqual([]);
+        // Only what the business alone can add is missing: its video, picture or address.
+        for (const e of publishProblems(content, ready))
+          expect(['Add the video link', 'Add the picture', 'Write the address']).toContain(
+            e.message,
+          );
+        // A packages section always comes with packages to choose from.
+        if (content.sections.some((s) => s.type === 'packages'))
+          expect(content.offer.packages.length).toBeGreaterThan(1);
+      }
+  });
+
+  it('has 30 templates in nine kinds of business, at least three of each', () => {
+    expect(TEMPLATES).toHaveLength(30);
+    expect(new Set(TEMPLATE_KEYS).size).toBe(30);
+    for (const c of TEMPLATE_CATEGORIES)
+      expect(TEMPLATES.filter((t) => t.category === c).length, c).toBeGreaterThanOrEqual(3);
+    // Between them the templates use every kind of section.
+    const used = new Set(
+      TEMPLATE_KEYS.flatMap((k) => templateContent(k, 'en', PRODUCT).sections.map((s) => s.type)),
+    );
+    for (const type of LANDING_SECTION_TYPES)
+      if (!['image', 'text', 'contact', 'spacer'].includes(type))
+        expect(used, type).toContain(type);
+  });
+
+  it('starts sections that need the business’s own pictures, videos or numbers hidden', () => {
+    for (const key of TEMPLATE_KEYS)
+      for (const s of templateContent(key, 'bn', PRODUCT).sections)
+        if (
+          ['stats', 'certificates', 'video_reviews', 'before_after', 'coupon_banner'].includes(
+            s.type,
+          )
+        )
+          expect(s.enabled, `${key} ${s.type}`).toBe(false);
+  });
+
+  it('holds back every new template until its instructions are replaced', () => {
+    for (const key of TEMPLATE_KEYS.slice(3))
+      for (const lang of ['en', 'bn'] as const) {
+        const content = templateContent(key, lang, PRODUCT);
+        expect(starterTextProblems(content).length, `${key} ${lang}`).toBeGreaterThan(0);
+        // No instruction is left once each shown section's words are the business's own.
+        const own = content.sections.map((s) =>
+          s.enabled && starterTextProblems({ ...content, sections: [s] }).length
+            ? { ...s, enabled: false }
+            : s,
+        );
+        expect(starterTextProblems({ ...content, sections: own })).toEqual([]);
       }
   });
 
@@ -418,5 +475,99 @@ describe('days', () => {
     expect(dayKey(at, 'Asia/Dhaka')).toBe('2026-10-28');
     expect(dayKey(at, 'UTC')).toBe('2026-10-27');
     expect(dayKey(at, 'Not/AZone')).toBe('2026-10-27');
+  });
+});
+
+describe('sections added in ADR 0031', () => {
+  const base = () => landingContentSchema.parse(templateContent('quick_order', 'en', PRODUCT));
+  const withSection = (section: Record<string, unknown>) =>
+    landingContentSchema.safeParse({
+      ...base(),
+      sections: [...base().sections, { id: 'new001', enabled: true, hideOn: 'none', ...section }],
+    });
+
+  it('accepts only Google Maps links and well-formed coupon codes', () => {
+    expect(isMapUrl('https://maps.app.goo.gl/AbCdEf123')).toBe(true);
+    expect(isMapUrl('https://www.google.com/maps/place/Dhaka')).toBe(true);
+    expect(isMapUrl('https://goo.gl/maps/xyz')).toBe(true);
+    expect(isMapUrl('http://maps.google.com/?q=Dhaka')).toBe(false);
+    expect(isMapUrl('https://evil.example/maps')).toBe(false);
+    expect(isMapUrl('https://www.google.com/search?q=maps')).toBe(false);
+    const loc = { type: 'location', heading: '', address: 'Road 5', hours: '' };
+    expect(withSection({ ...loc, mapUrl: 'https://maps.app.goo.gl/x1' }).success).toBe(true);
+    expect(withSection({ ...loc, mapUrl: 'https://example.com' }).success).toBe(false);
+
+    const banner = withSection({
+      type: 'coupon_banner',
+      heading: 'Save',
+      code: ' eid 50 ',
+      text: '',
+    });
+    expect(banner.success).toBe(true);
+    if (banner.success) expect(bannerCoupons(banner.data)).toEqual(['EID50']);
+    expect(
+      withSection({ type: 'coupon_banner', heading: '', code: 'A--B', text: '' }).success,
+    ).toBe(false);
+  });
+
+  it('says what each new section still needs before publishing', () => {
+    const problems = (section: Record<string, unknown>, products: OfferProducts = ready) => {
+      const parsed = withSection(section);
+      expect(parsed.success).toBe(true);
+      return publishProblems(parsed.data!, products).map((e) => e.message);
+    };
+    expect(problems({ type: 'orders_today', text: 'Many ordered today', minCount: 3 })).toEqual([
+      'Put {count} where the number goes',
+    ]);
+    expect(problems({ type: 'orders_today', text: '{count} ordered today', minCount: 3 })).toEqual(
+      [],
+    );
+    expect(
+      problems({
+        type: 'size_chart',
+        title: '',
+        columns: ['Size', 'Chest'],
+        rows: [{ cells: ['M'] }],
+        note: '',
+      }),
+    ).toEqual(['Fill every row for every column']);
+    expect(problems({ type: 'packages', heading: '', text: '' })).toEqual([
+      'Add packages to the offer, or hide this section',
+    ]);
+    const banner = { type: 'coupon_banner', heading: '', code: 'EID50', text: '' };
+    expect(problems(banner, { ...ready, usableCoupons: new Set(['EID50']) })).toEqual([]);
+    expect(problems(banner, { ...ready, usableCoupons: new Set() })).toEqual([
+      'No coupon with this code can be used on this page now',
+    ]);
+    expect(
+      problems({ type: 'video_reviews', title: '', items: [{ url: '', name: 'Mina' }] }),
+    ).toEqual(['Add the video link']);
+    expect(
+      problems({
+        type: 'who_for',
+        title: '',
+        forTitle: '',
+        forItems: [],
+        notForTitle: '',
+        notForItems: [],
+      }),
+    ).toEqual(['Say who the product is for']);
+  });
+
+  it('keeps pictures of the new sections attached and checks their words', () => {
+    const parsed = withSection({
+      type: 'certificates',
+      title: 'Approved',
+      items: [{ image: { fileId: FILE(7), url: '', alt: 'BSTI' }, caption: 'BSTI approval' }],
+    });
+    expect(parsed.success).toBe(true);
+    const content = parsed.data!;
+    expect(contentImages(content).map((i) => i.fileId)).toContain(FILE(7));
+    const fixed = withImageUrls(content, (id) => `https://cdn.test/${id}`);
+    const cert = fixed.sections.find((s) => s.type === 'certificates');
+    expect(cert?.type === 'certificates' && cert.items[0]!.image.url).toBe(
+      `https://cdn.test/${FILE(7)}`,
+    );
+    expect(contentTexts('Page', content).some((t) => t.text.includes('BSTI approval'))).toBe(true);
   });
 });

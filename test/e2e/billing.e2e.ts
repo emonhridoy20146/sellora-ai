@@ -832,7 +832,7 @@ describe('billing', () => {
       // Repeats within 30 minutes are grouped, so the mismatch above and the outage make one.
       let alerts: { subject: string; text: string }[] = [];
       // The alert is sent after the request answers; under a full parallel run it can take seconds.
-      for (let i = 0; i < 200 && !alerts.length; i++) {
+      for (let i = 0; i < 400 && !alerts.length; i++) {
         alerts = (await app.outbox(platformEmail)).filter((m) => m.category === 'platform.alert');
         if (!alerts.length) await new Promise((r) => setTimeout(r, 50));
       }

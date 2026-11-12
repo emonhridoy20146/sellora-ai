@@ -37,6 +37,7 @@ import { PlatformSettingsModule } from './modules/platform/platform-settings.mod
 import { PlatformModule } from './modules/platform/platform.module.js';
 import { ShopPaymentsModule } from './modules/shop-payments/shop-payments.module.js';
 import { AdTrackingModule } from './modules/ad-tracking/ad-tracking.module.js';
+import { CouponsModule } from './modules/coupons/coupons.module.js';
 import { SmsModule } from './modules/sms/sms.module.js';
 import { StoresModule } from './modules/stores/stores.module.js';
 import { TelegramModule } from './modules/telegram/telegram.module.js';
@@ -122,6 +123,7 @@ export class AppModule {
         LandingPagesModule,
         ShopPaymentsModule,
         AdTrackingModule,
+        CouponsModule,
         SmsModule,
         CartsModule,
         CampaignsModule,

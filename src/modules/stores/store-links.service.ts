@@ -22,7 +22,9 @@ interface PreviewClaims {
 }
 
 /** What a landing page preview shows: the business's draft or the snapshot under review. */
-export type LandingPreviewKind = 'draft' | 'submission';
+/** What a landing preview shows: the draft, the version in review, the scheduled one, or B. */
+export const LANDING_PREVIEW_KINDS = ['draft', 'submission', 'scheduled', 'ab_test'] as const;
+export type LandingPreviewKind = (typeof LANDING_PREVIEW_KINDS)[number];
 
 interface LandingPreviewClaims {
   t: 'landing_preview';
@@ -135,7 +137,7 @@ export class StoreLinksService {
     const claims = this.preview.verify<LandingPreviewClaims>(token);
     return claims?.t === 'landing_preview' &&
       typeof claims.p === 'string' &&
-      (claims.k === 'draft' || claims.k === 'submission')
+      (LANDING_PREVIEW_KINDS as readonly string[]).includes(claims.k)
       ? { pageId: claims.p, kind: claims.k }
       : null;
   }
