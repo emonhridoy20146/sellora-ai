@@ -31,6 +31,11 @@ export async function generateMetadata(): Promise<Metadata> {
     // Previews are for the business and the reviewer only.
     robots:
       store.state === 'preview' ? { index: false, follow: false } : { index: true, follow: true },
+    // Search Console's ownership check (ADR 0032): Sellora puts the code here when the
+    // business connects Search Console.
+    ...(store.seo.googleVerification
+      ? { verification: { google: store.seo.googleVerification } }
+      : {}),
   };
 }
 

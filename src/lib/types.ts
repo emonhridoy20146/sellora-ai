@@ -99,7 +99,8 @@ export interface OpenStore extends StoreBase {
   contact: StoreContact;
   social: StoreSocial;
   theme: ThemeSettings;
-  seo: { title: string; description: string };
+  /** `googleVerification`: Search Console's meta tag code (ADR 0032); null when not connected. */
+  seo: { title: string; description: string; googleVerification?: string | null };
   pages: PageKey[];
   checkout: { note: string; minOrderMinor: number };
   /** The business's own ad tags for this store; null in a preview (ADR 0030). */
@@ -138,6 +139,10 @@ export interface ProductDetail extends ProductCard {
   }[];
   category: { name: string; slug: string } | null;
   currency: string;
+  /** Search engine title and description (ADR 0032); null: the product's own name and text. */
+  seo?: { title: string | null; description: string | null };
+  faq?: { question: string; answer: string }[];
+  sku?: string | null;
 }
 
 export interface Category {

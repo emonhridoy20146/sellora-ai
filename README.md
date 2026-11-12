@@ -103,7 +103,7 @@ sellora-web, and connecting a custom domain by `scripts/domains-flow.mjs` there.
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/`                           | The home page sections the business arranged (hero, categories, products, features …).                                                                                           |
 | `/products`                   | All products, by category, search and sort, with pages.                                                                                                                          |
-| `/products/[slug]`            | Pictures, sizes and colours with live stock, add to cart.                                                                                                                        |
+| `/products/[slug]`            | Pictures, sizes and colours with live stock, add to cart, questions and answers; structured data for search engines. An old address redirects to the new one.                    |
 | `/cart`, `/checkout`          | Cart (kept in the browser), then name, phone, address, delivery area, note and how to pay.                                                                                       |
 | `/order?receipt=…`            | The receipt after ordering (a signed token valid for 90 days), with what came back from the gateway (`&payment=`) and Pay now while something is due online.                     |
 | `/track`                      | Order tracking by order number and phone.                                                                                                                                        |
@@ -210,6 +210,13 @@ suspended store shows "not available", and an address with no store shows a page
   receipt and thank-you page report the purchase with the server's event id, once per browser
   and only on the day it was placed (Google Ads gets only hashed email and phone). GA4
   purchases come from the server only. `lib/ad-tags.ts` holds the formats and is unit tested.
+- **Search engines** (ADR 0032 in sellora-api). Every shop page has a canonical tag; a product
+  page uses the product's search title and meta when set, its photos' alt text, and JSON-LD
+  from `lib/structured-data.ts` (`Product` with `Offer`, `BreadcrumbList`, and `FAQPage` when
+  the product has questions); the home page carries `Organization` and `WebSite`
+  (`ldJson` escapes `<` so text cannot end the script tag). An address the product
+  used before answers a permanent redirect to its address now. When the business connects
+  Google Search Console, the layout puts Google's verification meta tag on the home page.
 - **Security headers.** No framing, no referrer beyond the origin, no camera, microphone or
   location (`next.config.ts`).
 
