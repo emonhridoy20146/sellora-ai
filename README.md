@@ -141,6 +141,9 @@ src/
                           preview button, publish dialog (now, at a time, A/B test),
                           schedule and offer-end notes, offer end card, save as template
     coupons/              coupon list hooks and the coupon dialog (Coupons in the menu)
+    seo/                  SEO studio hooks, the product form's search engine card (score,
+                          AI suggestion, Google preview, alt text, FAQ), keyword research
+                          and lists, the store and landing page SEO writer
     sms/                  SMS route choice, provider account dialog (shared with the
                           admin), sender name, order texts with preview, message log,
                           opt-outs, and the Admin › SMS cards
@@ -159,6 +162,8 @@ src/
                           publishing, package prices, the reviewer's "words on the page",
                           block groups, publish and offer-end times, A/B verdicts
     coupons.ts            coupon states, value and "where" text, the form and what changed
+    seo.ts, seo-score.ts  SEO labels, the product SEO draft and save payload, Google preview,
+                          Search Console numbers; the same score as the API (ADR 0032)
     sms.ts                SMS part counting (GSM-7 and Unicode, as operators count),
                           template preview, placeholders, status and failure labels
   config/
@@ -397,6 +402,25 @@ approval is turned on for the run and put back after. Screenshots go to
 
 ```bash
 node scripts/landing-extras-flow.mjs
+```
+
+### SEO studio browser flow
+
+`scripts/seo-flow.mjs` (ADR 0032 in sellora-api) needs the API, the worker, this app and the
+storefront, the open store from `stores-flow.mjs`, and three stand-ins in sellora-api: the
+Claude stand-in (scripted, not an AI), `keyword-stand-in.mjs` (made-up volumes, not
+DataForSEO) and `google-stand-in.mjs` (made-up search numbers, not Google), with the API and
+worker pointed at them. It prices keyword lookups as the super-admin, researches জামদানি
+শাড়ি with monthly searches (one paid lookup, then the cache), makes a keyword list, adds a
+product with AI-written SEO fields (score 20 to 100), checks the product page on the store
+(title, canonical, Product, Offer, BreadcrumbList and FAQPage structured data against
+Google's required fields, the sitemap and robots.txt), changes the address and follows the
+redirect, connects Search Console through the stand-in's consent page and waits for the
+report, runs the bulk optimiser, writes a Facebook ad in the content studio and the store's
+search title. Screenshots go to `smoke-output/seo/`.
+
+```bash
+node scripts/seo-flow.mjs
 ```
 
 ### SMS browser flow
@@ -661,7 +685,13 @@ SSLCommerz, aamarPay and shurjoPay accounts, but only against fakes and a paymen
 no real payment has gone through any of them yet. Ad tracking works (Phase 2: Settings › Ad
 tracking, and the tags, consent banner and purchase reports in `sellora-storefront`) with the
 business's own Meta, TikTok, Google Analytics and Google Ads ids, but only against fakes, a
-tracking stand-in and fake tag scripts; no event has reached a real ad account yet.
+tracking stand-in and fake tag scripts; no event has reached a real ad account yet. The SEO
+studio works (Phase 2: SEO studio in the menu with the overview and bulk optimiser, keywords,
+Search Console and the content studio; the search engine card on the product form; "Write with
+AI" for the store's and landing pages' search fields; and canonical tags, structured data and
+redirects in `sellora-storefront`), but only against a scripted Claude stand-in, a keyword
+stand-in with made-up volumes and a Google stand-in; no real DataForSEO or Search Console data
+yet.
 Analytics appears in the merchant
 sidebar as a disabled "Soon" item. They will be added milestone by milestone; see
 `docs/TRACKER.md` in sellora-api.

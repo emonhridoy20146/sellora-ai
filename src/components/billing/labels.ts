@@ -46,4 +46,9 @@ export const FEATURE_LABEL: Record<string, string> = {
   ai_agent_reply: 'AI sales agent reply',
   ai_agent_preview: 'AI agent test chat',
   voice_note_transcription: 'Voice notes to text',
+  seo_product_writer: 'AI SEO for a product',
+  seo_page_writer: 'AI SEO for a page',
+  seo_keyword_ideas: 'Keyword ideas',
+  seo_keyword_volumes: 'Keyword search volumes',
+  content_writer: 'Content studio',
 };

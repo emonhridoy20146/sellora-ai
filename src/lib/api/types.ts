@@ -242,6 +242,8 @@ export interface CreditRate {
   minimumCreditsPerRequest: number;
   /** Credits per minute of voice note turned into text; null: voice notes stay audio only. */
   transcriptionCreditsPerMinute: number | null;
+  /** Credits per keyword search-volume lookup; null: keyword ideas show without volumes. */
+  keywordLookupCredits: number | null;
   tiers: { tier: ModelTier; inputCreditsPer1k: number; outputCreditsPer1k: number }[];
   effectiveFrom: IsoDate;
 }
@@ -664,10 +666,23 @@ export interface Variant {
   weightGrams: number | null;
 }
 
+export interface ProductSeo {
+  /** Empty: the product name is used. */
+  title: string;
+  /** Empty: the start of the description is used. */
+  description: string;
+  /** Target keywords; the first is the focus keyword. */
+  keywords: string[];
+  faq: { question: string; answer: string }[];
+}
+
 export interface Product {
   id: string;
   name: string;
   slug: string;
+  /** Old addresses that redirect (301) to this product. */
+  previousSlugs: string[];
+  seo: ProductSeo;
   description: string;
   categoryId: string | null;
   tags: string[];
@@ -3263,4 +3278,240 @@ export interface AdEventLogEntry {
   status: 'sent' | 'failed';
   detail: string;
   at: string;
+}
+
+// ------------------------------------------------------------------ SEO and content studio (ADR 0032)
+
+export type WriterLanguage = 'bn' | 'en';
+export type KeywordScript = 'bangla' | 'english' | 'banglish';
+export type KeywordIntent = 'buy' | 'compare' | 'learn' | 'local' | 'brand';
+export type KeywordMix = 'all' | 'bangla' | 'english' | 'banglish';
+export type KeywordCompetition = 'low' | 'medium' | 'high';
+/** Why a research or a list has monthly searches, or why not. */
+export type VolumeState = 'yes' | 'not_set_up' | 'not_priced' | 'no_credit' | 'failed' | 'off';
+
+export interface SeoSuggestion {
+  focusKeyword: string;
+  keywords: string[];
+  seoTitle: string;
+  slug: string;
+  metaDescription: string;
+  description: string;
+  tags: string[];
+  imageAlts: string[];
+  faq: { question: string; answer: string }[];
+}
+
+export interface PageSeoSuggestion {
+  focusKeyword: string;
+  seoTitle: string;
+  metaDescription: string;
+  credits: number;
+}
+
+export interface KeywordSetup {
+  volumes: 'ready' | 'not_set_up' | 'not_priced';
+  lookup: { credits: number; amountMinor: number; currency: string } | null;
+  maxKeywordsPerLookup: number;
+}
+
+export interface KeywordIdea {
+  keyword: string;
+  script: KeywordScript;
+  intent: KeywordIntent;
+  /** Monthly searches; null: no data. */
+  volume: number | null;
+  competition: KeywordCompetition | null;
+  cpcUsd: number | null;
+  /** Last 12 months, oldest first; empty without data. */
+  trend: number[];
+}
+
+export interface KeywordResearch {
+  id: string;
+  seed: string;
+  mix: KeywordMix;
+  volumes: VolumeState;
+  ideas: KeywordIdea[];
+  credits: number;
+  createdAt: IsoDate;
+}
+
+export interface KeywordListSummary {
+  id: string;
+  name: string;
+  count: number;
+  updatedAt: IsoDate;
+}
+
+export interface KeywordListEntry {
+  keyword: string;
+  volume: number | null;
+  competition: KeywordCompetition | null;
+  script: KeywordScript;
+  intent: KeywordIntent | null;
+  addedAt: IsoDate;
+  /** Active products that target the keyword (up to 5). */
+  targetedBy?: { id: string; name: string }[];
+}
+
+export interface KeywordListDetail extends KeywordListSummary {
+  keywords: KeywordListEntry[];
+  /** Keywords no product targets yet. */
+  gaps: number;
+  /** After a volume refresh. */
+  volumes?: VolumeState;
+  credits?: number;
+}
+
+export type SeoCheckKey =
+  | 'focus_keyword'
+  | 'title_length'
+  | 'keyword_in_title'
+  | 'meta_description'
+  | 'keyword_in_meta'
+  | 'description_length'
+  | 'image_alt'
+  | 'keyword_in_slug'
+  | 'unique_title'
+  | 'unique_meta'
+  | 'faq';
+
+export type StoreSeoCheckKey = 'store_title' | 'store_description' | 'indexable' | 'search_console';
+
+export interface SeoAudit {
+  products: {
+    count: number;
+    average: number | null;
+    good: number;
+    fair: number;
+    poor: number;
+    issues: Partial<Record<SeoCheckKey, number>>;
+    items: {
+      id: string;
+      name: string;
+      slug: string;
+      image: string | null;
+      score: number;
+      failing: SeoCheckKey[];
+    }[];
+    truncated: boolean;
+  };
+  stores: {
+    id: string;
+    name: string;
+    url: string;
+    open: boolean;
+    checks: { key: StoreSeoCheckKey; ok: boolean; detail: string }[];
+    sitemapUrl: string;
+    robotsUrl: string;
+  }[];
+}
+
+export type BulkItemState = 'waiting' | 'written' | 'applied' | 'failed' | 'skipped';
+export type ApplyField =
+  'title' | 'meta' | 'keywords' | 'faq' | 'description' | 'tags' | 'alts' | 'slug';
+
+export interface SeoBulkRun {
+  id: string;
+  status: 'queued' | 'running' | 'done' | 'cancelled';
+  language: WriterLanguage;
+  credits: number;
+  createdAt: IsoDate;
+  finishedAt: IsoDate | null;
+  counts: { total: number; waiting: number; written: number; applied: number; failed: number };
+  items: {
+    productId: string;
+    name: string;
+    status: BulkItemState;
+    scoreBefore: number;
+    scoreAfter: number | null;
+    suggestion: SeoSuggestion | null;
+    error: string | null;
+    credits: number;
+  }[];
+}
+
+export interface SearchConsoleConnection {
+  status: 'connected' | 'revoked';
+  email: string;
+  storeId: string;
+  siteUrl: string;
+  step: 'verify' | 'add_site' | 'sitemap' | 'done';
+  setupError: string | null;
+  verifiedAt: IsoDate | null;
+  sitemapSubmittedAt: IsoDate | null;
+  lastSyncAt: IsoDate | null;
+  lastSyncError: string | null;
+  connectedAt: IsoDate;
+  connectedBy: string | null;
+}
+
+export interface SearchTotals {
+  clicks: number;
+  impressions: number;
+  /** 0–1. */
+  ctr: number;
+  position: number | null;
+}
+
+export interface SearchGrouped {
+  key: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+export interface SearchOpportunity {
+  kind: 'almost_page_one' | 'low_ctr';
+  query: string;
+  page: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+  expectedCtr?: number;
+  product: { id: string; name: string } | null;
+}
+
+export interface SearchReport {
+  connection: SearchConsoleConnection;
+  ready: boolean;
+  period: { from: string; to: string; days: number };
+  totals: SearchTotals;
+  previous: SearchTotals;
+  series: { date: string; clicks: number; impressions: number }[];
+  rowsPeriod: { from: string; to: string } | null;
+  topQueries: SearchGrouped[];
+  topPages: SearchGrouped[];
+  opportunities: SearchOpportunity[];
+}
+
+export interface SearchConsoleState {
+  /** Google sign-in is set up on this server. */
+  configured: boolean;
+  connection: SearchConsoleConnection | null;
+  /** Open stores Search Console can be connected for. */
+  stores: { id: string; name: string; url: string }[];
+  report: SearchReport | null;
+}
+
+export type ContentKind = 'facebook_ad' | 'caption' | 'product_description' | 'translate';
+export type ContentTone = 'friendly' | 'premium' | 'urgent' | 'informative';
+export type TranslateTo = 'bn' | 'en' | 'banglish';
+
+export interface ContentDraft {
+  id: string;
+  kind: ContentKind;
+  productId: string | null;
+  productName: string | null;
+  language: WriterLanguage;
+  tone: ContentTone;
+  translateTo: TranslateTo | null;
+  notes: string;
+  source: string;
+  variants: { headline: string; text: string; hashtags: string[] }[];
+  credits: number;
+  createdAt: IsoDate;
 }
